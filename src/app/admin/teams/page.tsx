@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
+import Link from "next/link";
 import {
   inputClass,
   selectClass,
@@ -76,7 +77,11 @@ export default async function TeamsPage({
         <tbody>
           {teams.map((t) => (
             <tr key={t.id}>
-              <td className={tdClass}>{t.name}</td>
+              <td className={tdClass}>
+                <Link href={`/admin/teams/${t.id}`} className="text-slate-900 underline">
+                  {t.name}
+                </Link>
+              </td>
               <td className={`${tdClass} font-mono text-xs text-slate-500`}>
                 {t.externalTeamCode ?? ""}
               </td>
