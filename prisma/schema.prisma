@@ -29,6 +29,7 @@ model Season {
   endDate   DateTime
   isActive  Boolean  @default(false)
   teams     Team[]
+  events    Event[]
   createdAt DateTime @default(now())
 }
 
@@ -113,6 +114,152 @@ model Team {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  finishes       TeamFinish[]
+  rankingResults RankingResult[]
+
   @@unique([seasonId, clubId, teamNumber, ageGroup])
   @@index([lineageKey])
+}
+
+// --- Phase 1: events, divisions, point templates, finishes, rankings --------
+// See plan section 1.3/1.4 (manual-parity subset; rating-engine models come later)
+
+model Event {
+  id          String   @id @default(cuid())
+  seasonId    String
+  season      Season   @relation(fields: [seasonId], references: [id])
+  name        String
+  slug        String   @unique
+  startDate   DateTime
+  endDate     DateTime
+  addressLine String?
+  city        String?
+  state       String?
+  zip         String?
+  isAnchor    Boolean  @default(false) // USAV Nationals / Triple Crown NIT -- exempt
+  // from the future suggestion algorithm (Phase 4+); manually assigned max-value
+  // templates always.
+  divisions   Division[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+enum DivisionTierLabel {
+  OPEN
+  NATIONAL
+  AMERICAN
+  PATRIOT
+  LIBERTY
+  USA
+  FREEDOM
+}
+
+enum DivisionScoringStatus {
+  DRAFT
+  SUGGESTED
+  CONFIRMED
+}
+
+model Division {
+  id                String                @id @default(cuid())
+  eventId           String
+  event             Event                 @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  name              String // e.g. "17 Open"
+  slug              String
+  ageGroup          Int
+  tierLabel         DivisionTierLabel
+  tierLevel         String? // e.g. "I" / "II" -- separate roman-numeral axis
+  scoringStatus     DivisionScoringStatus @default(DRAFT)
+  ignoreAgeDefault  Boolean               @default(false)
+  pointBands        DivisionPointBand[]
+  finishes          TeamFinish[]
+  createdAt         DateTime              @default(now())
+  updatedAt         DateTime              @updatedAt
+
+  @@unique([eventId, slug])
+}
+
+model PointTemplate {
+  id              String              @id @default(cuid())
+  name            String              @unique
+  description     String?
+  maxPoints       Int // denormalized top-band value, for sorting/display
+  isAnchorTemplate Boolean            @default(false)
+  isSystem        Boolean             @default(false)
+  bands           PointTemplateBand[]
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+}
+
+model PointTemplateBand {
+  id              String        @id @default(cuid())
+  pointTemplateId String
+  pointTemplate   PointTemplate @relation(fields: [pointTemplateId], references: [id], onDelete: Cascade)
+  fromRank        Int
+  toRank          Int // 0 means "and beyond" (open-ended tail band), matching the
+  // legacy convention seen in the admin screenshots.
+  points          Int
+
+  @@unique([pointTemplateId, fromRank])
+}
+
+model DivisionPointBand {
+  id         String   @id @default(cuid())
+  divisionId String
+  division   Division @relation(fields: [divisionId], references: [id], onDelete: Cascade)
+  fromRank   Int
+  toRank     Int // 0 = open-ended tail band
+  points     Int
+
+  @@unique([divisionId, fromRank])
+}
+
+model TeamFinish {
+  id             String   @id @default(cuid())
+  divisionId     String
+  division       Division @relation(fields: [divisionId], references: [id], onDelete: Cascade)
+  teamId         String
+  team           Team     @relation(fields: [teamId], references: [id])
+  rank           Int // may repeat across rows for ties
+  tiebreakOrder  Int? // AES-embedded unique seed/order number, display/ordering only
+  points         Int? // resolved from DivisionPointBand at confirm time; null until then
+  ignoreAge      Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  rankingContributions RankingResultContribution[]
+
+  @@unique([divisionId, teamId])
+  @@index([teamId])
+}
+
+model RankingResult {
+  id             String   @id @default(cuid())
+  seasonId       String
+  ageGroup       Int
+  teamId         String
+  team           Team     @relation(fields: [teamId], references: [id])
+  totalPoints    Int
+  rank           Int
+  weightedRank   Int
+  algorithmVersion String @default("phase1-points-only")
+  computedAt     DateTime @default(now())
+
+  contributions RankingResultContribution[]
+
+  @@unique([seasonId, ageGroup, teamId])
+  @@index([seasonId, ageGroup, rank])
+}
+
+model RankingResultContribution {
+  id              String        @id @default(cuid())
+  rankingResultId String
+  rankingResult   RankingResult @relation(fields: [rankingResultId], references: [id], onDelete: Cascade)
+  teamFinishId    String
+  teamFinish      TeamFinish    @relation(fields: [teamFinishId], references: [id], onDelete: Cascade)
+  points          Int
+  rankInSeason    Int // 1st/2nd/3rd/4th... best finish, by points descending
+  countedInTop3   Boolean
+
+  @@unique([rankingResultId, teamFinishId])
 }

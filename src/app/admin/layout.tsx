@@ -18,6 +18,24 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           <Link href="/admin" className="rounded px-2 py-1 hover:bg-slate-200">
             Dashboard
           </Link>
+          <Link href="/admin/events" className="rounded px-2 py-1 hover:bg-slate-200">
+            Events
+          </Link>
+          <Link href="/admin/rankings" className="rounded px-2 py-1 hover:bg-slate-200">
+            Rankings
+          </Link>
+          <Link href="/admin/point-templates" className="rounded px-2 py-1 hover:bg-slate-200">
+            Point Templates
+          </Link>
+          <Link href="/admin/teams" className="rounded px-2 py-1 hover:bg-slate-200">
+            Teams
+          </Link>
+          <Link href="/admin/clubs" className="rounded px-2 py-1 hover:bg-slate-200">
+            Clubs
+          </Link>
+          <Link href="/admin/seasons" className="rounded px-2 py-1 hover:bg-slate-200">
+            Seasons
+          </Link>
           {user.role === "SUPER_ADMIN" && (
             <Link href="/admin/users" className="rounded px-2 py-1 hover:bg-slate-200">
               Users
