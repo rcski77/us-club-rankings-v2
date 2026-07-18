@@ -19,13 +19,14 @@ async function createTeam(formData: FormData) {
   const name = String(formData.get("name") ?? "").trim();
   const ageGroup = Number(formData.get("ageGroup"));
   const teamNumber = Number(formData.get("teamNumber") ?? 1);
+  const externalTeamCode = String(formData.get("externalTeamCode") ?? "").trim() || null;
 
   if (!seasonId || !name || !ageGroup || !teamNumber) {
     redirect("/admin/teams?error=invalid");
   }
 
   await prisma.team.create({
-    data: { clubId, seasonId, name, ageGroup, teamNumber },
+    data: { clubId, seasonId, name, ageGroup, teamNumber, externalTeamCode },
   });
 
   revalidatePath("/admin/teams");
@@ -65,6 +66,7 @@ export default async function TeamsPage({
         <thead>
           <tr>
             <th className={thClass}>Name</th>
+            <th className={thClass}>Code</th>
             <th className={thClass}>Club</th>
             <th className={thClass}>Age</th>
             <th className={thClass}>#</th>
@@ -75,6 +77,9 @@ export default async function TeamsPage({
           {teams.map((t) => (
             <tr key={t.id}>
               <td className={tdClass}>{t.name}</td>
+              <td className={`${tdClass} font-mono text-xs text-slate-500`}>
+                {t.externalTeamCode ?? ""}
+              </td>
               <td className={tdClass}>
                 {t.club ? t.club.name : <span className="text-amber-600">Unlinked</span>}
               </td>
@@ -85,7 +90,7 @@ export default async function TeamsPage({
           ))}
           {teams.length === 0 && (
             <tr>
-              <td className={tdClass} colSpan={5}>
+              <td className={tdClass} colSpan={6}>
                 No teams yet.
               </td>
             </tr>
@@ -132,6 +137,14 @@ export default async function TeamsPage({
                 defaultValue={1}
                 required
                 className={`${inputClass} w-20`}
+              />
+            </label>
+            <label className="flex flex-col gap-1 text-sm">
+              Code
+              <input
+                name="externalTeamCode"
+                placeholder="g14frogs1nt"
+                className={`${inputClass} w-32`}
               />
             </label>
             <label className="flex flex-col gap-1 text-sm">

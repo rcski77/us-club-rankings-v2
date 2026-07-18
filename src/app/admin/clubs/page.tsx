@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
+import Link from "next/link";
 import { uniqueSlug } from "@/lib/slug";
 import {
   inputClass,
@@ -61,7 +62,10 @@ export default async function ClubsPage({
 }) {
   const { error } = await searchParams;
   const [clubs, regions] = await Promise.all([
-    prisma.club.findMany({ include: { region: true }, orderBy: { name: "asc" } }),
+    prisma.club.findMany({
+      include: { region: true, _count: { select: { teams: true } } },
+      orderBy: { name: "asc" },
+    }),
     prisma.region.findMany({ orderBy: { code: "asc" } }),
   ]);
 
@@ -84,22 +88,28 @@ export default async function ClubsPage({
             <th className={thClass}>Region</th>
             <th className={thClass}>City/State</th>
             <th className={thClass}>External code</th>
+            <th className={thClass}>Teams</th>
           </tr>
         </thead>
         <tbody>
           {clubs.map((c) => (
             <tr key={c.id}>
-              <td className={tdClass}>{c.name}</td>
+              <td className={tdClass}>
+                <Link href={`/admin/clubs/${c.id}`} className="text-slate-900 underline">
+                  {c.name}
+                </Link>
+              </td>
               <td className={tdClass}>{c.region?.code ?? ""}</td>
               <td className={tdClass}>
                 {[c.city, c.state].filter(Boolean).join(", ")}
               </td>
               <td className={tdClass}>{c.externalCode ?? ""}</td>
+              <td className={tdClass}>{c._count.teams}</td>
             </tr>
           ))}
           {clubs.length === 0 && (
             <tr>
-              <td className={tdClass} colSpan={4}>
+              <td className={tdClass} colSpan={5}>
                 No clubs yet.
               </td>
             </tr>
