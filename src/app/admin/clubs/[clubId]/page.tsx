@@ -53,8 +53,8 @@ export default async function ClubDetailPage({
         region: true,
         contacts: true,
         teams: {
-          include: { season: true },
-          orderBy: [{ season: { startDate: "desc" } }, { ageGroup: "desc" }, { name: "asc" }],
+          include: { seasons: { include: { season: true }, orderBy: { season: { startDate: "desc" } } } },
+          orderBy: { name: "asc" },
         },
       },
     }),
@@ -136,10 +136,7 @@ export default async function ClubDetailPage({
         <thead>
           <tr>
             <th className={thClass}>Name</th>
-            <th className={thClass}>Code</th>
-            <th className={thClass}>Age</th>
-            <th className={thClass}>#</th>
-            <th className={thClass}>Season</th>
+            <th className={thClass}>Seasons</th>
           </tr>
         </thead>
         <tbody>
@@ -150,17 +147,26 @@ export default async function ClubDetailPage({
                   {t.name}
                 </Link>
               </td>
-              <td className={`${tdClass} font-mono text-xs text-slate-500`}>
-                {t.externalTeamCode ?? ""}
+              <td className={tdClass}>
+                {t.seasons.length === 0 && (
+                  <span className="text-slate-400">Not enrolled in any season</span>
+                )}
+                <ul className="flex flex-col gap-0.5">
+                  {t.seasons.map((ts) => (
+                    <li key={ts.id} className="text-xs text-slate-600">
+                      {ts.season.label}: {ts.ageGroup}u #{ts.teamNumber}
+                      {ts.externalTeamCode && (
+                        <span className="font-mono text-slate-400"> ({ts.externalTeamCode})</span>
+                      )}
+                    </li>
+                  ))}
+                </ul>
               </td>
-              <td className={tdClass}>{t.ageGroup}u</td>
-              <td className={tdClass}>{t.teamNumber}</td>
-              <td className={tdClass}>{t.season.label}</td>
             </tr>
           ))}
           {club.teams.length === 0 && (
             <tr>
-              <td className={tdClass} colSpan={5}>
+              <td className={tdClass} colSpan={2}>
                 No teams for this club yet.
               </td>
             </tr>

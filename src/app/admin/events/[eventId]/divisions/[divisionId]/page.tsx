@@ -39,18 +39,30 @@ export default async function DivisionDetailPage({
       include: {
         event: true,
         pointBands: { orderBy: { fromRank: "asc" } },
-        finishes: { include: { team: true }, orderBy: { rank: "asc" } },
       },
     }),
     prisma.pointTemplate.findMany({ orderBy: { maxPoints: "desc" } }),
   ]);
   if (!division || division.eventId !== eventId) notFound();
 
-  const teams = await prisma.team.findMany({
-    where: { seasonId: division.event.seasonId },
-    orderBy: [{ ageGroup: "desc" }, { name: "asc" }],
-  });
-  const finishedTeamIds = new Set(division.finishes.map((f) => f.teamId));
+  const seasonId = division.event.seasonId;
+  const seasonScopedTeam = { seasons: { where: { seasonId } } } as const;
+
+  const [finishes, teams] = await Promise.all([
+    prisma.teamFinish.findMany({
+      where: { divisionId },
+      include: { team: { include: seasonScopedTeam } },
+      orderBy: { rank: "asc" },
+    }),
+    prisma.team.findMany({
+      where: { seasons: { some: { seasonId } } },
+      include: seasonScopedTeam,
+      orderBy: { name: "asc" },
+    }),
+  ]);
+  teams.sort((a, b) => (b.seasons[0]?.ageGroup ?? 0) - (a.seasons[0]?.ageGroup ?? 0));
+
+  const finishedTeamIds = new Set(finishes.map((f) => f.teamId));
   const availableTeams = teams.filter((t) => !finishedTeamIds.has(t.id));
 
   const isConfirmed = division.scoringStatus === "CONFIRMED";
@@ -220,7 +232,7 @@ export default async function DivisionDetailPage({
             </tr>
           </thead>
           <tbody>
-            {division.finishes.map((f) => (
+            {finishes.map((f) => (
               <tr key={f.id}>
                 <td className={tdClass}>
                   {isConfirmed ? (
@@ -247,7 +259,7 @@ export default async function DivisionDetailPage({
                   )}
                 </td>
                 <td className={tdClass}>{f.team.name}</td>
-                <td className={tdClass}>{f.team.ageGroup}u</td>
+                <td className={tdClass}>{f.team.seasons[0]?.ageGroup}u</td>
                 <td className={tdClass}>{f.ignoreAge ? "Yes" : ""}</td>
                 <td className={tdClass}>{f.points ?? ""}</td>
                 {!isConfirmed && (
@@ -266,7 +278,7 @@ export default async function DivisionDetailPage({
                 )}
               </tr>
             ))}
-            {division.finishes.length === 0 && (
+            {finishes.length === 0 && (
               <tr>
                 <td className={tdClass} colSpan={isConfirmed ? 5 : 6}>
                   No team finishes entered yet.
@@ -286,7 +298,7 @@ export default async function DivisionDetailPage({
                 </option>
                 {availableTeams.map((t) => (
                   <option key={t.id} value={t.id}>
-                    {t.name} ({t.ageGroup}u)
+                    {t.name} ({t.seasons[0]?.ageGroup}u)
                   </option>
                 ))}
               </select>

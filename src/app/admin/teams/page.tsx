@@ -1,11 +1,11 @@
 import { prisma } from "@/lib/prisma";
 import { redirect } from "next/navigation";
-import { revalidatePath } from "next/cache";
 import Link from "next/link";
 import {
   inputClass,
   selectClass,
   primaryButtonClass,
+  secondaryButtonClass,
   errorBannerClass,
   tableClass,
   thClass,
@@ -23,32 +23,41 @@ async function createTeam(formData: FormData) {
   const externalTeamCode = String(formData.get("externalTeamCode") ?? "").trim() || null;
 
   if (!seasonId || !name || !ageGroup || !teamNumber) {
-    redirect("/admin/teams?error=invalid");
+    redirect(`/admin/teams?seasonId=${seasonId}&error=invalid`);
   }
 
   await prisma.team.create({
-    data: { clubId, seasonId, name, ageGroup, teamNumber, externalTeamCode },
+    data: {
+      clubId,
+      name,
+      seasons: { create: { seasonId, ageGroup, teamNumber, externalTeamCode } },
+    },
   });
 
-  revalidatePath("/admin/teams");
+  redirect(`/admin/teams?seasonId=${seasonId}`);
 }
 
 export default async function TeamsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string }>;
+  searchParams: Promise<{ error?: string; seasonId?: string }>;
 }) {
-  const { error } = await searchParams;
-  const [teams, clubs, seasons] = await Promise.all([
-    prisma.team.findMany({
-      include: { club: true, season: true },
-      orderBy: [{ season: { startDate: "desc" } }, { ageGroup: "desc" }, { name: "asc" }],
-      take: 200,
-    }),
+  const { error, seasonId: seasonIdParam } = await searchParams;
+  const [clubs, seasons] = await Promise.all([
     prisma.club.findMany({ orderBy: { name: "asc" } }),
     prisma.season.findMany({ orderBy: { startDate: "desc" } }),
   ]);
   const activeSeason = seasons.find((s) => s.isActive) ?? seasons[0];
+  const selectedSeasonId = seasonIdParam || activeSeason?.id;
+
+  const teams = selectedSeasonId
+    ? await prisma.team.findMany({
+        where: { seasons: { some: { seasonId: selectedSeasonId } } },
+        include: { club: true, seasons: { where: { seasonId: selectedSeasonId } } },
+        orderBy: { name: "asc" },
+        take: 200,
+      })
+    : [];
 
   return (
     <div>
@@ -63,6 +72,24 @@ export default async function TeamsPage({
         </p>
       )}
 
+      {seasons.length > 0 && (
+        <form action="/admin/teams" className="mb-4 flex items-end gap-3">
+          <label className="flex flex-col gap-1 text-sm">
+            Season
+            <select name="seasonId" className={selectClass} defaultValue={selectedSeasonId}>
+              {seasons.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button type="submit" className={secondaryButtonClass}>
+            Filter
+          </button>
+        </form>
+      )}
+
       <table className={`${tableClass} mb-8`}>
         <thead>
           <tr>
@@ -71,7 +98,6 @@ export default async function TeamsPage({
             <th className={thClass}>Club</th>
             <th className={thClass}>Age</th>
             <th className={thClass}>#</th>
-            <th className={thClass}>Season</th>
           </tr>
         </thead>
         <tbody>
@@ -83,20 +109,19 @@ export default async function TeamsPage({
                 </Link>
               </td>
               <td className={`${tdClass} font-mono text-xs text-slate-500`}>
-                {t.externalTeamCode ?? ""}
+                {t.seasons[0]?.externalTeamCode ?? ""}
               </td>
               <td className={tdClass}>
                 {t.club ? t.club.name : <span className="text-amber-600">Unlinked</span>}
               </td>
-              <td className={tdClass}>{t.ageGroup}u</td>
-              <td className={tdClass}>{t.teamNumber}</td>
-              <td className={tdClass}>{t.season.label}</td>
+              <td className={tdClass}>{t.seasons[0]?.ageGroup}u</td>
+              <td className={tdClass}>{t.seasons[0]?.teamNumber}</td>
             </tr>
           ))}
           {teams.length === 0 && (
             <tr>
-              <td className={tdClass} colSpan={6}>
-                No teams yet.
+              <td className={tdClass} colSpan={5}>
+                No teams for this season yet.
               </td>
             </tr>
           )}
@@ -106,6 +131,10 @@ export default async function TeamsPage({
       {seasons.length > 0 && (
         <>
           <h2 className="mb-2 text-lg font-medium">New team</h2>
+          <p className="mb-2 text-xs text-slate-500">
+            Creates the team and enrolls it in the selected season. A team already in
+            the system can also be added to additional seasons from its detail page.
+          </p>
           <form action={createTeam} className="flex flex-wrap items-end gap-3">
             <label className="flex flex-col gap-1 text-sm">
               Name
@@ -157,7 +186,7 @@ export default async function TeamsPage({
               <select
                 name="seasonId"
                 className={selectClass}
-                defaultValue={activeSeason?.id ?? ""}
+                defaultValue={selectedSeasonId}
               >
                 {seasons.map((s) => (
                   <option key={s.id} value={s.id}>

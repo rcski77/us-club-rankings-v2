@@ -23,14 +23,14 @@ model Region {
 }
 
 model Season {
-  id        String   @id @default(cuid())
-  label     String   @unique // e.g. "2025-2026"
-  startDate DateTime
-  endDate   DateTime
-  isActive  Boolean  @default(false)
-  teams     Team[]
-  events    Event[]
-  createdAt DateTime @default(now())
+  id          String       @id @default(cuid())
+  label       String       @unique // e.g. "2025-2026"
+  startDate   DateTime
+  endDate     DateTime
+  isActive    Boolean      @default(false)
+  teamSeasons TeamSeason[]
+  events      Event[]
+  createdAt   DateTime     @default(now())
 }
 
 model Club {
@@ -90,35 +90,55 @@ model User {
   createdAt    DateTime   @default(now())
 }
 
+// Team is a persistent identity (a program's squad), independent of season -- it can
+// participate in multiple seasons via TeamSeason. Fields that genuinely vary year to
+// year (age group, squad number, the AES-style code that embeds the age digit) live on
+// TeamSeason, not here. Results are filtered by season via TeamFinish -> Division ->
+// Event -> Season, not via a fixed field on Team itself.
 model Team {
   id     String  @id @default(cuid())
   clubId String? // nullable: "Unlinked Teams" -- a team whose club code didn't
   // resolve to a known Club yet (staged for admin to name, not fuzzy-guessed).
   club   Club?   @relation(fields: [clubId], references: [id])
 
-  seasonId String
-  season   Season @relation(fields: [seasonId], references: [id])
-
-  name       String // display name from the source, e.g. "MADFROG 12'S N GREEN"
-  ageGroup   Int
-  teamNumber Int // distinguishes a club's multiple squads in the same age group
-  // (legacy's "17-1"/"17-2"), parsed from the source code.
-
-  externalTeamCode String? // raw source code verbatim, e.g. "g14skyln1nt", kept for
-  // traceability.
-  lineageKey       String? // derived from (club externalCode+region, teamNumber) --
-  // stable across seasons even as the age-group digit changes; powers cross-season
-  // rating carry-forward and Teams-admin "same program as last year" suggestions.
+  name       String // display name, e.g. "MADFROG Green"
+  lineageKey String? // derived from (club externalCode+region, teamNumber) -- stable
+  // across seasons even as the age-group digit in the source code changes; powers
+  // cross-season rating carry-forward and "same program as last year" suggestions.
 
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  seasons        TeamSeason[]
   finishes       TeamFinish[]
   rankingResults RankingResult[]
 
-  @@unique([seasonId, clubId, teamNumber, ageGroup])
   @@index([lineageKey])
+}
+
+// One row per (team, season) it participates in -- this is what "a team belongs to
+// multiple seasons" means concretely: age group and squad number are season-scoped
+// facts about a team, not permanent ones.
+model TeamSeason {
+  id       String @id @default(cuid())
+  teamId   String
+  team     Team   @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  seasonId String
+  season   Season @relation(fields: [seasonId], references: [id])
+
+  ageGroup         Int
+  teamNumber       Int // distinguishes a club's multiple squads in the same age group
+  // (legacy's "17-1"/"17-2"), parsed from the source code for that season.
+  externalTeamCode String? // raw source code verbatim for that season, e.g.
+  // "g14skyln1nt" -- the leading age digit changes season to season, which is exactly
+  // why this can't live on Team.
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([teamId, seasonId])
+  @@index([seasonId, ageGroup])
 }
 
 // --- Phase 1: events, divisions, point templates, finishes, rankings --------

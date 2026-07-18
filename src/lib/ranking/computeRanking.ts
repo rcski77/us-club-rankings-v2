@@ -6,30 +6,36 @@ const ALGORITHM_VERSION = "phase1-points-only";
 /**
  * Recomputes the official points-based ranking for one (season, ageGroup) partition:
  * gather CONFIRMED-division finishes for that age group (or ignoreAge finishes whose
- * TEAM's natural age group matches), sum each team's best 3 point finishes, rank
- * descending, and replace the prior computed set. See plan section 4.3.
+ * TEAM's natural age group -- per that team's TeamSeason row -- matches), sum each
+ * team's best 3 point finishes, rank descending, and replace the prior computed set.
+ * See plan section 4.3.
  */
 export async function computeRanking(seasonId: string, ageGroup: number) {
-  // Fetch every CONFIRMED finish for the season (not just this age group) because an
-  // ignoreAge finish can live in a division of a *different* age group but still
-  // count toward this one -- see the `relevant` filter below.
+  // Fetch every CONFIRMED finish within this season's events (not just this age
+  // group) because an ignoreAge finish can live in a division of a *different* age
+  // group but still count toward this one -- see the `relevant` filter below.
   const finishes = await prisma.teamFinish.findMany({
     where: {
       points: { not: null },
-      team: { seasonId },
       division: { event: { seasonId }, scoringStatus: "CONFIRMED" },
     },
-    include: { team: true, division: true },
+    include: { division: true },
   });
+
+  // A team's "natural" age group for this season -- needed to resolve ignoreAge
+  // finishes, since a team can play up/down in a division of a different age group
+  // but should still count toward the age group it's actually enrolled at this season.
+  const teamSeasons = await prisma.teamSeason.findMany({ where: { seasonId } });
+  const naturalAgeGroup = new Map(teamSeasons.map((ts) => [ts.teamId, ts.ageGroup]));
 
   // A finish counts toward this ageGroup's ranking if either:
   //  - the division itself is this age group (the normal case), or
-  //  - ignoreAge is set and the TEAM's natural age group is this one (played up/down
-  //    but should still count for their own age group).
+  //  - ignoreAge is set and the TEAM's natural age group (per its TeamSeason row for
+  //    this season) is this one (played up/down but should still count for their own).
   const relevant = finishes.filter(
     (f) =>
       (f.division.ageGroup === ageGroup && !f.ignoreAge) ||
-      (f.ignoreAge && f.team.ageGroup === ageGroup),
+      (f.ignoreAge && naturalAgeGroup.get(f.teamId) === ageGroup),
   );
 
   const byTeam = new Map<string, typeof relevant>();
@@ -99,12 +105,20 @@ export async function computeRanking(seasonId: string, ageGroup: number) {
 export async function recomputeRankingsForDivision(divisionId: string) {
   const division = await prisma.division.findUniqueOrThrow({
     where: { id: divisionId },
-    include: { event: true, finishes: { include: { team: true } } },
+    include: { event: true, finishes: true },
   });
 
   const ageGroups = new Set<number>([division.ageGroup]);
-  for (const finish of division.finishes) {
-    if (finish.ignoreAge) ageGroups.add(finish.team.ageGroup);
+
+  const ignoreAgeFinishes = division.finishes.filter((f) => f.ignoreAge);
+  if (ignoreAgeFinishes.length > 0) {
+    const teamSeasons = await prisma.teamSeason.findMany({
+      where: {
+        seasonId: division.event.seasonId,
+        teamId: { in: ignoreAgeFinishes.map((f) => f.teamId) },
+      },
+    });
+    for (const ts of teamSeasons) ageGroups.add(ts.ageGroup);
   }
 
   for (const ageGroup of ageGroups) {
