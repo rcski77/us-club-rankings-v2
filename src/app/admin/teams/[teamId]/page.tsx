@@ -65,22 +65,22 @@ export default async function TeamDetailPage({
   const { teamId } = await params;
   const { error } = await searchParams;
 
-  const [team, clubs, seasons] = await Promise.all([
-    prisma.team.findUnique({
-      where: { id: teamId },
-      include: {
-        club: true,
-        seasons: { include: { season: true }, orderBy: { season: { startDate: "desc" } } },
-        finishes: {
-          include: { division: { include: { event: true } } },
-          orderBy: { createdAt: "desc" },
-        },
+  // Sequential, not Promise.all: the local dev Postgres (via `prisma dev`) doesn't
+  // reliably handle concurrent queries from the same connection pool.
+  const team = await prisma.team.findUnique({
+    where: { id: teamId },
+    include: {
+      club: true,
+      seasons: { include: { season: true }, orderBy: { season: { startDate: "desc" } } },
+      finishes: {
+        include: { division: { include: { event: true } } },
+        orderBy: { createdAt: "desc" },
       },
-    }),
-    prisma.club.findMany({ orderBy: { name: "asc" } }),
-    prisma.season.findMany({ orderBy: { startDate: "desc" } }),
-  ]);
+    },
+  });
   if (!team) notFound();
+  const clubs = await prisma.club.findMany({ orderBy: { name: "asc" } });
+  const seasons = await prisma.season.findMany({ orderBy: { startDate: "desc" } });
 
   const enrolledSeasonIds = new Set(team.seasons.map((ts) => ts.seasonId));
   const availableSeasons = seasons.filter((s) => !enrolledSeasonIds.has(s.id));

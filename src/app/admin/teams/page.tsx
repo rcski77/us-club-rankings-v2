@@ -43,10 +43,10 @@ export default async function TeamsPage({
   searchParams: Promise<{ error?: string; seasonId?: string }>;
 }) {
   const { error, seasonId: seasonIdParam } = await searchParams;
-  const [clubs, seasons] = await Promise.all([
-    prisma.club.findMany({ orderBy: { name: "asc" } }),
-    prisma.season.findMany({ orderBy: { startDate: "desc" } }),
-  ]);
+  // Sequential, not Promise.all: the local dev Postgres (via `prisma dev`) doesn't
+  // reliably handle concurrent queries from the same connection pool.
+  const clubs = await prisma.club.findMany({ orderBy: { name: "asc" } });
+  const seasons = await prisma.season.findMany({ orderBy: { startDate: "desc" } });
   const activeSeason = seasons.find((s) => s.isActive) ?? seasons[0];
   const selectedSeasonId = seasonIdParam || activeSeason?.id;
 

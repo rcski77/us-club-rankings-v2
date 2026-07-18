@@ -33,33 +33,31 @@ export default async function DivisionDetailPage({
   const { eventId, divisionId } = await params;
   const { error } = await searchParams;
 
-  const [division, templates] = await Promise.all([
-    prisma.division.findUnique({
-      where: { id: divisionId },
-      include: {
-        event: true,
-        pointBands: { orderBy: { fromRank: "asc" } },
-      },
-    }),
-    prisma.pointTemplate.findMany({ orderBy: { maxPoints: "desc" } }),
-  ]);
+  // Sequential, not Promise.all: the local dev Postgres (via `prisma dev`) doesn't
+  // reliably handle concurrent queries from the same connection pool.
+  const division = await prisma.division.findUnique({
+    where: { id: divisionId },
+    include: {
+      event: true,
+      pointBands: { orderBy: { fromRank: "asc" } },
+    },
+  });
   if (!division || division.eventId !== eventId) notFound();
+  const templates = await prisma.pointTemplate.findMany({ orderBy: { maxPoints: "desc" } });
 
   const seasonId = division.event.seasonId;
   const seasonScopedTeam = { seasons: { where: { seasonId } } } as const;
 
-  const [finishes, teams] = await Promise.all([
-    prisma.teamFinish.findMany({
-      where: { divisionId },
-      include: { team: { include: seasonScopedTeam } },
-      orderBy: { rank: "asc" },
-    }),
-    prisma.team.findMany({
-      where: { seasons: { some: { seasonId } } },
-      include: seasonScopedTeam,
-      orderBy: { name: "asc" },
-    }),
-  ]);
+  const finishes = await prisma.teamFinish.findMany({
+    where: { divisionId },
+    include: { team: { include: seasonScopedTeam } },
+    orderBy: { rank: "asc" },
+  });
+  const teams = await prisma.team.findMany({
+    where: { seasons: { some: { seasonId } } },
+    include: seasonScopedTeam,
+    orderBy: { name: "asc" },
+  });
   teams.sort((a, b) => (b.seasons[0]?.ageGroup ?? 0) - (a.seasons[0]?.ageGroup ?? 0));
 
   const finishedTeamIds = new Set(finishes.map((f) => f.teamId));

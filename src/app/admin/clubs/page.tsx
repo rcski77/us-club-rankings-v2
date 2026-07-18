@@ -61,13 +61,13 @@ export default async function ClubsPage({
   searchParams: Promise<{ error?: string }>;
 }) {
   const { error } = await searchParams;
-  const [clubs, regions] = await Promise.all([
-    prisma.club.findMany({
-      include: { region: true, _count: { select: { teams: true } } },
-      orderBy: { name: "asc" },
-    }),
-    prisma.region.findMany({ orderBy: { code: "asc" } }),
-  ]);
+  // Sequential, not Promise.all: the local dev Postgres (via `prisma dev`) doesn't
+  // reliably handle concurrent queries from the same connection pool.
+  const clubs = await prisma.club.findMany({
+    include: { region: true, _count: { select: { teams: true } } },
+    orderBy: { name: "asc" },
+  });
+  const regions = await prisma.region.findMany({ orderBy: { code: "asc" } });
 
   return (
     <div>
