@@ -195,17 +195,43 @@ comparisons to date. Only confirmed divisions feed the graph, which also sideste
 confirmed events are included.
 
 **Field-strength signal** for the suggestion algorithm: for each team in a candidate
-division, look up its latest Colley rating; bucket into Top5/10/25/.../250
-participation counts (mirroring the legacy Analysis screen); compute a composite Field
-Strength Score (FSS) as a weighted sum over bucket membership (Top5=100, Top10=80, ...
-unrated=0); map FSS to a suggested PointTemplate via percentile-based self-calibrating
-thresholds (admin-editable once real data suggests better fixed cutoffs).
+division, look up its latest Colley rating, then compute three things from that same
+rating list — kept separate, not blended into one hybrid number:
+- **Bucket participation counts** (Top5/10/25/.../250, mirroring the legacy Analysis
+  screen) — display/justification only, so staff can sanity-check against the
+  breakdown they're already used to from v1. Not an input to the suggestion math.
+- **Field Strength Score (FSS)** — mean Colley rating of the top 50% of teams in the
+  division. Continuous rather than bucket-weighted, so a team just outside a bucket
+  boundary doesn't swing the score. This is the number that actually drives the
+  suggestion: map FSS to a suggested PointTemplate via percentile-based
+  self-calibrating thresholds (admin-editable once real data suggests better fixed
+  cutoffs).
+- **Scale factor** — team count and match volume for the division. Weighted alongside
+  FSS in the suggestion mapping, not blended into FSS itself: a large low-strength
+  field shouldn't inflate the strength number, but should still be able to nudge the
+  suggested tier at the margins (a 300-team field is arguably worth more than a
+  20-team field of similar average strength). Exact weighting/formula is a Phase 3
+  calibration detail, not decided yet.
 
 **Suggest → Admin Confirms workflow**: admin sees FSS, percentile, bucket breakdown,
 percentTeamsRated, confidence warnings (SMALL_FIELD, NO_HISTORY, LOW_PERCENT_RATED),
-and the suggested template; Accept copies bands + confirms; Override requires a short
-reason (feeds future recalibration). CONFIRMED divisions are excluded from future
-re-suggestion; editing requires an explicit audited Unlock.
+and the suggested template, plus two presentation aids for sanity-checking the number
+rather than trusting it blind:
+- A **Colley-rating distribution histogram** for the division (visual shape of the
+  field, not just the summary stats).
+- A **plain-language score band** alongside the raw percentile (e.g. "Elite field" /
+  "Strong regional" / "Solid regional" / "Developmental") — exact band cutoffs TBD
+  during Phase 3 calibration, analogous to interpretation bands seen on other
+  volleyball-ranking sites.
+
+Once weekly `TeamRatingHistory` snapshots accumulate (see Tier 1 above), the same
+screen can also show how a division's FSS/suggested tier has shifted across prior
+runs — useful since a division scored early in the season, before its region's other
+results connect into the graph, can look weaker than it turns out to be.
+
+Accept copies bands + confirms; Override requires a short reason (feeds future
+recalibration). CONFIRMED divisions are excluded from future re-suggestion; editing
+requires an explicit audited Unlock.
 
 **Tier 2 (Phase 5): true Elo + Massey once match-level data exists.** *Important:*
 match-level AES data turned out to already be reachable via AES's public,
