@@ -60,10 +60,10 @@ export default async function TeamDetailPage({
   searchParams,
 }: {
   params: Promise<{ teamId: string }>;
-  searchParams: Promise<{ error?: string }>;
+  searchParams: Promise<{ error?: string; season?: string }>;
 }) {
   const { teamId } = await params;
-  const { error } = await searchParams;
+  const { error, season: seasonParam } = await searchParams;
 
   // Sequential, not Promise.all: the local dev Postgres (via `prisma dev`) doesn't
   // reliably handle concurrent queries from the same connection pool.
@@ -73,8 +73,10 @@ export default async function TeamDetailPage({
       club: true,
       seasons: { include: { season: true }, orderBy: { season: { startDate: "desc" } } },
       finishes: {
-        include: { division: { include: { event: true } } },
-        orderBy: { createdAt: "desc" },
+        include: {
+          division: { include: { event: { include: { season: true } }, pointBands: true } },
+        },
+        orderBy: { division: { event: { startDate: "desc" } } },
       },
     },
   });
@@ -84,6 +86,20 @@ export default async function TeamDetailPage({
 
   const enrolledSeasonIds = new Set(team.seasons.map((ts) => ts.seasonId));
   const availableSeasons = seasons.filter((s) => !enrolledSeasonIds.has(s.id));
+
+  // Season tabs: any season the team is enrolled in, plus any season it has a finish
+  // in (a team can have results recorded before/without an explicit TeamSeason row).
+  const finishSeasons = new Map(team.finishes.map((f) => [f.division.event.season.id, f.division.event.season]));
+  const tabSeasons = [...team.seasons.map((ts) => ts.season), ...finishSeasons.values()]
+    .filter((s, i, arr) => arr.findIndex((x) => x.id === s.id) === i)
+    .sort((a, b) => b.startDate.getTime() - a.startDate.getTime());
+
+  const activeSeasonId =
+    (seasonParam && tabSeasons.some((s) => s.id === seasonParam) ? seasonParam : undefined) ??
+    tabSeasons.find((s) => s.isActive)?.id ??
+    tabSeasons[0]?.id;
+
+  const finishesForSeason = team.finishes.filter((f) => f.division.event.season.id === activeSeasonId);
 
   const updateTeamWithId = updateTeam.bind(null, teamId);
   const addTeamSeasonWithId = addTeamSeason.bind(null, teamId);
@@ -228,33 +244,82 @@ export default async function TeamDetailPage({
 
       <section>
         <h2 className="mb-2 text-lg font-medium">Finishes</h2>
-        <table className={tableClass}>
-          <thead>
-            <tr>
-              <th className={thClass}>Event</th>
-              <th className={thClass}>Division</th>
-              <th className={thClass}>Rank</th>
-              <th className={thClass}>Points</th>
-            </tr>
-          </thead>
-          <tbody>
-            {team.finishes.map((f) => (
-              <tr key={f.id}>
-                <td className={tdClass}>{f.division.event.name}</td>
-                <td className={tdClass}>{f.division.name}</td>
-                <td className={tdClass}>{f.rank}</td>
-                <td className={tdClass}>{f.points ?? ""}</td>
-              </tr>
-            ))}
-            {team.finishes.length === 0 && (
-              <tr>
-                <td className={tdClass} colSpan={4}>
-                  No finishes yet.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
+
+        {tabSeasons.length === 0 ? (
+          <p className="text-sm text-slate-500">No finishes yet.</p>
+        ) : (
+          <>
+            <div className="mb-3 flex gap-1 border-b">
+              {tabSeasons.map((s) => (
+                <Link
+                  key={s.id}
+                  href={`/admin/teams/${teamId}?season=${s.id}`}
+                  className={
+                    s.id === activeSeasonId
+                      ? "-mb-px rounded-t border border-b-0 bg-white px-3 py-1.5 text-sm font-medium"
+                      : "-mb-px rounded-t border border-transparent px-3 py-1.5 text-sm text-slate-500 hover:text-slate-900"
+                  }
+                >
+                  {s.label}
+                </Link>
+              ))}
+            </div>
+
+            <table className={tableClass}>
+              <thead>
+                <tr>
+                  <th className={thClass}>Event</th>
+                  <th className={thClass}>Division</th>
+                  <th className={thClass}>Tier</th>
+                  <th className={thClass}>Place</th>
+                  <th className={thClass}>Points</th>
+                  <th className={thClass}>Max Points</th>
+                </tr>
+              </thead>
+              <tbody>
+                {finishesForSeason.map((f) => {
+                  const maxPoints = f.division.pointBands.length
+                    ? Math.max(...f.division.pointBands.map((b) => b.points))
+                    : null;
+                  return (
+                    <tr key={f.id}>
+                      <td className={tdClass}>
+                        <Link
+                          href={`/admin/events/${f.division.eventId}`}
+                          className="text-slate-900 underline"
+                        >
+                          {f.division.event.name}
+                        </Link>
+                      </td>
+                      <td className={tdClass}>
+                        <Link
+                          href={`/admin/events/${f.division.eventId}/divisions/${f.division.id}`}
+                          className="text-slate-900 underline"
+                        >
+                          {f.division.name}
+                        </Link>
+                      </td>
+                      <td className={tdClass}>
+                        {f.division.tierLabel}
+                        {f.division.tierLevel ? ` ${f.division.tierLevel}` : ""}
+                      </td>
+                      <td className={tdClass}>{f.rank}</td>
+                      <td className={tdClass}>{f.points ?? ""}</td>
+                      <td className={tdClass}>{maxPoints ?? ""}</td>
+                    </tr>
+                  );
+                })}
+                {finishesForSeason.length === 0 && (
+                  <tr>
+                    <td className={tdClass} colSpan={6}>
+                      No finishes for this season.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </>
+        )}
       </section>
     </div>
   );

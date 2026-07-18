@@ -7,6 +7,7 @@ import {
   selectClass,
   primaryButtonClass,
   errorBannerClass,
+  successBannerClass,
   tableClass,
   thClass,
   tdClass,
@@ -34,6 +35,7 @@ async function updateClub(clubId: string, formData: FormData) {
 
   revalidatePath(`/admin/clubs/${clubId}`);
   revalidatePath("/admin/clubs");
+  redirect(`/admin/clubs/${clubId}?success=1`);
 }
 
 export default async function ClubDetailPage({
@@ -41,10 +43,10 @@ export default async function ClubDetailPage({
   searchParams,
 }: {
   params: Promise<{ clubId: string }>;
-  searchParams: Promise<{ error?: string }>;
+  searchParams: Promise<{ error?: string; success?: string }>;
 }) {
   const { clubId } = await params;
-  const { error } = await searchParams;
+  const { error, success } = await searchParams;
 
   // Sequential, not Promise.all: the local dev Postgres (via `prisma dev`) doesn't
   // reliably handle concurrent queries from the same connection pool.
@@ -74,6 +76,7 @@ export default async function ClubDetailPage({
       <h1 className="mb-6 text-2xl font-semibold">{club.name}</h1>
 
       {error === "invalid" && <p className={errorBannerClass}>Club name is required.</p>}
+      {success === "1" && <p className={successBannerClass}>Club saved.</p>}
 
       <section className="mb-8 max-w-lg">
         <h2 className="mb-2 text-lg font-medium">Edit club</h2>

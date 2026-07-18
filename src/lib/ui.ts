@@ -7,6 +7,7 @@ export const smallPrimaryButtonClass =
   "rounded bg-slate-900 px-2 py-1 text-xs text-white hover:bg-slate-800";
 export const smallSecondaryButtonClass = "rounded border px-2 py-1 text-xs hover:bg-slate-50";
 export const errorBannerClass = "mb-4 rounded bg-red-50 p-3 text-sm text-red-700";
+export const successBannerClass = "mb-4 rounded bg-green-50 p-3 text-sm text-green-700";
 export const tableClass = "w-full border-collapse text-sm";
 export const thClass = "border-b px-3 py-2 text-left font-medium text-slate-600";
 export const tdClass = "border-b px-3 py-2";

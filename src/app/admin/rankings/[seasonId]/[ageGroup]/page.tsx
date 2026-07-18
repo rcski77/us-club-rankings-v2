@@ -51,7 +51,11 @@ export default async function RankingResultsPage({
           {results.map((r) => (
             <tr key={r.id}>
               <td className={tdClass}>{r.rank}</td>
-              <td className={tdClass}>{r.team.name}</td>
+              <td className={tdClass}>
+                <Link href={`/admin/teams/${r.team.id}`} className="text-slate-900 underline">
+                  {r.team.name}
+                </Link>
+              </td>
               <td className={tdClass}>{r.team.club?.name ?? ""}</td>
               <td className={tdClass}>{r.totalPoints}</td>
               <td className={tdClass}>
