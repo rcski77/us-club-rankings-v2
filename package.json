@@ -8,6 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "postinstall": "prisma generate",
+    "db:up": "docker compose up -d postgres",
+    "db:down": "docker compose down",
     "db:push": "prisma db push",
     "db:migrate": "prisma migrate dev",
     "db:studio": "prisma studio",

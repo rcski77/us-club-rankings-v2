@@ -48,15 +48,16 @@ script for the one-off-script pattern (construct a fresh client, same adapter se
 
 ```bash
 # edit prisma/schema.prisma
-npx prisma db push       # NOT migrate dev — see ../docs/dev-environment.md for why
+npx prisma db push       # NOT migrate dev, for now — see ../docs/dev-environment.md
 npx prisma generate
 # restart the Next.js dev server — it caches the generated client at startup
 ```
 
 No real migration history exists yet (`prisma/migrations/` isn't part of this
 project's workflow currently) — `db push` diffs the schema straight onto the dev
-database. When this project moves to a persistent Postgres, that's the point to
-switch to `prisma migrate dev` and generate a real initial migration.
+database. Dev Postgres now runs in Docker (`../docker-compose.yml`), which can run
+`prisma migrate dev` reliably (unlike the old `npx prisma dev` server), so this is a
+viable point to switch to real migrations — that switch just hasn't happened yet.
 
 ## Seed scripts
 

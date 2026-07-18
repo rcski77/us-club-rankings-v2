@@ -12,8 +12,8 @@ rebuild exists, what's built vs. planned, and domain knowledge — lives in `doc
   where the design has deviated from the original plan.
 - **[`docs/domain-notes.md`](docs/domain-notes.md)** — ranking methodology, the real
   AES CSV data format, USAV regions/zones, team identity across seasons.
-- **[`docs/dev-environment.md`](docs/dev-environment.md)** — local Postgres setup,
-  known instability + recovery steps, seed scripts. Read this before assuming a
+- **[`docs/dev-environment.md`](docs/dev-environment.md)** — local Postgres-in-Docker
+  setup, migration-workflow notes, seed scripts. Read this before assuming a
   connection error is an app bug.
 
 Subdirectory conventions: [`prisma/CLAUDE.md`](prisma/CLAUDE.md) (schema/seeding),
@@ -22,10 +22,10 @@ Subdirectory conventions: [`prisma/CLAUDE.md`](prisma/CLAUDE.md) (schema/seeding
 ## Stack
 
 Next.js 16 (App Router, Turbopack) + TypeScript + Tailwind + PostgreSQL + Prisma 7,
-Auth.js (Credentials provider, JWT sessions). Local dev Postgres via `npx prisma dev`
-(no Docker). Explicitly **not** using `prisma-client-js`'s auto-connect — Prisma 7's
-newer `prisma-client` generator requires an explicit `@prisma/adapter-pg` driver
-adapter everywhere a `PrismaClient` is constructed (see `src/lib/prisma.ts`).
+Auth.js (Credentials provider, JWT sessions). Local dev Postgres runs in Docker
+(`docker-compose.yml`). Explicitly **not** using `prisma-client-js`'s auto-connect —
+Prisma 7's newer `prisma-client` generator requires an explicit `@prisma/adapter-pg`
+driver adapter everywhere a `PrismaClient` is constructed (see `src/lib/prisma.ts`).
 
 ## Scope
 
@@ -35,7 +35,7 @@ for this codebase (see `docs/plan.md`).
 ## Quick start
 
 ```bash
-npx prisma dev --name us-club-rankings-v2 --detach
+npm run db:up
 npm run db:push && npm run db:seed && npm run db:seed-regions && npm run db:seed-demo
 npm run dev
 ```
@@ -45,8 +45,10 @@ Full detail, troubleshooting, and the seed-script reference: `docs/dev-environme
 ## Conventions worth knowing before editing
 
 - **Sequential `await`, never `Promise.all`, for multiple Prisma queries in the same
-  request.** The local dev Postgres unreliably drops connections under concurrent
-  queries from the same pool. See `docs/dev-environment.md`.
+  request.** Inherited from the old `npx prisma dev` database, which unreliably
+  dropped connections under concurrent queries — now on Docker Postgres this likely
+  no longer applies, but hasn't been re-verified/converted project-wide, so keep
+  following the existing convention. See `docs/dev-environment.md`.
 - **Shared style constants** in `src/lib/ui.ts` (`inputClass`, `tableClass`,
   `primaryButtonClass`, etc.) — reuse these rather than inlining Tailwind classes on
   new admin pages, for visual consistency.
@@ -56,8 +58,8 @@ Full detail, troubleshooting, and the seed-script reference: `docs/dev-environme
   with `?error=<code>`, and the page renders a banner keyed off that code — not thrown
   exceptions surfaced to the user. See any existing page (e.g.
   `src/app/admin/point-templates/page.tsx`) for the pattern.
-- **After any Prisma schema change**: `npm run db:push` (not `migrate dev` — see
-  `docs/dev-environment.md` for why), then `npx prisma generate`, then **restart the
+- **After any Prisma schema change**: `npm run db:push` (not `migrate dev`, for now —
+  see `docs/dev-environment.md`), then `npx prisma generate`, then **restart the
   dev server** — the generated client is cached in the running process.
 - Don't add dark-mode styling reactively — `src/app/globals.css` intentionally forces
   light theme (a real bug: the Next.js default dark-mode media query made the admin

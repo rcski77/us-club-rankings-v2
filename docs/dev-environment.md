@@ -4,11 +4,11 @@
 
 ```bash
 npm install
-npx prisma dev --name us-club-rankings-v2 --detach   # starts local Postgres, see below
-npm run db:push        # sync schema (see "migrate dev is broken" below)
-npm run db:seed        # bootstrap SUPER_ADMIN account
+npm run db:up           # starts Postgres in Docker, see below
+npm run db:push          # sync schema
+npm run db:seed          # bootstrap SUPER_ADMIN account
 npm run db:seed-regions  # 40 USAV regions
-npm run db:seed-demo   # optional: sample walkthrough data (club/teams/event/rankings)
+npm run db:seed-demo     # optional: sample walkthrough data (club/teams/event/rankings)
 npm run dev
 ```
 
@@ -17,42 +17,44 @@ Bootstrap admin login: email/password come from `SEED_ADMIN_EMAIL`/
 dev values). Change the password after first login in a real deployment; for local
 dev it doesn't matter.
 
-## Local Postgres via `prisma dev` — no Docker needed
+## Local Postgres via Docker
 
-This project uses Prisma 7's built-in local dev Postgres server
-(`npx prisma dev`) instead of Docker, since Docker Desktop wasn't reliably available
-in the original dev environment. It's an ephemeral server tied to a name
-(`us-club-rankings-v2`); `.env`'s `DATABASE_URL`/`SHADOW_DATABASE_URL` point at it.
-
-**Known instability — read this before assuming the app is broken.** Over a long
-session (many hours, several schema pushes and server restarts), this local dev
-Postgres has crashed at least once: `npx prisma dev ls` kept reporting the server as
-"running," but its actual TCP listener stopped responding, and every query — even a
-single one from a freshly-created client — failed with `P1017 Server has closed the
-connection` / `DriverAdapterError: ConnectionClosed`. If the app throws that error (or
-"Connection terminated unexpectedly") and a plain server restart doesn't fix it, the
-underlying database itself has likely died. Recovery:
+This project runs local Postgres through Docker Desktop (`docker-compose.yml` at the
+repo root — a single `postgres:16` service named `us-club-rankings-v2-db`, port 5432,
+with a named volume so data survives container restarts). `.env`'s `DATABASE_URL`
+points at it (`postgres://postgres:postgres@localhost:5432/us_club_rankings_dev`).
 
 ```bash
-npx prisma dev stop us-club-rankings-v2
-npx prisma dev rm us-club-rankings-v2      # clears a stale lock if `stop` alone fails
-npx prisma dev --name us-club-rankings-v2 --detach
+npm run db:up      # docker compose up -d postgres
+npm run db:down    # docker compose down (container stops; volume/data persists)
+```
+
+To wipe the database entirely (fresh start), also remove the volume:
+
+```bash
+docker compose down -v
+npm run db:up
 npm run db:push
 npm run db:seed
 npm run db:seed-regions
 npm run db:seed-demo    # if you want the sample data back
 ```
 
-This wipes all data (it's a fresh database) — hence the seed scripts existing as
-one-command rebuilds rather than needing to reconstruct anything by hand.
+This project previously used Prisma 7's built-in `npx prisma dev` ephemeral server
+instead of Docker, since Docker Desktop wasn't reliably available in the original dev
+environment. That server had real instability (`P1017 Server has closed the
+connection` after long sessions, and unreliable behavior under concurrent queries —
+see below) and couldn't run `prisma migrate dev` at all, since its shadow-database
+connection consistently failed with `P1017` even when the main connection was fine.
+Docker Desktop is now available, so the project moved to a real standalone Postgres
+container, which doesn't have either problem.
 
-**`migrate dev` doesn't work against this server.** It needs a shadow database to diff
-against, and that consistently fails with `P1017` even though the main connection is
-fine. Use `npx prisma db push` for schema changes during active development instead —
-it works reliably. This means there's no real migration history yet; if/when this
-project moves to a persistent Postgres (Docker, or a hosted provider), that's the
-right time to start using `prisma migrate dev` for real and generate an initial
-migration from the current schema.
+**Schema changes still use `db push`, not `migrate dev`, for now** — this project has
+no migration history yet (`prisma/migrations/` isn't part of the current workflow).
+Real Postgres can now run `prisma migrate dev` reliably (it auto-manages its own
+shadow database), so this is a viable point to switch to real migrations and generate
+an initial one from the current schema — that hasn't been done yet, so keep using
+`npx prisma db push` for schema changes until it is.
 
 **Prisma 7's client generator needs a driver adapter.** Unlike the older
 `prisma-client-js` generator, the `prisma-client` generator this project uses doesn't
@@ -69,16 +71,17 @@ const prisma = new PrismaClient({ adapter });
 safe via a `globalThis` cache); one-off scripts under `prisma/*.ts` construct their
 own client the same way (see `prisma/seed.ts`, `seedRegions.ts`, `seedDemo.ts`).
 
-**Concurrent queries are unreliable — always await sequentially.** This local
-Postgres (whatever it's backed by under the hood — likely a lightweight/embedded
-engine, not full standalone Postgres) reliably throws `Connection terminated
-unexpectedly` when two Prisma queries are issued concurrently from the same
-connection pool (e.g. `Promise.all([prisma.a.findMany(), prisma.b.findMany()])`), even
-when the server is otherwise healthy. Every admin page in this codebase fetches
-multiple things with **sequential `await` calls**, not `Promise.all`, specifically
-because of this. Keep doing that for new pages — it's a real, reproducible constraint
-of this dev database, not a stylistic preference. Worth re-testing once the app runs
-against a real persistent Postgres; this may not apply there.
+**Concurrent queries — sequential `await` convention, inherited from the old
+Prisma-dev database.** Every admin page in this codebase fetches multiple things with
+sequential `await` calls, not `Promise.all`, because the previous `npx prisma dev`
+database (whatever it was backed by under the hood — likely a lightweight/embedded
+engine, not full standalone Postgres) reliably threw `Connection terminated
+unexpectedly` under concurrent queries from the same connection pool. Now that the
+project runs against a real Postgres container, this constraint likely no longer
+applies, but it hasn't been re-tested or the existing pages converted back to
+`Promise.all`. Keep writing new pages with sequential `await` to match the existing
+codebase until someone deliberately verifies concurrent queries are safe here and
+updates this convention project-wide.
 
 ## Regenerating the Prisma client after a schema change
 
