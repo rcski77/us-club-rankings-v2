@@ -7,7 +7,6 @@ import {
   inputClass,
   selectClass,
   primaryButtonClass,
-  secondaryButtonClass,
   errorBannerClass,
   tableClass,
   thClass,
@@ -36,25 +35,6 @@ async function createClub(formData: FormData) {
   revalidatePath("/admin/clubs");
 }
 
-async function createRegion(formData: FormData) {
-  "use server";
-
-  const name = String(formData.get("regionName") ?? "").trim();
-  const code = String(formData.get("regionCode") ?? "").trim().toUpperCase();
-
-  if (!name || code.length !== 2) {
-    redirect("/admin/clubs?error=region-invalid");
-  }
-
-  const existing = await prisma.region.findUnique({ where: { code } });
-  if (existing) {
-    redirect("/admin/clubs?error=region-exists");
-  }
-
-  await prisma.region.create({ data: { name, code } });
-  revalidatePath("/admin/clubs");
-}
-
 export default async function ClubsPage({
   searchParams,
 }: {
@@ -74,12 +54,6 @@ export default async function ClubsPage({
       <h1 className="mb-6 text-2xl font-semibold">Clubs</h1>
 
       {error === "invalid" && <p className={errorBannerClass}>Club name is required.</p>}
-      {error === "region-invalid" && (
-        <p className={errorBannerClass}>Region name and a 2-letter code are required.</p>
-      )}
-      {error === "region-exists" && (
-        <p className={errorBannerClass}>A region with that code already exists.</p>
-      )}
 
       <table className={`${tableClass} mb-8`}>
         <thead>
@@ -117,67 +91,41 @@ export default async function ClubsPage({
         </tbody>
       </table>
 
-      <div className="flex flex-wrap gap-12">
-        <div>
-          <h2 className="mb-2 text-lg font-medium">New club</h2>
-          <form action={createClub} className="flex flex-col gap-3">
-            <label className="flex flex-col gap-1 text-sm">
-              Name
-              <input name="name" required className={inputClass} />
-            </label>
-            <label className="flex flex-col gap-1 text-sm">
-              Region
-              <select name="regionId" className={selectClass} defaultValue="">
-                <option value="">(none)</option>
-                {regions.map((r) => (
-                  <option key={r.id} value={r.id}>
-                    {r.code} — {r.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <div className="flex gap-3">
-              <label className="flex flex-col gap-1 text-sm">
-                City
-                <input name="city" className={inputClass} />
-              </label>
-              <label className="flex flex-col gap-1 text-sm">
-                State
-                <input name="state" maxLength={2} className={`${inputClass} w-16`} />
-              </label>
-              <label className="flex flex-col gap-1 text-sm">
-                Zip
-                <input name="zip" className={`${inputClass} w-24`} />
-              </label>
-            </div>
-            <button type="submit" className={primaryButtonClass}>
-              Create club
-            </button>
-          </form>
+      <h2 className="mb-2 text-lg font-medium">New club</h2>
+      <form action={createClub} className="flex flex-col gap-3">
+        <label className="flex flex-col gap-1 text-sm">
+          Name
+          <input name="name" required className={inputClass} />
+        </label>
+        <label className="flex flex-col gap-1 text-sm">
+          Region
+          <select name="regionId" className={selectClass} defaultValue="">
+            <option value="">(none)</option>
+            {regions.map((r) => (
+              <option key={r.id} value={r.id}>
+                {r.code} — {r.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <div className="flex gap-3">
+          <label className="flex flex-col gap-1 text-sm">
+            City
+            <input name="city" className={inputClass} />
+          </label>
+          <label className="flex flex-col gap-1 text-sm">
+            State
+            <input name="state" maxLength={2} className={`${inputClass} w-16`} />
+          </label>
+          <label className="flex flex-col gap-1 text-sm">
+            Zip
+            <input name="zip" className={`${inputClass} w-24`} />
+          </label>
         </div>
-
-        <div>
-          <h2 className="mb-2 text-lg font-medium">New region</h2>
-          <form action={createRegion} className="flex flex-col gap-3">
-            <label className="flex flex-col gap-1 text-sm">
-              Name
-              <input name="regionName" placeholder="Northeast Texas" className={inputClass} />
-            </label>
-            <label className="flex flex-col gap-1 text-sm">
-              Code (2 letters)
-              <input
-                name="regionCode"
-                placeholder="NT"
-                maxLength={2}
-                className={`${inputClass} w-20 uppercase`}
-              />
-            </label>
-            <button type="submit" className={secondaryButtonClass}>
-              Create region
-            </button>
-          </form>
-        </div>
-      </div>
+        <button type="submit" className={primaryButtonClass}>
+          Create club
+        </button>
+      </form>
     </div>
   );
 }

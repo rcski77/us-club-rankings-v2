@@ -1,53 +1,54 @@
 import "dotenv/config";
 import { PrismaClient } from "../src/generated/prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
+import type { UsavZone } from "../src/generated/prisma/enums";
 
 // The 40 USAV regions, per https://www.usavregions.org/ (fetched 2026-07-18).
-const USAV_REGIONS: { name: string; code: string }[] = [
+const USAV_REGIONS: { name: string; code: string; zone: UsavZone }[] = [
   // Atlantic Zone
-  { name: "Carolina", code: "CR" },
-  { name: "Chesapeake", code: "CH" },
-  { name: "Excelsior Empire", code: "XL" },
-  { name: "Florida", code: "FL" },
-  { name: "Garden Empire", code: "GE" },
-  { name: "Keystone", code: "KE" },
-  { name: "New England", code: "NE" },
-  { name: "Old Dominion", code: "OD" },
-  { name: "Palmetto", code: "PM" },
-  { name: "Southern", code: "SO" },
-  { name: "Western Empire", code: "WE" },
+  { name: "Carolina", code: "CR", zone: "ATLANTIC" },
+  { name: "Chesapeake", code: "CH", zone: "ATLANTIC" },
+  { name: "Excelsior Empire", code: "XL", zone: "ATLANTIC" },
+  { name: "Florida", code: "FL", zone: "ATLANTIC" },
+  { name: "Garden Empire", code: "GE", zone: "ATLANTIC" },
+  { name: "Keystone", code: "KE", zone: "ATLANTIC" },
+  { name: "New England", code: "NE", zone: "ATLANTIC" },
+  { name: "Old Dominion", code: "OD", zone: "ATLANTIC" },
+  { name: "Palmetto", code: "PM", zone: "ATLANTIC" },
+  { name: "Southern", code: "SO", zone: "ATLANTIC" },
+  { name: "Western Empire", code: "WE", zone: "ATLANTIC" },
   // Border Zone
-  { name: "Arizona", code: "AZ" },
-  { name: "Bayou", code: "BY" },
-  { name: "Delta", code: "DE" },
-  { name: "Gulf Coast", code: "GC" },
-  { name: "Lonestar", code: "LS" },
-  { name: "North Texas", code: "NT" },
-  { name: "Oklahoma", code: "OK" },
-  { name: "Sun Country", code: "SU" },
+  { name: "Arizona", code: "AZ", zone: "BORDER" },
+  { name: "Bayou", code: "BY", zone: "BORDER" },
+  { name: "Delta", code: "DE", zone: "BORDER" },
+  { name: "Gulf Coast", code: "GC", zone: "BORDER" },
+  { name: "Lonestar", code: "LS", zone: "BORDER" },
+  { name: "North Texas", code: "NT", zone: "BORDER" },
+  { name: "Oklahoma", code: "OK", zone: "BORDER" },
+  { name: "Sun Country", code: "SU", zone: "BORDER" },
   // Central Zone
-  { name: "Badger", code: "BG" },
-  { name: "Gateway", code: "GW" },
-  { name: "Great Lakes", code: "GL" },
-  { name: "Great Plains", code: "GP" },
-  { name: "Heart of America", code: "HA" },
-  { name: "Hoosier", code: "HO" },
-  { name: "Iowa", code: "IA" },
-  { name: "Lakeshore", code: "LK" },
-  { name: "North Country", code: "NO" },
-  { name: "Ohio Valley", code: "OV" },
-  { name: "Pioneer", code: "PR" },
+  { name: "Badger", code: "BG", zone: "CENTRAL" },
+  { name: "Gateway", code: "GW", zone: "CENTRAL" },
+  { name: "Great Lakes", code: "GL", zone: "CENTRAL" },
+  { name: "Great Plains", code: "GP", zone: "CENTRAL" },
+  { name: "Heart of America", code: "HA", zone: "CENTRAL" },
+  { name: "Hoosier", code: "HO", zone: "CENTRAL" },
+  { name: "Iowa", code: "IA", zone: "CENTRAL" },
+  { name: "Lakeshore", code: "LK", zone: "CENTRAL" },
+  { name: "North Country", code: "NO", zone: "CENTRAL" },
+  { name: "Ohio Valley", code: "OV", zone: "CENTRAL" },
+  { name: "Pioneer", code: "PR", zone: "CENTRAL" },
   // Pacific Zone
-  { name: "Alaska", code: "AK" },
-  { name: "Aloha", code: "AH" },
-  { name: "Columbia Empire", code: "CE" },
-  { name: "Evergreen", code: "EV" },
-  { name: "Intermountain", code: "IM" },
-  { name: "Moku O Keawe", code: "MK" },
-  { name: "Northern California", code: "NC" },
-  { name: "Puget Sound", code: "PS" },
-  { name: "Rocky Mountain", code: "RM" },
-  { name: "Southern California / Southern Nevada", code: "SCSN" },
+  { name: "Alaska", code: "AK", zone: "PACIFIC" },
+  { name: "Aloha", code: "AH", zone: "PACIFIC" },
+  { name: "Columbia Empire", code: "CE", zone: "PACIFIC" },
+  { name: "Evergreen", code: "EV", zone: "PACIFIC" },
+  { name: "Intermountain", code: "IM", zone: "PACIFIC" },
+  { name: "Moku O Keawe", code: "MK", zone: "PACIFIC" },
+  { name: "Northern California", code: "NC", zone: "PACIFIC" },
+  { name: "Puget Sound", code: "PS", zone: "PACIFIC" },
+  { name: "Rocky Mountain", code: "RM", zone: "PACIFIC" },
+  { name: "Southern California / Southern Nevada", code: "SCSN", zone: "PACIFIC" },
 ];
 
 async function main() {
@@ -57,7 +58,7 @@ async function main() {
   for (const region of USAV_REGIONS) {
     await prisma.region.upsert({
       where: { code: region.code },
-      update: { name: region.name },
+      update: { name: region.name, zone: region.zone },
       create: region,
     });
   }

@@ -13,13 +13,21 @@ datasource db {
 // --- Phase 0: reference / org data + auth -----------------------------------
 // See plan section 1.1/1.2 (C:\Users\adam\.claude\plans\i-need-to-do-fancy-kay.md)
 
+enum UsavZone {
+  ATLANTIC
+  BORDER
+  CENTRAL
+  PACIFIC
+}
+
 model Region {
-  id        String   @id @default(cuid())
+  id        String    @id @default(cuid())
   name      String
-  code      String   @unique // 2-char, e.g. "NT", "AZ", "SC" -- matches the region
+  code      String    @unique // 2-char, e.g. "NT", "AZ", "SC" -- matches the region
   // codes embedded in AES team codes (see Team.externalTeamCode).
+  zone      UsavZone?
   clubs     Club[]
-  createdAt DateTime @default(now())
+  createdAt DateTime  @default(now())
 }
 
 model Season {
