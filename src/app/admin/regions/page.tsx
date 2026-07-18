@@ -1,3 +1,4 @@
+import { Fragment } from "react";
 import { prisma } from "@/lib/prisma";
 import { redirect } from "next/navigation";
 import {
@@ -73,36 +74,40 @@ export default async function RegionsPage({
 
       {regions.length === 0 && <p className="mb-6 text-sm text-slate-500">No regions yet.</p>}
 
-      {[...ZONE_ORDER, "none" as const].map((zoneKey) => {
-        const zoneRegions = byZone.get(zoneKey);
-        if (!zoneRegions || zoneRegions.length === 0) return null;
+      {regions.length > 0 && (
+        <table className={`${tableClass} mb-8`}>
+          <thead>
+            <tr>
+              <th className={thClass}>Code</th>
+              <th className={thClass}>Name</th>
+              <th className={thClass}>Clubs</th>
+            </tr>
+          </thead>
+          <tbody>
+            {[...ZONE_ORDER, "none" as const].map((zoneKey) => {
+              const zoneRegions = byZone.get(zoneKey);
+              if (!zoneRegions || zoneRegions.length === 0) return null;
 
-        return (
-          <section key={zoneKey} className="mb-6">
-            <h2 className="mb-2 text-lg font-medium">
-              {zoneKey === "none" ? "No zone assigned" : ZONE_LABEL[zoneKey]}
-            </h2>
-            <table className={tableClass}>
-              <thead>
-                <tr>
-                  <th className={thClass}>Code</th>
-                  <th className={thClass}>Name</th>
-                  <th className={thClass}>Clubs</th>
-                </tr>
-              </thead>
-              <tbody>
-                {zoneRegions.map((r) => (
-                  <tr key={r.id}>
-                    <td className={`${tdClass} font-mono`}>{r.code}</td>
-                    <td className={tdClass}>{r.name}</td>
-                    <td className={tdClass}>{r._count.clubs}</td>
+              return (
+                <Fragment key={zoneKey}>
+                  <tr className="bg-slate-50">
+                    <td colSpan={3} className={`${tdClass} font-medium`}>
+                      {zoneKey === "none" ? "No zone assigned" : ZONE_LABEL[zoneKey]}
+                    </td>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </section>
-        );
-      })}
+                  {zoneRegions.map((r) => (
+                    <tr key={r.id}>
+                      <td className={`${tdClass} font-mono`}>{r.code}</td>
+                      <td className={tdClass}>{r.name}</td>
+                      <td className={tdClass}>{r._count.clubs}</td>
+                    </tr>
+                  ))}
+                </Fragment>
+              );
+            })}
+          </tbody>
+        </table>
+      )}
 
       <h2 className="mb-2 text-lg font-medium">New region</h2>
       <form action={createRegion} className="flex flex-wrap items-end gap-3">
