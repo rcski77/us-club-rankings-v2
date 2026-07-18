@@ -1,0 +1,118 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// --- Phase 0: reference / org data + auth -----------------------------------
+// See plan section 1.1/1.2 (C:\Users\adam\.claude\plans\i-need-to-do-fancy-kay.md)
+
+model Region {
+  id        String   @id @default(cuid())
+  name      String
+  code      String   @unique // 2-char, e.g. "NT", "AZ", "SC" -- matches the region
+  // codes embedded in AES team codes (see Team.externalTeamCode).
+  clubs     Club[]
+  createdAt DateTime @default(now())
+}
+
+model Season {
+  id        String   @id @default(cuid())
+  label     String   @unique // e.g. "2025-2026"
+  startDate DateTime
+  endDate   DateTime
+  isActive  Boolean  @default(false)
+  teams     Team[]
+  createdAt DateTime @default(now())
+}
+
+model Club {
+  id           String        @id @default(cuid())
+  name         String // admin-maintained; the "club code registry" -- named once,
+  // reused by every future import referencing the same externalCode+region.
+  slug         String        @unique
+  externalCode String? // 5-char AES club code, e.g. "frogs", "skyln". Nullable:
+  // not every club arrives via a source with a stable code (e.g. manual entry).
+  regionId     String?
+  region       Region?       @relation(fields: [regionId], references: [id])
+  city         String?
+  state        String?
+  zip          String?
+  isActive     Boolean       @default(true)
+  teams        Team[]
+  contacts     ClubContact[]
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  // Confirmed from a real AES sample: the 5-char code alone is not globally unique
+  // (e.g. "skyln" is used by a Dallas-area club under region NT and a
+  // Jacksonville-area club under region FL) -- the compound key is.
+  @@unique([externalCode, regionId])
+}
+
+model ClubContact {
+  id        String   @id @default(cuid())
+  clubId    String
+  club      Club     @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  name      String
+  email     String?
+  phone     String?
+  title     String?
+  createdAt DateTime @default(now())
+}
+
+enum UserRole {
+  SUPER_ADMIN
+  ADMIN
+  PENDING
+}
+
+enum UserStatus {
+  PENDING
+  ACTIVE
+  DISABLED
+}
+
+model User {
+  id           String     @id @default(cuid())
+  email        String     @unique
+  name         String?
+  passwordHash String // scrypt-hashed, format "salt:hash" (see src/lib/password.ts)
+  role         UserRole   @default(PENDING)
+  status       UserStatus @default(PENDING)
+  createdAt    DateTime   @default(now())
+}
+
+model Team {
+  id     String  @id @default(cuid())
+  clubId String? // nullable: "Unlinked Teams" -- a team whose club code didn't
+  // resolve to a known Club yet (staged for admin to name, not fuzzy-guessed).
+  club   Club?   @relation(fields: [clubId], references: [id])
+
+  seasonId String
+  season   Season @relation(fields: [seasonId], references: [id])
+
+  name       String // display name from the source, e.g. "MADFROG 12'S N GREEN"
+  ageGroup   Int
+  teamNumber Int // distinguishes a club's multiple squads in the same age group
+  // (legacy's "17-1"/"17-2"), parsed from the source code.
+
+  externalTeamCode String? // raw source code verbatim, e.g. "g14skyln1nt", kept for
+  // traceability.
+  lineageKey       String? // derived from (club externalCode+region, teamNumber) --
+  // stable across seasons even as the age-group digit changes; powers cross-season
+  // rating carry-forward and Teams-admin "same program as last year" suggestions.
+
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([seasonId, clubId, teamNumber, ageGroup])
+  @@index([lineageKey])
+}

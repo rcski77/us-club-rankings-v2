@@ -1,0 +1,87 @@
+import { prisma } from "@/lib/prisma";
+import { hashPassword } from "@/lib/password";
+import { redirect } from "next/navigation";
+import Link from "next/link";
+
+async function registerAction(formData: FormData) {
+  "use server";
+
+  const email = String(formData.get("email") ?? "").trim().toLowerCase();
+  const name = String(formData.get("name") ?? "").trim() || null;
+  const password = String(formData.get("password") ?? "");
+
+  if (!email || password.length < 8) {
+    redirect("/register?error=invalid");
+  }
+
+  const existing = await prisma.user.findUnique({ where: { email } });
+  if (existing) {
+    redirect("/register?error=exists");
+  }
+
+  const passwordHash = await hashPassword(password);
+  await prisma.user.create({
+    data: { email, name, passwordHash, role: "PENDING", status: "PENDING" },
+  });
+
+  redirect("/login?registered=1");
+}
+
+export default async function RegisterPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ error?: string }>;
+}) {
+  const { error } = await searchParams;
+
+  return (
+    <div className="mx-auto mt-24 max-w-sm">
+      <h1 className="mb-6 text-2xl font-semibold">Create an account</h1>
+      {error === "invalid" && (
+        <p className="mb-4 rounded bg-red-50 p-3 text-sm text-red-700">
+          Enter a valid email and a password of at least 8 characters.
+        </p>
+      )}
+      {error === "exists" && (
+        <p className="mb-4 rounded bg-red-50 p-3 text-sm text-red-700">
+          An account with that email already exists.
+        </p>
+      )}
+      {!error && (
+        <p className="mb-4 text-sm text-slate-500">
+          New accounts require admin approval before you can access the admin area.
+        </p>
+      )}
+      <form action={registerAction} className="flex flex-col gap-4">
+        <input name="name" type="text" placeholder="Name" className="rounded border px-3 py-2" />
+        <input
+          name="email"
+          type="email"
+          placeholder="Email"
+          required
+          className="rounded border px-3 py-2"
+        />
+        <input
+          name="password"
+          type="password"
+          placeholder="Password (min 8 characters)"
+          required
+          minLength={8}
+          className="rounded border px-3 py-2"
+        />
+        <button
+          type="submit"
+          className="rounded bg-slate-900 px-3 py-2 text-white hover:bg-slate-800"
+        >
+          Register
+        </button>
+      </form>
+      <p className="mt-4 text-sm text-slate-600">
+        Already have an account?{" "}
+        <Link href="/login" className="underline">
+          Sign in
+        </Link>
+      </p>
+    </div>
+  );
+}
