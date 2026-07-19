@@ -2,6 +2,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { recomputeRankingsForDivision } from "@/lib/ranking/computeRanking";
+import { resolvePoints } from "@/lib/scoring/resolvePoints";
 import { redirect } from "next/navigation";
 
 function divisionPath(eventId: string, divisionId: string) {
@@ -59,12 +60,6 @@ export async function addDivisionBand(eventId: string, divisionId: string, formD
 export async function removeDivisionBand(eventId: string, divisionId: string, bandId: string) {
   await prisma.divisionPointBand.delete({ where: { id: bandId } });
   redirect(divisionPath(eventId, divisionId));
-}
-
-/** Given a rank and the division's bands, finds the matching band's points (0 if none covers it). */
-function resolvePoints(rank: number, bands: { fromRank: number; toRank: number; points: number }[]) {
-  const band = bands.find((b) => rank >= b.fromRank && (b.toRank === 0 || rank <= b.toRank));
-  return band?.points ?? 0;
 }
 
 export async function confirmDivisionScoring(eventId: string, divisionId: string) {

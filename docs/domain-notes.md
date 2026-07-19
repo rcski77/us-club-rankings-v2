@@ -49,22 +49,53 @@ division, which the original legacy system assumed. Columns:
 ageGroupLabel, rank, "Team Name (RegionCode) (seedNumber)", teamCode
 ```
 
-Example row: `"12 & Under",3,"HPSTL 12 Royal (GW) (4)",g12hpstl1gw`
+Example row (from a real 2026 USAV Girls Junior National Championship 14-17 sample,
+352 rows across 6 tiers): `14 American,1,Paramount VBC 14 Jaz (CH) (1),g14parvb1ch`.
+**No header row and no field quoting** in real exports — the `csv-parse`-based parser
+(`src/lib/import/aesCsv.ts`) tries header-based parsing first (for a hypothetical
+future export that does have one) and falls back to strict positional 4-column
+parsing, which is what real files hit today.
 
-- `ageGroupLabel` is free text ("12 & Under") — maps to an integer ageGroup (12).
+- `ageGroupLabel` carries both the age group *and* the division tier (e.g. "14
+  American", "14 Open", "14 Freedom") — parsed into an integer `ageGroup` (leading
+  number) + `tierLabel` (case-insensitive keyword match against `DivisionTierLabel`) +
+  optional `tierLevel` (roman numeral). Every row of the real 352-row Nationals sample
+  carried a tier keyword, including from anchor events — so the "bare age, no tier"
+  case (e.g. "12 & Under", seen in an earlier, smaller Triple Crown NIT sample) is
+  evidently not universal even across anchor events, and may be specific to Triple
+  Crown NIT in particular. The Phase 2 import pipeline still defaults `tierLabel` to
+  `OPEN` and flags the row (`tierWasDefaulted`) for admin review when no tier keyword
+  is found, rather than guessing silently, but this fallback is not expected to trigger
+  often in practice — see `docs/plan.md` §2 (Phase 2) for the full parsing/resolve
+  design (`src/lib/import/divisionLabel.ts`).
 - `rank` may repeat across rows for ties.
 - The team name field embeds two parentheticals: the **region code** (not a club code
   — this was an early wrong assumption, corrected once real data was seen) and a
   **unique tiebreak/seed number** (sequential, no ties — useful for stable ordering
   only, no scoring implication).
-- `teamCode` is the reliable structured identifier: fixed-width
-  `{gender:1}{ageGroup:2}{clubExternalCode:5}{teamNumber:1}{regionCode:2}`. Example:
-  `g14skyln1nt` = girls, 14u, club code "skyln", team #1, region "nt". Decoding this
-  gives exact club/team identity with zero fuzzy string matching — this is why
+- `teamCode` is the reliable structured identifier:
+  `{gender:1}{ageGroup:2}{clubExternalCode:5}{teamNumber:1+}{regionCode:2}`. Example:
+  `g14skyln1nt` = girls, 14u, club code "skyln", team #1, region "nt". **`teamNumber`
+  is not fixed-width, and not always numeric** — confirmed from the real Nationals
+  sample: team numbers up to 23 (`g14afive23so`, the multi-region "A5" club chain
+  fielding 10+ teams under one shared code, widening the whole code past the
+  originally-assumed 11 characters), and at least one team using a lettered
+  designator instead of a digit (`g14nwrvbace` — team "a", confirmed as real/valid
+  AES behavior, not a data error). `TeamSeason.teamNumber` and
+  `ImportRow.parsedTeamNumber` are `String`, not `Int`, for exactly this reason.
+  `src/lib/import/aesTeamCode.ts` decodes by taking the fixed 8-char prefix
+  (gender+ageGroup+clubExternalCode) and fixed 2-char region suffix, treating
+  everything in between as the team designator and requiring it to be non-empty
+  alphanumeric (a code where that middle segment contains anything else, e.g.
+  punctuation, is flagged as a decode error rather than guessed). Decoding gives
+  exact club/team identity with zero fuzzy string matching — this is why
   `Club.externalCode` + `Region` and `TeamSeason.externalTeamCode` exist as they do.
 - **Club codes are not globally unique on their own** — only `(externalCode, regionId)`
-  together is. Confirmed example: "skyln" is used both by a Dallas-area club under
-  region NT and a Jacksonville-area club under region FL.
+  together is. Confirmed both from an early hypothetical example ("skyln" used by a
+  Dallas-area club under region NT and a Jacksonville-area club under region FL) and
+  independently from the real Nationals sample, which has exactly that: a Dallas-area
+  "Skyline" program fielding 5 teams under code "skyln"/region NT, and a separate "JAX
+  SKYLINE" under code "skyln"/region FL.
 - **Large events get split across multiple files** ("_part1", "_part2", ...) because
   the source scraper errors past ~300 lines. The import pipeline (Phase 2, not built
   yet) needs to treat a multi-part upload as one logical dataset.
@@ -98,8 +129,10 @@ without needing new scraper work — see `docs/plan.md` §2 and Open Question 11
 Note AES's embedded 2-letter region codes in team codes (e.g. "nt", "az", "sc") don't
 necessarily match USAV's official codes 1:1 in every case (e.g. USAV's Southern
 California/Nevada region code is "SCSN," but AES data has been observed using plain
-"SC" for at least some Southern California clubs) — this hasn't been fully reconciled
-and will matter once Phase 2's AES adapter is built for real.
+"SC" for at least some Southern California clubs) — this hasn't been fully reconciled.
+Phase 2's import pipeline treats an unresolved or mismatched region code as a
+`WARNING`-status row an admin can override past, never a hard blocker or a silent
+guess — a proper alias table is a plausible follow-up but isn't built.
 
 ## Team identity across seasons
 

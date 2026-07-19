@@ -56,6 +56,8 @@ model Club {
   isActive     Boolean       @default(true)
   teams        Team[]
   contacts     ClubContact[]
+  importRows   ImportRow[]
+  auditFlags   AuditFlag[]
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
 
@@ -89,13 +91,14 @@ enum UserStatus {
 }
 
 model User {
-  id           String     @id @default(cuid())
-  email        String     @unique
-  name         String?
-  passwordHash String // scrypt-hashed, format "salt:hash" (see src/lib/password.ts)
-  role         UserRole   @default(PENDING)
-  status       UserStatus @default(PENDING)
-  createdAt    DateTime   @default(now())
+  id            String        @id @default(cuid())
+  email         String        @unique
+  name          String?
+  passwordHash  String // scrypt-hashed, format "salt:hash" (see src/lib/password.ts)
+  role          UserRole      @default(PENDING)
+  status        UserStatus    @default(PENDING)
+  createdAt     DateTime      @default(now())
+  importBatches ImportBatch[]
 }
 
 // Team is a persistent identity (a program's squad), independent of season -- it can
@@ -121,6 +124,8 @@ model Team {
   seasons        TeamSeason[]
   finishes       TeamFinish[]
   rankingResults RankingResult[]
+  importRows     ImportRow[]
+  auditFlags     AuditFlag[]
 
   @@index([lineageKey])
 }
@@ -136,8 +141,10 @@ model TeamSeason {
   season   Season @relation(fields: [seasonId], references: [id])
 
   ageGroup         Int
-  teamNumber       Int // distinguishes a club's multiple squads in the same age group
-  // (legacy's "17-1"/"17-2"), parsed from the source code for that season.
+  teamNumber       String // distinguishes a club's multiple squads in the same age
+  // group (legacy's "17-1"/"17-2"), parsed from the source code for that season.
+  // String, not Int: confirmed from real AES data that this segment of the source
+  // code can be alphanumeric (e.g. a lettered designator), not just a digit.
   externalTeamCode String? // raw source code verbatim for that season, e.g.
   // "g14skyln1nt" -- the leading age digit changes season to season, which is exactly
   // why this can't live on Team.
@@ -167,9 +174,10 @@ model Event {
   isAnchor    Boolean  @default(false) // USAV Nationals / Triple Crown NIT -- exempt
   // from the future suggestion algorithm (Phase 4+); manually assigned max-value
   // templates always.
-  divisions   Division[]
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  divisions     Division[]
+  importBatches ImportBatch[]
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
 }
 
 enum DivisionTierLabel {
@@ -201,6 +209,8 @@ model Division {
   ignoreAgeDefault  Boolean               @default(false)
   pointBands        DivisionPointBand[]
   finishes          TeamFinish[]
+  importRows        ImportRow[]
+  auditFlags        AuditFlag[]
   createdAt         DateTime              @default(now())
   updatedAt         DateTime              @updatedAt
 
@@ -290,4 +300,176 @@ model RankingResultContribution {
   countedInTop3   Boolean
 
   @@unique([rankingResultId, teamFinishId])
+}
+
+// --- Phase 2: CSV import pipeline (AES adapter, TEAM_FINISHES only) ---------
+// See docs/plan.md Phase 2 section for the full resolve/commit algorithm.
+
+enum ImportSource {
+  AES
+  SPORTWRENCH
+  TM2
+  VBSCHEDULE
+  MANUAL
+}
+
+enum ImportType {
+  DIVISIONS
+  TEAM_FINISHES
+  MATCH_RESULTS
+}
+
+enum ImportBatchStatus {
+  DRAFT
+  RESOLVED
+  COMMITTED
+  FAILED
+}
+
+enum ImportFileStatus {
+  UPLOADED
+  PARSED
+  ERROR
+}
+
+enum ImportRowStatus {
+  PENDING
+  OK
+  WARNING
+  ERROR
+}
+
+enum ImportMatchType {
+  EXISTING
+  NEW
+  AMBIGUOUS
+}
+
+enum AuditFlagType {
+  NEW_CLUB
+  NEW_TEAM
+  NEW_DIVISION
+  REGION_MISMATCH
+  TIER_DEFAULTED
+  DUPLICATE_IN_IMPORT
+  REIMPORT_UPDATE
+  OTHER
+}
+
+// One import batch targets a single Event -- an AES file spans that whole event's
+// age groups/tiers at once, so one batch's commit can create/touch many Divisions.
+model ImportBatch {
+  id          String            @id @default(cuid())
+  eventId     String
+  event       Event             @relation(fields: [eventId], references: [id])
+  source      ImportSource      @default(AES)
+  importType  ImportType        @default(TEAM_FINISHES)
+  status      ImportBatchStatus @default(DRAFT)
+  summaryJson Json? // display cache of row-status + new-club/team/division counts,
+  // refreshed after resolve/commit -- mirrors the Division.scoringStatus-coarse-field
+  // / audit-trail-detail pattern used elsewhere; ImportRow is the real detail.
+  createdById String?
+  createdBy   User?     @relation(fields: [createdById], references: [id])
+  files       ImportFile[]
+  auditFlags  AuditFlag[]
+  committedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model ImportFile {
+  id            String           @id @default(cuid())
+  importBatchId String
+  importBatch   ImportBatch      @relation(fields: [importBatchId], references: [id], onDelete: Cascade)
+  filename      String
+  partNumber    Int? // parsed from "_part1"/"_part2" in filename; null for a single-file batch
+  rawContent    String // full CSV text -- stored directly (no blob storage exists in
+  // this project; AES's ~300-line-per-file cap keeps this small), also lets "resolve"
+  // replay from scratch without re-upload.
+  status     ImportFileStatus @default(UPLOADED)
+  parseError String?
+  rowCount   Int              @default(0)
+  rows       ImportRow[]
+  createdAt  DateTime         @default(now())
+
+  @@unique([importBatchId, filename])
+}
+
+// Staging row for the preview screen. Raw AES columns are explicit typed fields
+// (not a generic JSON blob) since AES's 4-column shape is fixed and known.
+model ImportRow {
+  id           String     @id @default(cuid())
+  importFileId String
+  importFile   ImportFile @relation(fields: [importFileId], references: [id], onDelete: Cascade)
+  rowNumber    Int // 1-based row number within the file, for error display
+
+  // raw, exactly as read from the CSV's 4 AES columns
+  ageGroupLabelRaw String
+  rankRaw          String
+  teamNameRaw      String
+  teamCodeRaw      String
+
+  // parsed, populated by resolveImportBatch()
+  parsedRank               Int?
+  parsedAgeGroup            Int?
+  parsedTierLabel           DivisionTierLabel?
+  parsedTierLevel           String?
+  tierWasDefaulted          Boolean            @default(false)
+  parsedGender              String? // audit-only -- not modeled anywhere downstream
+  parsedClubExternalCode    String?
+  parsedTeamNumber          String? // alphanumeric -- see TeamSeason.teamNumber
+  parsedRegionCodeFromCode  String?
+  parsedRegionCodeFromName  String?
+  parsedTiebreakOrder       Int?
+  teamNameClean             String?
+
+  // resolve output
+  status   ImportRowStatus @default(PENDING)
+  messages String[]
+
+  divisionMatchType ImportMatchType?
+  matchedDivisionId String?
+  matchedDivision   Division? @relation(fields: [matchedDivisionId], references: [id])
+
+  clubMatchType ImportMatchType?
+  matchedClubId String?
+  matchedClub   Club? @relation(fields: [matchedClubId], references: [id])
+
+  teamMatchType ImportMatchType?
+  matchedTeamId String?
+  matchedTeam   Team? @relation(fields: [matchedTeamId], references: [id])
+
+  existingTeamFinishId String? // set when TeamFinish(divisionId,teamId) already
+  // exists -- commit updates it instead of erroring (re-import idempotency).
+
+  // admin overrides -- sticky across re-resolve. Plain id strings, not relations:
+  // write-mostly pointer fields, not worth six more relation names to the same
+  // three target models.
+  overrideDivisionId String?
+  overrideClubId     String?
+  overrideTeamId     String?
+  overrideClubName   String? // required before commit whenever the effective club match is NEW
+  excluded           Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([importFileId])
+  @@index([status])
+}
+
+model AuditFlag {
+  id            String        @id @default(cuid())
+  importBatchId String?
+  importBatch   ImportBatch?  @relation(fields: [importBatchId], references: [id])
+  type          AuditFlagType
+  message       String
+  teamId        String?
+  team          Team?         @relation(fields: [teamId], references: [id])
+  clubId        String?
+  club          Club?         @relation(fields: [clubId], references: [id])
+  divisionId    String?
+  division      Division?     @relation(fields: [divisionId], references: [id])
+  resolved      Boolean       @default(false) // no UI to flip this yet -- Phase 6 (/admin/flags)
+  createdAt     DateTime      @default(now())
 }

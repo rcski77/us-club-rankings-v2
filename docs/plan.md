@@ -46,7 +46,7 @@ preference, non-negotiable.
 | 0 | Foundations — scaffold, auth, base schema | ✅ Done |
 | 1 | Manual parity core — Events/Divisions/PointTemplates/scoring/TeamFinish/Rankings | ✅ Done |
 | 1.5 | Team/TeamSeason restructuring, Regions+zones (post-Phase-1 additions) | ✅ Done |
-| 2 | CSV import pipeline (AES adapter first) | Not started |
+| 2 | CSV import pipeline (AES adapter first) | ✅ Done (AES adapter, TEAM_FINISHES only) |
 | 3 | Tier 1 rating engine (Colley) + algorithmic scoring suggestion | Not started |
 | 4 | Cross-season bootstrapping and calibration | Not started |
 | 5 | Tier 2 upgrade (Elo + Massey from real match data) | Not started |
@@ -58,9 +58,11 @@ season management — create a season, clubs, teams (enrolled per-season via
 or from a template, enter team finishes, confirm scoring, and see the resulting
 top-3-of-season ranking per age group, including the `ignoreAge` cross-age-group case.
 Verified end-to-end against a real scenario (2026 Triple Crown NIT / 14 Open, scored
-against the legacy 245/230/220/180 curve). No CSV import yet — all data entry is
-manual. No algorithmic scoring yet — point curves are always picked/applied by a
-human. `npm run db:seed-demo` rebuilds this walkthrough data from scratch.
+against the legacy 245/230/220/180 curve). CSV import (Phase 2) now covers AES
+TEAM_FINISHES bulk-import via `/admin/imports`, so team finishes no longer have to be
+typed in one row at a time — see §3. No algorithmic scoring yet — point curves are
+always picked/applied by a human. `npm run db:seed-demo` rebuilds this walkthrough
+data from scratch.
 
 ## Deviations from the original plan
 
@@ -166,15 +168,30 @@ implementation is `Team` + `TeamSeason`.)*
   the rating engine has a track record.
 - Ballot / BallotEntry — stub only, not wired into scoring. Not built yet.
 
-### 1.5 Import / Audit — not built yet (Phase 2)
-- ImportBatch — source (AES|SPORTWRENCH|TM2|VBSCHEDULE|MANUAL), importType
-  (DIVISIONS|TEAM_FINISHES|MATCH_RESULTS), status, summaryJson. One ImportBatch spans
-  multiple uploaded files (see §3.1 — AES's "_part1/_part2..." splitting).
-- ImportFile — per-file record within a batch.
-- ImportRow — staging rows for the preview screen (OK/WARNING/ERROR, matched
-  team/club, confidence).
-- AuditFlag — Team Finish Error/Flags audit (duplicate rank conflicts, unlinked teams,
-  name mismatches, etc.).
+### 1.5 Import / Audit — ✅ Done (AES adapter, TEAM_FINISHES only; see §3)
+- ImportBatch — eventId (an import batch targets a whole Event, not a single
+  Division — see §3), source (AES|SPORTWRENCH|TM2|VBSCHEDULE|MANUAL, only AES is
+  wired up), importType (DIVISIONS|TEAM_FINISHES|MATCH_RESULTS, only TEAM_FINISHES is
+  wired up), status (DRAFT|RESOLVED|COMMITTED|FAILED), summaryJson (display cache of
+  row-status counts), createdById. One ImportBatch spans multiple uploaded files (AES's
+  "_part1/_part2..." splitting).
+- ImportFile — importBatchId, filename, partNumber, rawContent (full CSV text, stored
+  directly — no blob storage exists in this project), status, parseError, rowCount.
+- ImportRow — staging row for the preview screen: raw AES columns (explicit typed
+  fields, not a generic JSON blob, since AES's 4-column shape is fixed), parsed fields
+  (ageGroup/tierLabel/tierLevel/tierWasDefaulted/clubExternalCode/teamNumber/
+  regionCode/tiebreakOrder/cleanName), resolve output (status OK|WARNING|ERROR,
+  messages, divisionMatchType/clubMatchType/teamMatchType EXISTING|NEW|AMBIGUOUS +
+  matched ids, existingTeamFinishId for re-import idempotency), and admin overrides
+  (overrideDivisionId/overrideClubId/overrideTeamId/overrideClubName/excluded — sticky
+  across re-resolve).
+- AuditFlag — written at commit time as an audit trail (NEW_CLUB, NEW_TEAM,
+  NEW_DIVISION, REGION_MISMATCH, TIER_DEFAULTED, REIMPORT_UPDATE). Two rows resolving
+  to the *same* team+division within one batch is a hard commit-blocking `ERROR`
+  (`DUPLICATE_IN_IMPORT` at resolve time), not a post-commit audit flag — legitimate
+  same-rank ties across *different* teams are unaffected and normal. No
+  `/admin/flags` management UI yet (`resolved` field exists but nothing flips it) —
+  that's Phase 6.
 
 ---
 
@@ -259,27 +276,44 @@ approach first), not because of a data-availability blocker.
 
 ---
 
-## 3. CSV Import Pipeline (Phase 2 — not built)
+## 3. CSV Import Pipeline (Phase 2 — ✅ Done: AES adapter, TEAM_FINISHES only)
 
-**Pipeline stages**: Start batch (source + import type + target event) → attach
-file(s) (multi-part support built in from the start — AES exports split past ~300
-lines) → parse via source-specific adapter → resolve (exact lookup via structured code
-for AES; fuzzy name-match fallback for sources without one) → preview (editable grid,
-"new club code" staging) → commit (single transaction, creates new Clubs/Teams,
-writes Division/TeamFinish rows) → post-commit audit (AuditFlag rows for ambiguity).
+**Pipeline stages, as built**: Start batch (event; source/importType fixed to
+AES/TEAM_FINISHES this pass) → attach file(s) (multi-part support — AES exports split
+past ~300 lines into "_part1/_part2...") → parse (`src/lib/import/aesCsv.ts`, header-
+or-positional CSV parsing) → resolve (`src/lib/import/resolve.ts` — exact lookup via
+AES's structured team code; re-runnable/idempotent, admin overrides survive
+re-resolve) → preview (editable grid at `/admin/imports/[batchId]`, per-row
+division/club/team override, "new club" name entry, row exclude) → commit
+(`src/lib/import/commit.ts`, one transaction: creates new Divisions/Clubs/
+Teams/TeamSeasons, upserts TeamFinish rows, writes AuditFlag rows, recomputes
+rankings for every touched division).
 
-**AES adapter specifics** (confirmed against a real 2026 Triple Crown NIT sample):
-decode the fixed-width team code into clubExternalCode/regionCode/ageGroup/teamNumber;
-one AES file spans many age groups/divisions at once (grouped by an
-`ageGroupLabel` column), not one file per division. A code that doesn't resolve to a
-known Club is staged as "New Club Code" — admin names it once in the preview screen,
-and every future import referencing that code resolves automatically (this **is** the
-"separate import that maps code to club name" — implemented as the ordinary Club CRUD
-screen with a resolve-new-codes entry point, not a separate mapping table).
+**AES adapter specifics** (verified against a real 2026 USAV Girls Junior National
+Championship 14-17 sample, 352 rows across 6 tiers — see
+`docs/domain-notes.md`'s AES data format section): decode the team code
+(`src/lib/import/aesTeamCode.ts`) into clubExternalCode/regionCode/ageGroup/
+teamNumber/gender; **teamNumber is variable-width and not always numeric** — the real
+sample had team numbers up to 23 (e.g. `g14afive23so`, the multi-region "A5" club
+chain fielding 10+ teams under one shared code, widening the whole code past the
+originally-assumed 11 characters), and at least one team used a lettered designator
+instead of a digit (`g14nwrvbace` — team "a", confirmed as real/valid AES behavior).
+`TeamSeason.teamNumber` and `ImportRow.parsedTeamNumber` are `String`, not `Int`, for
+this reason. One AES file spans a whole event's age groups **and
+tiers** at once (`ageGroupLabel` carried both in every row of the real sample, e.g.
+"14 American" — parsed by `src/lib/import/divisionLabel.ts`; the OPEN-default+WARNING
+fallback exists for the anchor-event case seen in an earlier, smaller Triple Crown NIT
+sample but never triggered against this real file), not one file per division. A club
+code that doesn't resolve to a known Club is staged as "new" — admin supplies a name
+in the preview grid before commit (`overrideClubName`), and
+every future import referencing that code resolves automatically once the Club exists.
+An unresolved/mismatched region code (AES "SC" vs USAV "SCSN" — still unreconciled)
+is a `WARNING`, never a hard blocker or a silent guess.
 
-**Manual/Generic adapter** ships alongside AES's: admin hand-picks which CSV column
-maps to which canonical field. Permanent safety net, and the only path for
-Sportwrench/TM2/VBSchedule until their real sample exports are reviewed.
+**Manual/Generic adapter**: not built this pass — deferred along with Sportwrench/
+TM2/VBSchedule (still no confirmed sample formats, Open Question 1 below), the
+DIVISIONS/MATCH_RESULTS import types, region-code alias reconciliation, and a
+dedicated `/admin/flags` AuditFlag-management UI (Phase 6).
 
 ---
 
@@ -308,11 +342,14 @@ Built (Phase 0/1):
 `/admin/teams/[teamId]`, `/admin/clubs`, `/admin/clubs/[clubId]`, `/admin/regions`,
 `/admin/rankings`, `/admin/rankings/[seasonId]/[ageGroup]`, `/admin/users`.
 
+Built (Phase 2): `/admin/imports` (list + start batch), `/admin/imports/[batchId]`
+(upload/resolve/preview/commit workflow).
+
 Planned, not built: `/admin/events/[eventId]/divisions/[divisionId]/scoring`
-(suggestion-review screen, Phase 3), `/admin/imports*` (Phase 2),
-`/admin/teams/unlinked`, `/admin/teams/inactive`, `/admin/clubs/unlinked`,
-`/admin/clubs/inactive` (Phase 2 audits), `/admin/flags` (Phase 6), `/admin/ballots`
-(Phase 6), `/admin/power-rankings/[season]/[ageGroup]` (Phase 5),
+(suggestion-review screen, Phase 3), `/admin/teams/unlinked`, `/admin/teams/inactive`,
+`/admin/clubs/unlinked`, `/admin/clubs/inactive` (Phase 2 follow-up audits),
+`/admin/flags` (Phase 6), `/admin/ballots` (Phase 6),
+`/admin/power-rankings/[season]/[ageGroup]` (Phase 5),
 `/admin/analysis/[season]/[ageGroup]` (Phase 3).
 
 ---
@@ -328,10 +365,14 @@ PointTemplate CRUD + band editor, manual point-curve assignment, TeamFinish
 entry/reorder, top-3-of-season ranking + Rankings view. Shippable v1 functional
 parity, worked entirely by hand.
 
-**Phase 2 — CSV import pipeline.** Not started. Multi-file-per-batch support; AES
-adapter against the real sample format; Manual/Generic adapter; Sportwrench/TM2/
-VBSchedule adapters once sample exports are reviewed; fuzzy team/club matching;
-Unlinked/Inactive audits; ImportBatch history + preview/commit flow.
+**Phase 2 — CSV import pipeline.** ✅ Done for AES/TEAM_FINISHES (see §3):
+multi-file-per-batch support, AES adapter (decode + division-label parsing, verified
+against a real 352-row USAV Nationals sample), resolve/preview/commit workflow,
+AuditFlag audit trail.
+**Not built**: Manual/Generic adapter; Sportwrench/TM2/VBSchedule adapters (still no
+confirmed sample formats — Open Question 1); DIVISIONS/MATCH_RESULTS import types;
+fuzzy team/club matching beyond AES's structured code; Unlinked/Inactive audit list
+pages (`/admin/teams/unlinked` etc.); region-code alias reconciliation table.
 
 **Phase 3 — Tier 1 rating engine (Colley) + algorithmic scoring.** Not started. Fully
 deliverable with data available today (placement-only), no dependency on new

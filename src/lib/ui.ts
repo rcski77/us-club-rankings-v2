@@ -1,11 +1,17 @@
 export const inputClass = "rounded border px-3 py-2 text-sm";
 export const selectClass = inputClass;
+// Native file inputs can only be styled via the `file:` pseudo-element variant --
+// this makes the browser-generated "Choose File" control match secondaryButtonClass.
+export const fileInputClass =
+  "text-sm text-slate-500 file:mr-3 file:cursor-pointer file:rounded file:border file:bg-white file:px-3 file:py-2 file:text-sm file:font-medium file:text-slate-900 file:transition-colors file:hover:border-slate-400 file:hover:bg-slate-100";
 export const primaryButtonClass =
-  "rounded bg-slate-900 px-3 py-2 text-sm text-white hover:bg-slate-800 disabled:opacity-50";
-export const secondaryButtonClass = "rounded border px-3 py-2 text-sm hover:bg-slate-50";
+  "rounded bg-slate-900 px-3 py-2 text-sm text-white transition-colors hover:bg-slate-700 disabled:opacity-50 disabled:hover:bg-slate-900";
+export const secondaryButtonClass =
+  "rounded border px-3 py-2 text-sm transition-colors hover:border-slate-400 hover:bg-slate-100 disabled:opacity-50 disabled:hover:border-inherit disabled:hover:bg-transparent";
 export const smallPrimaryButtonClass =
-  "rounded bg-slate-900 px-2 py-1 text-xs text-white hover:bg-slate-800";
-export const smallSecondaryButtonClass = "rounded border px-2 py-1 text-xs hover:bg-slate-50";
+  "rounded bg-slate-900 px-2 py-1 text-xs text-white transition-colors hover:bg-slate-700 disabled:opacity-50 disabled:hover:bg-slate-900";
+export const smallSecondaryButtonClass =
+  "rounded border px-2 py-1 text-xs transition-colors hover:border-slate-400 hover:bg-slate-100 disabled:opacity-50 disabled:hover:border-inherit disabled:hover:bg-transparent";
 export const errorBannerClass = "mb-4 rounded bg-red-50 p-3 text-sm text-red-700";
 export const successBannerClass = "mb-4 rounded bg-green-50 p-3 text-sm text-green-700";
 export const tableClass = "w-full border-collapse text-sm";

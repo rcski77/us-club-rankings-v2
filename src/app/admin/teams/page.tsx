@@ -19,7 +19,7 @@ async function createTeam(formData: FormData) {
   const seasonId = String(formData.get("seasonId") ?? "");
   const name = String(formData.get("name") ?? "").trim();
   const ageGroup = Number(formData.get("ageGroup"));
-  const teamNumber = Number(formData.get("teamNumber") ?? 1);
+  const teamNumber = String(formData.get("teamNumber") ?? "").trim();
   const externalTeamCode = String(formData.get("externalTeamCode") ?? "").trim() || null;
 
   if (!seasonId || !name || !ageGroup || !teamNumber) {
@@ -166,9 +166,7 @@ export default async function TeamsPage({
               Team #
               <input
                 name="teamNumber"
-                type="number"
-                min={1}
-                defaultValue={1}
+                defaultValue="1"
                 required
                 className={`${inputClass} w-20`}
               />

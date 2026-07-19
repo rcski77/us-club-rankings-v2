@@ -1,0 +1,134 @@
+import { prisma } from "@/lib/prisma";
+import { auth } from "@/auth";
+import { redirect } from "next/navigation";
+import Link from "next/link";
+import {
+  selectClass,
+  primaryButtonClass,
+  errorBannerClass,
+  tableClass,
+  thClass,
+  tdClass,
+} from "@/lib/ui";
+import { SubmitButton } from "@/components/SubmitButton";
+
+async function startImportBatch(formData: FormData) {
+  "use server";
+
+  const session = await auth();
+  const eventId = String(formData.get("eventId") ?? "");
+  if (!eventId) redirect("/admin/imports?error=invalid");
+
+  const batch = await prisma.importBatch.create({
+    data: {
+      eventId,
+      source: "AES",
+      importType: "TEAM_FINISHES",
+      status: "DRAFT",
+      createdById: session?.user?.id ?? null,
+    },
+  });
+
+  redirect(`/admin/imports/${batch.id}`);
+}
+
+const STATUS_LABELS: Record<string, string> = {
+  DRAFT: "Draft",
+  RESOLVED: "Resolved",
+  COMMITTED: "Committed",
+  FAILED: "Failed",
+};
+
+export default async function ImportsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ error?: string }>;
+}) {
+  const { error } = await searchParams;
+
+  // Sequential, not Promise.all -- see docs/dev-environment.md.
+  const batches = await prisma.importBatch.findMany({
+    include: { event: true },
+    orderBy: { createdAt: "desc" },
+    take: 100,
+  });
+  const events = await prisma.event.findMany({
+    include: { season: true },
+    orderBy: [{ startDate: "desc" }],
+    take: 200,
+  });
+
+  return (
+    <div>
+      <h1 className="mb-6 text-2xl font-semibold">Imports</h1>
+
+      {error === "invalid" && <p className={errorBannerClass}>Select an event to import into.</p>}
+
+      <table className={`${tableClass} mb-8`}>
+        <thead>
+          <tr>
+            <th className={thClass}>Event</th>
+            <th className={thClass}>Source</th>
+            <th className={thClass}>Status</th>
+            <th className={thClass}>Summary</th>
+            <th className={thClass}>Created</th>
+          </tr>
+        </thead>
+        <tbody>
+          {batches.map((b) => {
+            const summary = b.summaryJson as
+              | { ok?: number; warning?: number; error?: number }
+              | null;
+            return (
+              <tr key={b.id}>
+                <td className={tdClass}>
+                  <Link href={`/admin/imports/${b.id}`} className="text-slate-900 underline">
+                    {b.event.name}
+                  </Link>
+                </td>
+                <td className={tdClass}>{b.source}</td>
+                <td className={tdClass}>{STATUS_LABELS[b.status] ?? b.status}</td>
+                <td className={tdClass}>
+                  {summary
+                    ? `${summary.ok ?? 0} ok · ${summary.warning ?? 0} warning · ${summary.error ?? 0} error`
+                    : ""}
+                </td>
+                <td className={tdClass}>{b.createdAt.toISOString().slice(0, 10)}</td>
+              </tr>
+            );
+          })}
+          {batches.length === 0 && (
+            <tr>
+              <td className={tdClass} colSpan={5}>
+                No imports yet.
+              </td>
+            </tr>
+          )}
+        </tbody>
+      </table>
+
+      <h2 className="mb-2 text-lg font-medium">Start import</h2>
+      <p className="mb-2 text-xs text-slate-500">
+        Source: AES · Type: Team Finishes. Other sources/types aren&apos;t supported yet.
+      </p>
+      <form action={startImportBatch} className="flex flex-wrap items-end gap-3">
+        <label className="flex flex-col gap-1 text-sm">
+          Event
+          <select name="eventId" className={selectClass} defaultValue="" required>
+            <option value="" disabled>
+              Select an event…
+            </option>
+            {events.map((e) => (
+              <option key={e.id} value={e.id}>
+                {e.season.label} — {e.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <SubmitButton className={primaryButtonClass} pendingText="Starting…">
+          Start import
+        </SubmitButton>
+      </form>
+    </div>
+  );
+}

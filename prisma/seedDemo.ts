@@ -52,7 +52,7 @@ async function main() {
     });
     if (!existingSeason) {
       await prisma.teamSeason.create({
-        data: { teamId: team.id, seasonId, ageGroup, teamNumber: 1, externalTeamCode },
+        data: { teamId: team.id, seasonId, ageGroup, teamNumber: "1", externalTeamCode },
       });
     }
     return team;
