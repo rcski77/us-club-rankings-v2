@@ -48,7 +48,11 @@ const USAV_REGIONS: { name: string; code: string; zone: UsavZone }[] = [
   { name: "Northern California", code: "NC", zone: "PACIFIC" },
   { name: "Puget Sound", code: "PS", zone: "PACIFIC" },
   { name: "Rocky Mountain", code: "RM", zone: "PACIFIC" },
-  { name: "Southern California / Southern Nevada", code: "SCSN", zone: "PACIFIC" },
+  // USAV's own materials sometimes use "SCSN," but AES team codes always embed the
+  // 2-char region code verbatim -- and every real AES sample for this region uses
+  // "SC" -- so this uses "SC" to match what actually shows up in imported data,
+  // matching the convention documented on Region.code in schema.prisma.
+  { name: "Southern California / Southern Nevada", code: "SC", zone: "PACIFIC" },
 ];
 
 async function main() {

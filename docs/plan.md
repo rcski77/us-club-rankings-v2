@@ -307,13 +307,14 @@ sample but never triggered against this real file), not one file per division. A
 code that doesn't resolve to a known Club is staged as "new" — admin supplies a name
 in the preview grid before commit (`overrideClubName`), and
 every future import referencing that code resolves automatically once the Club exists.
-An unresolved/mismatched region code (AES "SC" vs USAV "SCSN" — still unreconciled)
-is a `WARNING`, never a hard blocker or a silent guess.
+An unresolved/mismatched region code is a `WARNING`, never a hard blocker or a silent
+guess (see `docs/domain-notes.md` for why `Region.code` is seeded as "SC," not USAV's
+own "SCSN," for Southern California / Southern Nevada — AES data always uses "sc").
 
 **Manual/Generic adapter**: not built this pass — deferred along with Sportwrench/
 TM2/VBSchedule (still no confirmed sample formats, Open Question 1 below), the
-DIVISIONS/MATCH_RESULTS import types, region-code alias reconciliation, and a
-dedicated `/admin/flags` AuditFlag-management UI (Phase 6).
+DIVISIONS/MATCH_RESULTS import types, and a dedicated `/admin/flags` AuditFlag-
+management UI (Phase 6).
 
 ---
 

@@ -126,13 +126,15 @@ without needing new scraper work — see `docs/plan.md` §2 and Open Question 11
   Keawe, Northern California, Puget Sound, Rocky Mountain, Southern California /
   Southern Nevada
 
-Note AES's embedded 2-letter region codes in team codes (e.g. "nt", "az", "sc") don't
-necessarily match USAV's official codes 1:1 in every case (e.g. USAV's Southern
-California/Nevada region code is "SCSN," but AES data has been observed using plain
-"SC" for at least some Southern California clubs) — this hasn't been fully reconciled.
-Phase 2's import pipeline treats an unresolved or mismatched region code as a
+Note AES's embedded 2-letter region codes in team codes (e.g. "nt", "az", "sc") are
+always exactly 2 characters — so `Region.code` is seeded to match that 2-char
+convention throughout (see the comment on `Region.code` in `schema.prisma`).
+Southern California / Southern Nevada is seeded as `"SC"`, not USAV's own "SCSN"
+abbreviation, specifically because every real AES sample for that region uses "sc" —
+seeding the 4-letter form would make it permanently unmatchable against import data.
+Any other region-code mismatch (typos, genuinely unknown codes) is still surfaced as a
 `WARNING`-status row an admin can override past, never a hard blocker or a silent
-guess — a proper alias table is a plausible follow-up but isn't built.
+guess.
 
 ## Team identity across seasons
 

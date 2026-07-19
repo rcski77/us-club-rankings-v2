@@ -178,7 +178,7 @@ function resolveRow(row: RowInput, ctx: ResolveContext) {
 
   // Region (cross-check only -- an unresolved/mismatched code is a WARNING, never a
   // hard blocker, since AES's region codes aren't fully reconciled with USAV's
-  // official codes yet, e.g. "SC" vs "SCSN". See docs/domain-notes.md.
+  // official codes for every region. See docs/domain-notes.md.
   const region = ctx.regionByCode.get(decoded.regionCode);
   if (!region) {
     escalate("WARNING", `Region code "${decoded.regionCode}" not found among known Regions.`);
