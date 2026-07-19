@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import Link from "next/link";
 import { uniqueSlug } from "@/lib/slug";
+import { RegionFilterSelect } from "./RegionFilterSelect";
 import {
   inputClass,
   selectClass,
@@ -38,12 +39,23 @@ async function createClub(formData: FormData) {
 export default async function ClubsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string }>;
+  searchParams: Promise<{ error?: string; q?: string; regionId?: string }>;
 }) {
-  const { error } = await searchParams;
+  const { error, q, regionId } = await searchParams;
   // Sequential, not Promise.all: the local dev Postgres (via `prisma dev`) doesn't
   // reliably handle concurrent queries from the same connection pool.
   const clubs = await prisma.club.findMany({
+    where: {
+      ...(q
+        ? {
+            OR: [
+              { name: { contains: q, mode: "insensitive" } },
+              { externalCode: { contains: q, mode: "insensitive" } },
+            ],
+          }
+        : {}),
+      ...(regionId ? { regionId } : {}),
+    },
     include: { region: true, _count: { select: { teams: true } } },
     orderBy: { name: "asc" },
   });
@@ -54,6 +66,25 @@ export default async function ClubsPage({
       <h1 className="mb-6 text-2xl font-semibold">Clubs</h1>
 
       {error === "invalid" && <p className={errorBannerClass}>Club name is required.</p>}
+
+      <form action="/admin/clubs" method="get" className="mb-4 flex gap-2">
+        <input
+          type="search"
+          name="q"
+          defaultValue={q ?? ""}
+          placeholder="Search by name or code…"
+          className={`${inputClass} max-w-sm`}
+        />
+        <RegionFilterSelect regions={regions} defaultValue={regionId ?? ""} />
+        <button type="submit" className={primaryButtonClass}>
+          Search
+        </button>
+        {(q || regionId) && (
+          <Link href="/admin/clubs" className="self-center text-sm text-slate-500 underline">
+            Clear
+          </Link>
+        )}
+      </form>
 
       <table className={`${tableClass} mb-8`}>
         <thead>
@@ -84,7 +115,7 @@ export default async function ClubsPage({
           {clubs.length === 0 && (
             <tr>
               <td className={tdClass} colSpan={5}>
-                No clubs yet.
+                {q || regionId ? "No clubs match your search." : "No clubs yet."}
               </td>
             </tr>
           )}

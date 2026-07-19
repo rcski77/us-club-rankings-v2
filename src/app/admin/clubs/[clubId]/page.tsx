@@ -64,6 +64,8 @@ export default async function ClubDetailPage({
   if (!club) notFound();
   const regions = await prisma.region.findMany({ orderBy: { code: "asc" } });
 
+  const activeSeason = await prisma.season.findFirst({ where: { isActive: true } });
+
   const updateClubWithId = updateClub.bind(null, clubId);
 
   return (
@@ -135,41 +137,59 @@ export default async function ClubDetailPage({
       </section>
 
       <h2 className="mb-2 text-lg font-medium">Teams</h2>
+      {activeSeason && (
+        <p className="mb-2 text-xs text-slate-500">
+          Age, team #, and code shown are for the active season ({activeSeason.label}).
+        </p>
+      )}
       <table className={tableClass}>
         <thead>
           <tr>
             <th className={thClass}>Name</th>
+            <th className={thClass}>Age</th>
+            <th className={thClass}>Team #</th>
+            <th className={thClass}>Team code</th>
             <th className={thClass}>Seasons</th>
           </tr>
         </thead>
         <tbody>
-          {club.teams.map((t) => (
-            <tr key={t.id}>
-              <td className={tdClass}>
-                <Link href={`/admin/teams/${t.id}`} className="text-slate-900 underline">
-                  {t.name}
-                </Link>
-              </td>
-              <td className={tdClass}>
-                {t.seasons.length === 0 && (
-                  <span className="text-slate-400">Not enrolled in any season</span>
-                )}
-                <ul className="flex flex-col gap-0.5">
-                  {t.seasons.map((ts) => (
-                    <li key={ts.id} className="text-xs text-slate-600">
-                      {ts.season.label}: {ts.ageGroup}u #{ts.teamNumber}
-                      {ts.externalTeamCode && (
-                        <span className="font-mono text-slate-400"> ({ts.externalTeamCode})</span>
-                      )}
-                    </li>
-                  ))}
-                </ul>
-              </td>
-            </tr>
-          ))}
+          {club.teams.map((t) => {
+            const activeTs = activeSeason
+              ? t.seasons.find((ts) => ts.seasonId === activeSeason.id)
+              : undefined;
+            return (
+              <tr key={t.id}>
+                <td className={tdClass}>
+                  <Link href={`/admin/teams/${t.id}`} className="text-slate-900 underline">
+                    {t.name}
+                  </Link>
+                </td>
+                <td className={tdClass}>{activeTs ? `${activeTs.ageGroup}u` : ""}</td>
+                <td className={tdClass}>{activeTs?.teamNumber ?? ""}</td>
+                <td className={`${tdClass} font-mono text-xs text-slate-500`}>
+                  {activeTs?.externalTeamCode ?? ""}
+                </td>
+                <td className={tdClass}>
+                  {t.seasons.length === 0 && (
+                    <span className="text-slate-400">Not enrolled in any season</span>
+                  )}
+                  <ul className="flex flex-col gap-0.5">
+                    {t.seasons.map((ts) => (
+                      <li key={ts.id} className="text-xs text-slate-600">
+                        {ts.season.label}: {ts.ageGroup}u #{ts.teamNumber}
+                        {ts.externalTeamCode && (
+                          <span className="font-mono text-slate-400"> ({ts.externalTeamCode})</span>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                </td>
+              </tr>
+            );
+          })}
           {club.teams.length === 0 && (
             <tr>
-              <td className={tdClass} colSpan={2}>
+              <td className={tdClass} colSpan={5}>
                 No teams for this club yet.
               </td>
             </tr>
