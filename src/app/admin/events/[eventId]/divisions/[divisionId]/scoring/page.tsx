@@ -1,0 +1,180 @@
+import { prisma } from "@/lib/prisma";
+import { notFound } from "next/navigation";
+import Link from "next/link";
+import { BUCKET_THRESHOLDS } from "@/lib/rating/fieldStrength";
+import { generateSuggestion, acceptSuggestion, overrideSuggestion } from "./actions";
+import {
+  inputClass,
+  primaryButtonClass,
+  secondaryButtonClass,
+  errorBannerClass,
+  tableClass,
+  thClass,
+  tdClass,
+} from "@/lib/ui";
+
+export default async function DivisionScoringPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ eventId: string; divisionId: string }>;
+  searchParams: Promise<{ error?: string }>;
+}) {
+  const { eventId, divisionId } = await params;
+  const { error } = await searchParams;
+
+  const division = await prisma.division.findUnique({ where: { id: divisionId }, include: { event: true } });
+  if (!division || division.eventId !== eventId) notFound();
+
+  const snapshot = await prisma.divisionScoringSnapshot.findFirst({
+    where: { divisionId },
+    include: { suggestedTemplate: true },
+    orderBy: { createdAt: "desc" },
+  });
+
+  const generateWithIds = generateSuggestion.bind(null, eventId, divisionId);
+  const bucketCounts = (snapshot?.bucketCounts as Record<string, number> | undefined) ?? {};
+  const isPending = snapshot?.status === "PENDING" && division.scoringStatus === "SUGGESTED";
+
+  return (
+    <div className="max-w-2xl">
+      <div className="mb-2 text-sm text-slate-500">
+        <Link href="/admin/events" className="underline">
+          Events
+        </Link>{" "}
+        /{" "}
+        <Link href={`/admin/events/${eventId}`} className="underline">
+          {division.event.name}
+        </Link>{" "}
+        /{" "}
+        <Link href={`/admin/events/${eventId}/divisions/${divisionId}`} className="underline">
+          {division.name}
+        </Link>
+      </div>
+      <h1 className="mb-1 text-2xl font-semibold">Scoring suggestion</h1>
+      <p className="mb-6 text-sm text-slate-500">
+        {division.name} · {division.ageGroup}u ·{" "}
+        <span className="font-medium">{division.scoringStatus}</span>
+      </p>
+
+      {error === "nosuggestion" && (
+        <p className={errorBannerClass}>This snapshot has no suggested template to accept.</p>
+      )}
+      {error === "nofinishes" && (
+        <p className={errorBannerClass}>Enter team finishes before accepting a suggestion.</p>
+      )}
+      {error === "noreason" && (
+        <p className={errorBannerClass}>An override reason is required.</p>
+      )}
+
+      <form action={generateWithIds} className="mb-6">
+        <button type="submit" className={secondaryButtonClass}>
+          {snapshot ? "Regenerate suggestion" : "Generate suggestion"}
+        </button>
+      </form>
+
+      {!snapshot && <p className="text-sm text-slate-500">No suggestion generated yet.</p>}
+
+      {snapshot && (
+        <>
+          <section className="mb-8 grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
+            <div className="text-slate-500">Field Strength Score</div>
+            <div>{snapshot.fss !== null ? snapshot.fss.toFixed(3) : "—"}</div>
+
+            <div className="text-slate-500">Percentile</div>
+            <div>{snapshot.percentile !== null ? `${snapshot.percentile.toFixed(0)}th` : "—"}</div>
+
+            <div className="text-slate-500">Score band</div>
+            <div>{snapshot.scoreBand ?? "—"}</div>
+
+            <div className="text-slate-500">Teams / rated</div>
+            <div>
+              {snapshot.teamCount} / {snapshot.ratedTeamCount} (
+              {(snapshot.percentTeamsRated * 100).toFixed(0)}% rated)
+            </div>
+
+            <div className="text-slate-500">Match volume</div>
+            <div>{snapshot.matchVolume}</div>
+
+            <div className="text-slate-500">Suggested template</div>
+            <div>
+              {snapshot.suggestedTemplate
+                ? `${snapshot.suggestedTemplate.name} (${snapshot.suggestedTemplate.maxPoints} max)`
+                : "—"}
+            </div>
+
+            <div className="text-slate-500">Snapshot status</div>
+            <div>{snapshot.status}</div>
+          </section>
+
+          {snapshot.warnings.length > 0 && (
+            <p className={errorBannerClass}>
+              Confidence warnings: {snapshot.warnings.join(", ")}
+            </p>
+          )}
+
+          <section className="mb-8">
+            <h2 className="mb-2 text-lg font-medium">Bucket participation (by national rank)</h2>
+            <table className={tableClass}>
+              <thead>
+                <tr>
+                  {BUCKET_THRESHOLDS.map((t) => (
+                    <th key={t} className={thClass}>
+                      Top {t}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  {BUCKET_THRESHOLDS.map((t) => (
+                    <td key={t} className={tdClass}>
+                      {bucketCounts[String(t)] ?? 0}
+                    </td>
+                  ))}
+                </tr>
+              </tbody>
+            </table>
+          </section>
+
+          {isPending && (
+            <section className="flex flex-wrap items-start gap-6">
+              <form
+                action={async () => {
+                  "use server";
+                  await acceptSuggestion(eventId, divisionId, snapshot.id);
+                }}
+              >
+                <button type="submit" className={primaryButtonClass} disabled={!snapshot.suggestedTemplateId}>
+                  Accept
+                </button>
+              </form>
+
+              <form
+                action={async (formData: FormData) => {
+                  "use server";
+                  await overrideSuggestion(eventId, divisionId, snapshot.id, formData);
+                }}
+                className="flex items-end gap-3"
+              >
+                <label className="flex flex-col gap-1 text-sm">
+                  Override reason
+                  <input name="reason" required className={`${inputClass} w-64`} />
+                </label>
+                <button type="submit" className={secondaryButtonClass}>
+                  Override
+                </button>
+              </form>
+            </section>
+          )}
+
+          {snapshot.status === "OVERRIDDEN" && snapshot.overrideReason && (
+            <p className="text-sm text-slate-500">
+              Overridden: {snapshot.overrideReason}
+            </p>
+          )}
+        </>
+      )}
+    </div>
+  );
+}

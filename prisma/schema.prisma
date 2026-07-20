@@ -213,6 +213,7 @@ model Division {
   finishes          TeamFinish[]
   importRows        ImportRow[]
   auditFlags        AuditFlag[]
+  scoringSnapshots  DivisionScoringSnapshot[]
   createdAt         DateTime              @default(now())
   updatedAt         DateTime              @updatedAt
 
@@ -227,6 +228,7 @@ model PointTemplate {
   isAnchorTemplate Boolean            @default(false)
   isSystem        Boolean             @default(false)
   bands           PointTemplateBand[]
+  suggestedInSnapshots DivisionScoringSnapshot[]
   createdAt       DateTime            @default(now())
   updatedAt       DateTime            @updatedAt
 }
@@ -319,6 +321,48 @@ model TeamRatingHistory {
 
   @@unique([teamId, seasonId, ageGroup, weekEndingDate, ratingEngine])
   @@index([seasonId, ageGroup, weekEndingDate])
+}
+
+// State machine on the entity (Division.scoringStatus), audit trail here -- see
+// prisma/CLAUDE.md's "state machine on the entity, audit trail in a separate table"
+// pattern. One Division can accumulate many snapshots over time (e.g. re-suggested
+// after more of the season's Colley graph connects); the latest is "current." Not a
+// live view -- fields are captured at generation time so accept/override history
+// stays legible even as ratings keep moving.
+enum DivisionScoringSnapshotStatus {
+  PENDING
+  ACCEPTED
+  OVERRIDDEN
+}
+
+model DivisionScoringSnapshot {
+  id         String   @id @default(cuid())
+  divisionId String
+  division   Division @relation(fields: [divisionId], references: [id], onDelete: Cascade)
+
+  teamCount         Int
+  ratedTeamCount    Int
+  percentTeamsRated Float
+  fss               Float? // null when no team in the field is rated yet (NO_HISTORY)
+  percentile        Float? // FSS's percentile within the full (season, ageGroup) rating
+  // population -- this is what makes the suggestion self-calibrating rather than a
+  // fixed FSS cutoff (see docs/plan.md §2). Null alongside fss.
+  scoreBand   String? // plain-language band, e.g. "Elite field" -- cutoffs TBD, Phase 4
+  matchVolume Int // one of the two raw scale-factor inputs (see fieldStrength.ts)
+  bucketCounts Json // Record<threshold, count>, mirrors the legacy Analysis screen
+
+  warnings String[] // SMALL_FIELD | NO_HISTORY | LOW_PERCENT_RATED
+
+  suggestedTemplateId String?
+  suggestedTemplate    PointTemplate? @relation(fields: [suggestedTemplateId], references: [id])
+
+  status         DivisionScoringSnapshotStatus @default(PENDING)
+  overrideReason String? // required by the UI whenever status flips to OVERRIDDEN --
+  // feeds future recalibration (docs/plan.md §2)
+
+  createdAt DateTime @default(now())
+
+  @@index([divisionId, createdAt])
 }
 
 model RankingResultContribution {

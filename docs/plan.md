@@ -47,7 +47,7 @@ preference, non-negotiable.
 | 1 | Manual parity core — Events/Divisions/PointTemplates/scoring/TeamFinish/Rankings | ✅ Done |
 | 1.5 | Team/TeamSeason restructuring, Regions+zones (post-Phase-1 additions) | ✅ Done |
 | 2 | CSV import pipeline (AES adapter first) | ✅ Done (AES adapter, TEAM_FINISHES only) |
-| 3 | Tier 1 rating engine (Colley) + algorithmic scoring suggestion | In progress (Colley solve ✅; FSS/suggestion/scoring screen not started) |
+| 3 | Tier 1 rating engine (Colley) + algorithmic scoring suggestion | In progress (Colley solve ✅; FSS + suggestion + scoring-review screen ✅; Analysis view + histogram not started) |
 | 4 | Cross-season bootstrapping and calibration | Not started |
 | 5 | Tier 2 upgrade (Elo + Massey from real match data) | Not started |
 | 6 | Polish — flags, ballots, weight config, background jobs, hosting | Not started |
@@ -79,9 +79,38 @@ infra yet — that's Phase 6) from a new `/admin/power-rankings` page (season se
 already in the dev DB (81 rated 14u teams) — ratings ordered sensibly, and the
 "isolated team" edge case (a lone `ignoreAge` team with no peer in its natural age
 group's graph) correctly produces no rating row rather than a degenerate one.
-**Not yet built**: Field Strength Score, bucket participation counts, the
-suggestion-to-`PointTemplate` mapping, `DivisionScoringSnapshot`, the Division
-scoring-review screen, and the Analysis view — those are the next slice of Phase 3.
+**Phase 3, second slice — FSS + suggestion mapping + scoring-review screen — done.**
+`src/lib/rating/fieldStrength.ts` (pure: FSS = mean rating of the top half by rating
+among a division's rated teams; Top5/10/25/.../250 bucket counts by each team's
+*national* Colley rank, not division rank; raw scale-factor inputs `teamCount`/
+`matchVolume`; confidence warnings `SMALL_FIELD`/`NO_HISTORY`/`LOW_PERCENT_RATED`, all
+placeholder-cutoff, unit-tested) plus `computeDivisionFieldStrength.ts` (Prisma
+orchestration: latest `TeamRatingHistory` row per team in the division). Layered on
+top, `src/lib/rating/suggestPointTemplate.ts` (pure: FSS's percentile within the
+*full* (season, ageGroup) rating population — not against other divisions' FSS, which
+is what makes it self-calibrating without needing historical snapshot data yet — a
+plain-language score band from percentile, and a percentile-to-non-anchor-template
+linear mapping, unit-tested) plus `computeDivisionScoringSuggestion.ts` (orchestration:
+runs the full pipeline and persists a `DivisionScoringSnapshot`, sets
+`Division.scoringStatus` to `SUGGESTED`). New `DivisionScoringSnapshot` model
+(audit-trail pattern, not a live view — see `prisma/CLAUDE.md`) with a
+`PENDING|ACCEPTED|OVERRIDDEN` status. New screen
+`/admin/events/[eventId]/divisions/[divisionId]/scoring`: shows FSS/percentile/band/
+bucket counts/warnings/suggested template; **Accept** copies the suggested template's
+bands into `DivisionPointBand` (frozen-copy pattern, same as the existing manual
+apply-template flow) and confirms scoring in one step; **Override** requires a reason,
+marks the snapshot `OVERRIDDEN`, and drops the division back to `DRAFT` for the
+existing manual apply-template/confirm flow. Verified end-to-end in the browser
+against the real 14 Open division (FSS 0.732 → 77th percentile → "Strong regional" →
+correctly picked the strongest available non-anchor template; Override correctly
+reverted the division to DRAFT) — demo data restored via `npm run db:seed-demo`
+afterward, which is idempotent and doesn't touch `DivisionScoringSnapshot` rows.
+**Not yet built**: the Colley-rating distribution histogram and prior-run FSS-history
+comparison (both "presentation aid," Phase 3 nice-to-haves per §2), and the Analysis
+view — those remain the next slice of Phase 3. Also still open: the current dev
+seed data has no non-anchor `PointTemplate`, so the suggestion pipeline has nothing
+real to suggest against outside of manual verification — worth seeding a small
+non-anchor template library.
 
 ## Deviations from the original plan
 
@@ -369,8 +398,10 @@ Built (Phase 3, first slice): `/admin/power-rankings` (season/age-group selector
 manual recompute trigger), `/admin/power-rankings/[seasonId]/[ageGroup]` (Colley
 ratings table).
 
-Planned, not built: `/admin/events/[eventId]/divisions/[divisionId]/scoring`
-(suggestion-review screen, Phase 3), `/admin/teams/unlinked`, `/admin/teams/inactive`,
+Built (Phase 3, second slice): `/admin/events/[eventId]/divisions/[divisionId]/scoring`
+(generate suggestion, view FSS/percentile/band/bucket counts/warnings, Accept/Override).
+
+Planned, not built: `/admin/teams/unlinked`, `/admin/teams/inactive`,
 `/admin/clubs/unlinked`, `/admin/clubs/inactive` (Phase 2 follow-up audits),
 `/admin/flags` (Phase 6), `/admin/ballots` (Phase 6),
 `/admin/power-rankings/[season]/[ageGroup]` (Phase 5),
@@ -399,9 +430,10 @@ fuzzy team/club matching beyond AES's structured code; Unlinked/Inactive audit l
 pages (`/admin/teams/unlinked` etc.); region-code alias reconciliation table.
 
 **Phase 3 — Tier 1 rating engine (Colley) + algorithmic scoring.** In progress. Colley
-batch solve + `TeamRatingHistory` snapshot + a basic Power Rankings view are done (see
-Status above); still to do: the Analysis view, FSS computation + suggestion
-generation, Division scoring-review screen, `DivisionScoringSnapshot` audit trail.
+batch solve + `TeamRatingHistory` snapshot + a basic Power Rankings view are done, and
+so is FSS computation + suggestion generation + the Division scoring-review screen +
+`DivisionScoringSnapshot` audit trail (see Status above); still to do: the Analysis
+view and the Colley-rating distribution histogram / prior-run FSS-history comparison.
 
 **Phase 4 — Cross-season bootstrapping and calibration.** Not started. Prior-season
 carry-forward with regression-to-mean; calibrate FSS thresholds against real

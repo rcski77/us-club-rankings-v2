@@ -85,7 +85,11 @@ export default async function DivisionDetailPage({
         {division.tierLevel ? ` ${division.tierLevel}` : ""} ·{" "}
         <span className={isConfirmed ? "font-medium text-green-700" : "font-medium text-amber-700"}>
           {division.scoringStatus}
-        </span>
+        </span>{" "}
+        ·{" "}
+        <Link href={`/admin/events/${eventId}/divisions/${divisionId}/scoring`} className="underline">
+          Scoring suggestion
+        </Link>
       </p>
 
       {error === "invalid" && <p className={errorBannerClass}>Invalid band values.</p>}
