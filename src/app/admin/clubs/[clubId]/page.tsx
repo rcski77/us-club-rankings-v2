@@ -68,6 +68,16 @@ export default async function ClubDetailPage({
 
   const updateClubWithId = updateClub.bind(null, clubId);
 
+  const sortedTeams = [...club.teams].sort((a, b) => {
+    const aTs = activeSeason ? a.seasons.find((ts) => ts.seasonId === activeSeason.id) : undefined;
+    const bTs = activeSeason ? b.seasons.find((ts) => ts.seasonId === activeSeason.id) : undefined;
+    if (!aTs && !bTs) return a.name.localeCompare(b.name);
+    if (!aTs) return 1;
+    if (!bTs) return -1;
+    if (aTs.ageGroup !== bTs.ageGroup) return aTs.ageGroup - bTs.ageGroup;
+    return aTs.teamNumber.localeCompare(bTs.teamNumber, undefined, { numeric: true });
+  });
+
   return (
     <div>
       <div className="mb-2 text-sm text-slate-500">
@@ -153,7 +163,7 @@ export default async function ClubDetailPage({
           </tr>
         </thead>
         <tbody>
-          {club.teams.map((t) => {
+          {sortedTeams.map((t) => {
             const activeTs = activeSeason
               ? t.seasons.find((ts) => ts.seasonId === activeSeason.id)
               : undefined;
@@ -187,7 +197,7 @@ export default async function ClubDetailPage({
               </tr>
             );
           })}
-          {club.teams.length === 0 && (
+          {sortedTeams.length === 0 && (
             <tr>
               <td className={tdClass} colSpan={5}>
                 No teams for this club yet.

@@ -66,6 +66,16 @@ export default async function ImportBatchPage({
   const divisionById = new Map(divisions.map((d) => [d.id, d]));
   const clubById = new Map(clubs.map((c) => [c.id, c]));
   const teamById = new Map(teams.map((t) => [t.id, t]));
+  // Scopes the team-override dropdown to the row's own club instead of dumping every
+  // team in the system into it -- with real-sized data (1000+ teams) that select was
+  // the other half of the page-lockup bug the club-override fix above addresses.
+  const teamsByClubId = new Map<string, typeof teams>();
+  for (const t of teams) {
+    if (!t.clubId) continue;
+    const list = teamsByClubId.get(t.clubId) ?? [];
+    list.push(t);
+    teamsByClubId.set(t.clubId, list);
+  }
 
   const allRows = batch.files.flatMap((f) =>
     f.rows.map((r) => ({ ...r, filename: f.filename, partNumber: f.partNumber })),
@@ -253,6 +263,8 @@ export default async function ImportBatchPage({
                 const matchedClub = row.matchedClubId ? clubById.get(row.matchedClubId) : null;
                 const matchedTeam = row.matchedTeamId ? teamById.get(row.matchedTeamId) : null;
                 const ambiguousResolvedClub = row.overrideClubId ? clubById.get(row.overrideClubId) : null;
+                const teamOverrideClubId = row.overrideClubId ?? row.matchedClubId;
+                const teamOverrideCandidates = teamOverrideClubId ? (teamsByClubId.get(teamOverrideClubId) ?? []) : [];
 
                 return (
                   <tr key={row.id} className={row.excluded ? "opacity-40" : ""}>
@@ -326,7 +338,12 @@ export default async function ImportBatchPage({
                       ) : (
                         <span className="text-xs text-slate-400">(not yet resolved)</span>
                       )}
-                      {!isCommitted && (
+                      {/* Full club list is 500+ rows -- only render it for rows that
+                          actually need a manual club decision (matches blockingReason's
+                          AMBIGUOUS/NEW check), not for every cleanly-matched row. See
+                          docs/plan.md Phase 2 postmortem: rendering this select for every
+                          row of a real-sized (500+ row) import froze the page. */}
+                      {!isCommitted && (row.clubMatchType === "NEW" || row.clubMatchType === "AMBIGUOUS") && (
                         <form action={overrideClubWithIds} className="mt-1 flex flex-wrap items-center gap-1">
                           <input type="hidden" name="filter" value={filter ?? ""} />
                           <select
@@ -366,7 +383,13 @@ export default async function ImportBatchPage({
                       ) : (
                         <span className="text-xs text-slate-400">{row.teamNameRaw} (not yet resolved)</span>
                       )}
-                      {!isCommitted && (
+                      {/* Only render for rows that don't already have a clean
+                          existing-team match, and scope the candidate list to the
+                          row's matched club (typically a handful of teams) instead of
+                          every team in the system (1000+) -- rendering the full list
+                          for every unmatched row was the other half of the page-lockup
+                          bug this fixes. */}
+                      {!isCommitted && row.teamMatchType === "NEW" && teamOverrideCandidates.length > 0 && (
                         <form action={overrideTeamWithIds} className="mt-1 flex gap-1">
                           <input type="hidden" name="filter" value={filter ?? ""} />
                           <select
@@ -375,7 +398,7 @@ export default async function ImportBatchPage({
                             defaultValue={row.overrideTeamId ?? ""}
                           >
                             <option value="">— auto —</option>
-                            {teams.map((t) => (
+                            {teamOverrideCandidates.map((t) => (
                               <option key={t.id} value={t.id}>
                                 {t.name} {t.club ? `(${t.club.name})` : ""}
                               </option>
