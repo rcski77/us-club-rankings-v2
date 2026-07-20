@@ -38,6 +38,7 @@ model Season {
   isActive    Boolean      @default(false)
   teamSeasons TeamSeason[]
   events      Event[]
+  ratingHistory TeamRatingHistory[]
   createdAt   DateTime     @default(now())
 }
 
@@ -124,6 +125,7 @@ model Team {
   seasons        TeamSeason[]
   finishes       TeamFinish[]
   rankingResults RankingResult[]
+  ratingHistory  TeamRatingHistory[]
   importRows     ImportRow[]
   auditFlags     AuditFlag[]
 
@@ -287,6 +289,36 @@ model RankingResult {
 
   @@unique([seasonId, ageGroup, teamId])
   @@index([seasonId, ageGroup, rank])
+}
+
+// --- Phase 3: Tier 1 rating engine (Colley) ----------------------------------
+// See docs/plan.md §2/§6 (Phase 3). Weekly persisted snapshot per (team, season,
+// ageGroup) -- mirrors RankingResult's delete-and-replace-by-partition pattern, keyed
+// here by weekEndingDate instead of always representing "current."
+
+enum RatingEngine {
+  COLLEY
+}
+
+model TeamRatingHistory {
+  id             String       @id @default(cuid())
+  teamId         String
+  team           Team         @relation(fields: [teamId], references: [id])
+  seasonId       String
+  season         Season       @relation(fields: [seasonId], references: [id])
+  ageGroup       Int
+  weekEndingDate DateTime
+  ratingEngine   RatingEngine @default(COLLEY)
+  rating         Float
+  rank           Int
+  comparisons    Int // count of inferred pairwise win/loss comparisons feeding this
+  // rating (NOT real matches played -- see docs/plan.md; Phase 5's match-level data
+  // will supersede this). Powers the future NO_HISTORY / LOW_PERCENT_RATED confidence
+  // warnings (Phase 3 FSS work).
+  createdAt      DateTime     @default(now())
+
+  @@unique([teamId, seasonId, ageGroup, weekEndingDate, ratingEngine])
+  @@index([seasonId, ageGroup, weekEndingDate])
 }
 
 model RankingResultContribution {

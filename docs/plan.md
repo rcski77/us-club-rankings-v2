@@ -47,7 +47,7 @@ preference, non-negotiable.
 | 1 | Manual parity core — Events/Divisions/PointTemplates/scoring/TeamFinish/Rankings | ✅ Done |
 | 1.5 | Team/TeamSeason restructuring, Regions+zones (post-Phase-1 additions) | ✅ Done |
 | 2 | CSV import pipeline (AES adapter first) | ✅ Done (AES adapter, TEAM_FINISHES only) |
-| 3 | Tier 1 rating engine (Colley) + algorithmic scoring suggestion | Not started |
+| 3 | Tier 1 rating engine (Colley) + algorithmic scoring suggestion | In progress (Colley solve ✅; FSS/suggestion/scoring screen not started) |
 | 4 | Cross-season bootstrapping and calibration | Not started |
 | 5 | Tier 2 upgrade (Elo + Massey from real match data) | Not started |
 | 6 | Polish — flags, ballots, weight config, background jobs, hosting | Not started |
@@ -63,6 +63,25 @@ TEAM_FINISHES bulk-import via `/admin/imports`, so team finishes no longer have 
 typed in one row at a time — see §3. No algorithmic scoring yet — point curves are
 always picked/applied by a human. `npm run db:seed-demo` rebuilds this walkthrough
 data from scratch.
+
+**Phase 3, first slice — Colley rating engine — done.** `src/lib/rating/colley.ts`
+(pure: pairwise-comparison builder + hand-rolled Gaussian-elimination Colley solve,
+unit-tested) and `src/lib/rating/computeColleyRatings.ts` (Prisma orchestration:
+gathers CONFIRMED finishes up to an `asOfDate`, resolves `ignoreAge` finishes to the
+team's *natural* age group exactly like `computeRanking.ts`, builds per-division
+win/loss comparisons — same-rank ties produce no comparison — solves per
+`(season, ageGroup)`, and persists a `TeamRatingHistory` snapshot). New
+`TeamRatingHistory` model added to the schema (not yet the full `MasseyRatingRun`/
+`MasseyTeamRating` — those stay Phase 5). Triggered manually today (no background-job
+infra yet — that's Phase 6) from a new `/admin/power-rankings` page (season selector +
+"Recompute ratings" button) and viewed per `(season, ageGroup)` at
+`/admin/power-rankings/[seasonId]/[ageGroup]`. Verified against real imported AES data
+already in the dev DB (81 rated 14u teams) — ratings ordered sensibly, and the
+"isolated team" edge case (a lone `ignoreAge` team with no peer in its natural age
+group's graph) correctly produces no rating row rather than a degenerate one.
+**Not yet built**: Field Strength Score, bucket participation counts, the
+suggestion-to-`PointTemplate` mapping, `DivisionScoringSnapshot`, the Division
+scoring-review screen, and the Analysis view — those are the next slice of Phase 3.
 
 ## Deviations from the original plan
 
@@ -346,6 +365,10 @@ Built (Phase 0/1):
 Built (Phase 2): `/admin/imports` (list + start batch), `/admin/imports/[batchId]`
 (upload/resolve/preview/commit workflow).
 
+Built (Phase 3, first slice): `/admin/power-rankings` (season/age-group selector +
+manual recompute trigger), `/admin/power-rankings/[seasonId]/[ageGroup]` (Colley
+ratings table).
+
 Planned, not built: `/admin/events/[eventId]/divisions/[divisionId]/scoring`
 (suggestion-review screen, Phase 3), `/admin/teams/unlinked`, `/admin/teams/inactive`,
 `/admin/clubs/unlinked`, `/admin/clubs/inactive` (Phase 2 follow-up audits),
@@ -375,11 +398,10 @@ confirmed sample formats — Open Question 1); DIVISIONS/MATCH_RESULTS import ty
 fuzzy team/club matching beyond AES's structured code; Unlinked/Inactive audit list
 pages (`/admin/teams/unlinked` etc.); region-code alias reconciliation table.
 
-**Phase 3 — Tier 1 rating engine (Colley) + algorithmic scoring.** Not started. Fully
-deliverable with data available today (placement-only), no dependency on new
-scraping work. Analysis view first, then Colley batch solve, weekly
-TeamRatingHistory snapshot + Power Rankings view, FSS computation + suggestion
-generation, Division scoring-review screen, DivisionScoringSnapshot audit trail.
+**Phase 3 — Tier 1 rating engine (Colley) + algorithmic scoring.** In progress. Colley
+batch solve + `TeamRatingHistory` snapshot + a basic Power Rankings view are done (see
+Status above); still to do: the Analysis view, FSS computation + suggestion
+generation, Division scoring-review screen, `DivisionScoringSnapshot` audit trail.
 
 **Phase 4 — Cross-season bootstrapping and calibration.** Not started. Prior-season
 carry-forward with regression-to-mean; calibrate FSS thresholds against real
