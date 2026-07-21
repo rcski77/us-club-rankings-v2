@@ -209,7 +209,11 @@ function resolveRow(row: RowInput, ctx: ResolveContext) {
       effectiveDivisionKey = `id:${existing.id}`;
     } else {
       divisionMatchType = "NEW";
-      effectiveDivisionKey = `new:${key}`;
+      // Keyed by the raw label text, not the structural (age, tier, level) key --
+      // the Division this creates is named verbatim from the CSV (see commit.ts), so
+      // grouping should match on the same text rather than an internal guess that
+      // could quietly merge two differently-worded-but-same-guessed-tier labels.
+      effectiveDivisionKey = `new:label:${row.ageGroupLabelRaw.trim().toLowerCase()}`;
     }
   }
 
@@ -283,10 +287,13 @@ function resolveRow(row: RowInput, ctx: ResolveContext) {
       // season at the SAME age group (genuinely the same team); otherwise fall
       // back to one not yet enrolled this season at all (a returning team newly
       // aging into this code). Never match a candidate already enrolled this
-      // season at a *different* age -- that's a different real team.
+      // season at a *different* age -- that's a different real team. Compared
+      // against this TEAM's own decoded age (decoded.ageGroup), not the division's
+      // nominal age (label.ageGroup) -- those differ for a team playing up in a
+      // combined/mismatched division, and it's the team's own age that identifies it.
       const candidates = ctx.teamsByLineageKey.get(lineageKey) ?? [];
       const sameAgeMatch = candidates.find(
-        (t) => ctx.teamSeasonByTeamId.get(t.id)?.ageGroup === label.ageGroup,
+        (t) => ctx.teamSeasonByTeamId.get(t.id)?.ageGroup === decoded.ageGroup,
       );
       const unenrolledMatch = candidates.find((t) => !ctx.teamSeasonByTeamId.has(t.id));
       const byLineage = sameAgeMatch ?? unenrolledMatch ?? null;
@@ -299,7 +306,11 @@ function resolveRow(row: RowInput, ctx: ResolveContext) {
     }
   }
 
-  const effectiveTeamKey = matchedTeamId ? `id:${matchedTeamId}` : `new:${lineageKey}`;
+  // Age-scoped, matching commit.ts's own new-team grouping (lineageKey alone would
+  // incorrectly treat a club's two different-age squads sharing a team-number as
+  // "the same team" whenever they land in the same division -- e.g. two legitimately
+  // different teams both competing in one combined-age bracket).
+  const effectiveTeamKey = matchedTeamId ? `id:${matchedTeamId}` : `new:${lineageKey}|${decoded.ageGroup}`;
 
   // Duplicate-in-batch: two rows collapsing onto the same team+division is an
   // error; same-rank ties across *different* teams are normal and unaffected.
@@ -327,6 +338,7 @@ function resolveRow(row: RowInput, ctx: ResolveContext) {
   return {
     parsedRank: Number.isFinite(rank) ? rank : null,
     parsedAgeGroup: label.ageGroup,
+    parsedTeamAgeGroup: decoded.ageGroup,
     parsedTierLabel: label.tierLabel,
     parsedTierLevel: label.tierLevel,
     tierWasDefaulted: label.tierWasDefaulted,

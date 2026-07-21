@@ -47,7 +47,7 @@ preference, non-negotiable.
 | 1 | Manual parity core — Events/Divisions/PointTemplates/scoring/TeamFinish/Rankings | ✅ Done |
 | 1.5 | Team/TeamSeason restructuring, Regions+zones (post-Phase-1 additions) | ✅ Done |
 | 2 | CSV import pipeline (AES adapter first) | ✅ Done (AES adapter, TEAM_FINISHES only) |
-| 3 | Tier 1 rating engine (Colley) + algorithmic scoring suggestion | In progress (Colley solve ✅; FSS + suggestion + scoring-review screen ✅; Analysis view + histogram not started) |
+| 3 | Tier 1 rating engine (Colley) + algorithmic scoring suggestion | In progress (Colley solve ✅; FSS + suggestion + scoring-review screen ✅; Analysis view + histogram ✅; non-anchor template seeding + prior-run FSS-history comparison not started) |
 | 4 | Cross-season bootstrapping and calibration | Not started |
 | 5 | Tier 2 upgrade (Elo + Massey from real match data) | Not started |
 | 6 | Polish — flags, ballots, weight config, background jobs, hosting | Not started |
@@ -105,12 +105,40 @@ against the real 14 Open division (FSS 0.732 → 77th percentile → "Strong reg
 correctly picked the strongest available non-anchor template; Override correctly
 reverted the division to DRAFT) — demo data restored via `npm run db:seed-demo`
 afterward, which is idempotent and doesn't touch `DivisionScoringSnapshot` rows.
-**Not yet built**: the Colley-rating distribution histogram and prior-run FSS-history
-comparison (both "presentation aid," Phase 3 nice-to-haves per §2), and the Analysis
-view — those remain the next slice of Phase 3. Also still open: the current dev
-seed data has no non-anchor `PointTemplate`, so the suggestion pipeline has nothing
-real to suggest against outside of manual verification — worth seeding a small
-non-anchor template library.
+**Phase 3, third slice — Colley-rating distribution histogram + Analysis view — done.**
+`src/lib/rating/ratingHistogram.ts` (pure: bins a list of ratings into fixed-width
+buckets, unit-tested — single-bin fallback for empty/all-equal input, max value
+assigned to the last bin rather than overflowing) plus a new
+`getDivisionRatedRatings()` export on `computeDivisionFieldStrength.ts` (shares the
+existing latest-rating-per-team lookup, factored into `fetchLatestRatedTeams()`, so
+FSS and the histogram don't duplicate the Prisma query). Rendered as a dependency-free
+server-rendered inline SVG bar chart
+(`.../scoring/RatingHistogramChart.tsx`) on the existing scoring-review screen, below
+the bucket-participation table. New `/admin/analysis` (season/age-group selector,
+mirrors `/admin/power-rankings`'s pattern) → `/admin/analysis/[seasonId]/[ageGroup]`
+(one row per Division in that season/age group — event, scoring status, team count,
+FSS/percentile/band, all 8 bucket counts, suggested template — pulling each
+division's latest `DivisionScoringSnapshot` via a single relation-scoped `include`,
+not N+1 queries) — the side-by-side view for sanity-checking one division's suggestion
+against every other division's in the same age group. Verified in the browser against
+real seed data: the confirmed 14 Open/Triple Crown NIT division shows its full
+snapshot (FSS 0.732, 77th percentile, "Strong regional", histogram shaped as expected)
+next to five still-DRAFT USAV Nationals divisions with no snapshot yet (shown as "—").
+**Not yet built**: prior-run FSS-history comparison (how a division's FSS/suggested
+tier has shifted across snapshots over time — needs weekly `TeamRatingHistory`
+snapshots to accumulate first, so deferred past Phase 3).
+
+**Non-anchor `PointTemplate` library — seeded.** `prisma/seedPointTemplates.ts` (new
+`db:seed-point-templates` script, idempotent — upserts by name, replaces bands
+wholesale) now seeds 13 real non-anchor tiers spanning 190→100 max points: 8 sourced
+directly from real point-curve screenshots from last season (190/185/180/175/170/
+165(interpolated)/160/150(interpolated) max), plus 5 lower tiers (140/130/120/110/100
+max) filled in by scaling down from the lowest real tier since no screenshot covered
+that range — each interpolated template's `description` says so explicitly. Verified
+against the live suggestion pipeline: regenerating a suggestion for the (previously
+untested, still-DRAFT) 14 American/USAV Nationals division now correctly picks a
+template proportional to its percentile (17th → "170 max") instead of the single
+option that existed before this tier library existed.
 
 ## Deviations from the original plan
 
@@ -399,13 +427,17 @@ manual recompute trigger), `/admin/power-rankings/[seasonId]/[ageGroup]` (Colley
 ratings table).
 
 Built (Phase 3, second slice): `/admin/events/[eventId]/divisions/[divisionId]/scoring`
-(generate suggestion, view FSS/percentile/band/bucket counts/warnings, Accept/Override).
+(generate suggestion, view FSS/percentile/band/bucket counts/warnings, Accept/Override,
+now also the Colley-rating distribution histogram).
+
+Built (Phase 3, third slice): `/admin/analysis` (season/age-group selector),
+`/admin/analysis/[seasonId]/[ageGroup]` (per-division FSS/percentile/band/bucket-count
+breakdown across a whole season/age group).
 
 Planned, not built: `/admin/teams/unlinked`, `/admin/teams/inactive`,
 `/admin/clubs/unlinked`, `/admin/clubs/inactive` (Phase 2 follow-up audits),
 `/admin/flags` (Phase 6), `/admin/ballots` (Phase 6),
-`/admin/power-rankings/[season]/[ageGroup]` (Phase 5),
-`/admin/analysis/[season]/[ageGroup]` (Phase 3).
+`/admin/power-rankings/[season]/[ageGroup]` (Phase 5).
 
 ---
 
@@ -432,8 +464,10 @@ pages (`/admin/teams/unlinked` etc.); region-code alias reconciliation table.
 **Phase 3 — Tier 1 rating engine (Colley) + algorithmic scoring.** In progress. Colley
 batch solve + `TeamRatingHistory` snapshot + a basic Power Rankings view are done, and
 so is FSS computation + suggestion generation + the Division scoring-review screen +
-`DivisionScoringSnapshot` audit trail (see Status above); still to do: the Analysis
-view and the Colley-rating distribution histogram / prior-run FSS-history comparison.
+`DivisionScoringSnapshot` audit trail + the Colley-rating distribution histogram + the
+Analysis view (see Status above); still to do: prior-run FSS-history comparison
+(needs weekly snapshots to accumulate) and seeding a non-anchor `PointTemplate`
+library for realistic suggestion testing.
 
 **Phase 4 — Cross-season bootstrapping and calibration.** Not started. Prior-season
 carry-forward with regression-to-mean; calibrate FSS thresholds against real

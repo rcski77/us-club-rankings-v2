@@ -287,8 +287,9 @@ export default async function ImportBatchPage({
                     <td className={tdClass}>
                       {row.divisionMatchType === "NEW" ? (
                         <span className="text-xs text-amber-700">
-                          NEW: {row.parsedAgeGroup}u {row.parsedTierLabel}
-                          {row.parsedTierLevel ? ` ${row.parsedTierLevel}` : ""}
+                          NEW: &quot;{row.ageGroupLabelRaw.trim()}&quot; ({row.parsedAgeGroup}u{" "}
+                          {row.parsedTierLabel}
+                          {row.parsedTierLevel ? ` ${row.parsedTierLevel}` : ""})
                         </span>
                       ) : row.divisionMatchType === "EXISTING" ? (
                         matchedDivision?.name ?? ""

@@ -3,6 +3,21 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { tableClass, thClass, tdClass } from "@/lib/ui";
 
+function ordinalSuffix(n: number): string {
+  const mod100 = n % 100;
+  if (mod100 >= 11 && mod100 <= 13) return "th";
+  switch (n % 10) {
+    case 1:
+      return "st";
+    case 2:
+      return "nd";
+    case 3:
+      return "rd";
+    default:
+      return "th";
+  }
+}
+
 export default async function RankingResultsPage({
   params,
 }: {
@@ -66,8 +81,9 @@ export default async function RankingResultsPage({
                   <ul className="mt-2 flex flex-col gap-1 text-xs text-slate-600">
                     {r.contributions.map((c) => (
                       <li key={c.id} className={c.countedInTop3 ? "" : "line-through opacity-50"}>
-                        {c.teamFinish.division.event.name} ({c.teamFinish.division.name}):{" "}
-                        {c.points} pts
+                        {c.teamFinish.division.event.name} ({c.teamFinish.division.name}): {c.points}{" "}
+                        pts ({c.teamFinish.rank}
+                        {ordinalSuffix(c.teamFinish.rank)})
                       </li>
                     ))}
                   </ul>

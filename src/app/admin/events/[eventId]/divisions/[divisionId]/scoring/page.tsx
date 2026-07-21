@@ -2,7 +2,10 @@ import { prisma } from "@/lib/prisma";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { BUCKET_THRESHOLDS } from "@/lib/rating/fieldStrength";
+import { getDivisionRatedRatings } from "@/lib/rating/computeDivisionFieldStrength";
+import { computeRatingHistogram } from "@/lib/rating/ratingHistogram";
 import { generateSuggestion, acceptSuggestion, overrideSuggestion } from "./actions";
+import { RatingHistogramChart } from "./RatingHistogramChart";
 import {
   inputClass,
   primaryButtonClass,
@@ -35,6 +38,9 @@ export default async function DivisionScoringPage({
   const generateWithIds = generateSuggestion.bind(null, eventId, divisionId);
   const bucketCounts = (snapshot?.bucketCounts as Record<string, number> | undefined) ?? {};
   const isPending = snapshot?.status === "PENDING" && division.scoringStatus === "SUGGESTED";
+
+  const ratings = snapshot ? await getDivisionRatedRatings(divisionId) : [];
+  const histogram = snapshot ? computeRatingHistogram(ratings) : null;
 
   return (
     <div className="max-w-2xl">
@@ -135,6 +141,15 @@ export default async function DivisionScoringPage({
                 </tr>
               </tbody>
             </table>
+          </section>
+
+          <section className="mb-8">
+            <h2 className="mb-2 text-lg font-medium">Colley rating distribution</h2>
+            {ratings.length > 0 && histogram ? (
+              <RatingHistogramChart histogram={histogram} />
+            ) : (
+              <p className="text-sm text-slate-500">No rated teams in this division yet.</p>
+            )}
           </section>
 
           {isPending && (

@@ -487,7 +487,14 @@ model ImportRow {
 
   // parsed, populated by resolveImportBatch()
   parsedRank               Int?
-  parsedAgeGroup            Int?
+  parsedAgeGroup            Int? // the DIVISION's nominal age group, from ageGroupLabelRaw --
+  // for a combined-age label ("12/13 Club") this is the older/max age, per domain
+  // convention that a combined bracket is "for" the older age and a younger team
+  // playing in it is the one playing up (see parsedTeamAgeGroup + docs/plan.md).
+  parsedTeamAgeGroup        Int? // this TEAM's own real age group, decoded from its
+  // team code (always structurally reliable, unlike the free-text label). Differs
+  // from parsedAgeGroup exactly when this team is playing up in a combined/mismatched
+  // division -- that comparison is what drives TeamFinish.ignoreAge at commit time.
   parsedTierLabel           DivisionTierLabel?
   parsedTierLevel           String?
   tierWasDefaulted          Boolean            @default(false)

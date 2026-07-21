@@ -8,7 +8,7 @@ import { computeFieldStrength, type FieldStrengthResult } from "./fieldStrength"
  * age-group partition (the ignoreAge case), so a team has at most one current COLLEY
  * row per season regardless of which age group's division it's finishing in here.
  */
-export async function computeDivisionFieldStrength(divisionId: string): Promise<FieldStrengthResult> {
+async function fetchLatestRatedTeams(divisionId: string) {
   const division = await prisma.division.findUniqueOrThrow({
     where: { id: divisionId },
     include: { event: true, finishes: true },
@@ -40,5 +40,20 @@ export async function computeDivisionFieldStrength(divisionId: string): Promise<
       comparisons: row.comparisons,
     }));
 
-  return computeFieldStrength(teamIds.length, ratedTeams);
+  return { teamCount: teamIds.length, ratedTeams };
+}
+
+export async function computeDivisionFieldStrength(divisionId: string): Promise<FieldStrengthResult> {
+  const { teamCount, ratedTeams } = await fetchLatestRatedTeams(divisionId);
+  return computeFieldStrength(teamCount, ratedTeams);
+}
+
+/**
+ * The raw rated-team ratings for a division, for the scoring-review screen's Colley-
+ * rating distribution histogram (docs/plan.md §2) -- FieldStrengthResult only carries
+ * the aggregated FSS, not the underlying values a histogram needs.
+ */
+export async function getDivisionRatedRatings(divisionId: string): Promise<number[]> {
+  const { ratedTeams } = await fetchLatestRatedTeams(divisionId);
+  return ratedTeams.map((t) => t.rating);
 }

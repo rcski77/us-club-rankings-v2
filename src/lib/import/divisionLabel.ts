@@ -5,6 +5,14 @@ import { DivisionTierLabel } from "@/generated/prisma/enums";
 // Crown NIT / USAV Nationals), which have no sub-tiers and show just the bare age
 // (e.g. "12 & Under") -- see docs/domain-notes.md. When no tier keyword is found we
 // default to OPEN and flag it so an admin can verify.
+//
+// Some events also genuinely combine two age groups into one division ("12/13 Club",
+// a real bracket where 12u and 13u teams compete together, not a mislabeled pair of
+// single-age divisions -- confirmed against real Triple Crown Colorado Challenge data).
+// The division's nominal ageGroup for a combined label is the OLDER of the two ages --
+// the convention this app already uses elsewhere (ignoreAge) is that a combined
+// bracket is "for" the older age, and a younger team competing in it is the one
+// playing up.
 
 export type ParsedDivisionLabel = {
   ageGroup: number;
@@ -29,11 +37,13 @@ const TIER_LEVEL_PATTERN = /\b(I{1,3})\b/i;
 
 export function parseAgeGroupLabel(label: string): ParsedDivisionLabel | DivisionLabelParseError {
   const trimmed = label.trim();
-  const ageMatch = trimmed.match(/^(\d{1,2})/);
+  // Combined-range labels ("12/13 Club") carry two leading numbers, not one -- the
+  // nominal ageGroup is the older/max of the two (see file header comment).
+  const ageMatch = trimmed.match(/^(\d{1,2})(?:\s*\/\s*(\d{1,2}))?/);
   if (!ageMatch) {
     return { raw: label, reason: `No leading age number found in "${label}".` };
   }
-  const ageGroup = Number(ageMatch[1]);
+  const ageGroup = ageMatch[2] ? Math.max(Number(ageMatch[1]), Number(ageMatch[2])) : Number(ageMatch[1]);
   const remainder = trimmed.slice(ageMatch[0].length);
 
   const tierMatch = TIER_KEYWORDS.find((tier) =>

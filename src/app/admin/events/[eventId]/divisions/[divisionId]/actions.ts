@@ -3,10 +3,31 @@
 import { prisma } from "@/lib/prisma";
 import { recomputeRankingsForDivision } from "@/lib/ranking/computeRanking";
 import { resolvePoints } from "@/lib/scoring/resolvePoints";
+import { computeDivisionScoringSuggestion } from "@/lib/rating/computeDivisionScoringSuggestion";
 import { redirect } from "next/navigation";
 
 function divisionPath(eventId: string, divisionId: string) {
   return `/admin/events/${eventId}/divisions/${divisionId}`;
+}
+
+const TIER_LABELS = ["OPEN", "NATIONAL", "AMERICAN", "PATRIOT", "LIBERTY", "USA", "FREEDOM"] as const;
+
+export async function updateDivisionDetails(eventId: string, divisionId: string, formData: FormData) {
+  const name = String(formData.get("name") ?? "").trim();
+  const ageGroup = Number(formData.get("ageGroup"));
+  const tierLabel = String(formData.get("tierLabel") ?? "");
+  const tierLevel = String(formData.get("tierLevel") ?? "").trim() || null;
+
+  if (!name || !ageGroup || !TIER_LABELS.includes(tierLabel as (typeof TIER_LABELS)[number])) {
+    redirect(`${divisionPath(eventId, divisionId)}?error=division-invalid`);
+  }
+
+  await prisma.division.update({
+    where: { id: divisionId },
+    data: { name, ageGroup, tierLabel: tierLabel as (typeof TIER_LABELS)[number], tierLevel },
+  });
+
+  redirect(divisionPath(eventId, divisionId));
 }
 
 export async function applyTemplate(
@@ -71,6 +92,12 @@ export async function confirmDivisionScoring(eventId: string, divisionId: string
   if (division.pointBands.length === 0) {
     redirect(`${divisionPath(eventId, divisionId)}?error=nobands`);
   }
+
+  // Confirming here bypasses the suggestion-review screen (manual apply-template
+  // flow), which is the only other place a DivisionScoringSnapshot gets created.
+  // Generate one here too so the Analysis view has FSS/percentile/band data for every
+  // confirmed division, not just ones that went through the suggestion flow.
+  await computeDivisionScoringSuggestion(divisionId);
 
   await prisma.$transaction([
     ...division.finishes.map((f) =>

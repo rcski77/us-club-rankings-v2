@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import {
+  updateDivisionDetails,
   applyTemplate,
   addDivisionBand,
   removeDivisionBand,
@@ -64,9 +65,12 @@ export default async function DivisionDetailPage({
   const availableTeams = teams.filter((t) => !finishedTeamIds.has(t.id));
 
   const isConfirmed = division.scoringStatus === "CONFIRMED";
+  const updateDetailsWithIds = updateDivisionDetails.bind(null, eventId, divisionId);
   const applyTemplateWithIds = applyTemplate.bind(null, eventId, divisionId);
   const addBandWithIds = addDivisionBand.bind(null, eventId, divisionId);
   const addFinishWithIds = addTeamFinish.bind(null, eventId, divisionId);
+
+  const TIER_LABELS = ["OPEN", "NATIONAL", "AMERICAN", "PATRIOT", "LIBERTY", "USA", "FREEDOM"] as const;
 
   return (
     <div className="max-w-2xl">
@@ -99,6 +103,57 @@ export default async function DivisionDetailPage({
           Apply a point template or add at least one band before confirming.
         </p>
       )}
+      {error === "division-invalid" && (
+        <p className={errorBannerClass}>Name, age group, and tier are required.</p>
+      )}
+
+      <section className="mb-8">
+        <h2 className="mb-2 text-lg font-medium">Edit division</h2>
+        <form action={updateDetailsWithIds} className="flex flex-wrap items-end gap-3">
+          <label className="flex flex-col gap-1 text-sm">
+            Name
+            <input name="name" defaultValue={division.name} required className={`${inputClass} w-56`} />
+          </label>
+          <label className="flex flex-col gap-1 text-sm">
+            Age group
+            <input
+              name="ageGroup"
+              type="number"
+              min={1}
+              defaultValue={division.ageGroup}
+              required
+              className={`${inputClass} w-20`}
+            />
+          </label>
+          <label className="flex flex-col gap-1 text-sm">
+            Tier
+            <select name="tierLabel" className={selectClass} defaultValue={division.tierLabel}>
+              {TIER_LABELS.map((t) => (
+                <option key={t} value={t}>
+                  {t}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex flex-col gap-1 text-sm">
+            Tier level
+            <input
+              name="tierLevel"
+              defaultValue={division.tierLevel ?? ""}
+              placeholder="I / II"
+              className={`${inputClass} w-20`}
+            />
+          </label>
+          <button type="submit" className={secondaryButtonClass}>
+            Save
+          </button>
+        </form>
+        <p className="mt-1 text-xs text-slate-500">
+          Correcting the age group here does not retroactively update the &quot;ignore
+          age&quot; flag on finishes already entered — re-check those below if they
+          were affected.
+        </p>
+      </section>
 
       <section className="mb-8">
         <h2 className="mb-2 text-lg font-medium">Point curve</h2>

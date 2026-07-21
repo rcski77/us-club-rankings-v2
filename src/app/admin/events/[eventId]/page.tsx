@@ -1,11 +1,13 @@
 import { prisma } from "@/lib/prisma";
 import { notFound, redirect } from "next/navigation";
+import { revalidatePath } from "next/cache";
 import Link from "next/link";
 import {
   inputClass,
   selectClass,
   primaryButtonClass,
   errorBannerClass,
+  successBannerClass,
   tableClass,
   thClass,
   tdClass,
@@ -22,6 +24,35 @@ const TIER_LABELS: DivisionTierLabel[] = [
   "USA",
   "FREEDOM",
 ];
+
+async function updateEvent(eventId: string, formData: FormData) {
+  "use server";
+
+  const name = String(formData.get("name") ?? "").trim();
+  const startDateRaw = String(formData.get("startDate") ?? "");
+  const endDateRaw = String(formData.get("endDate") ?? "");
+  const isAnchor = formData.get("isAnchor") === "on";
+  const addressLine = String(formData.get("addressLine") ?? "").trim() || null;
+  const city = String(formData.get("city") ?? "").trim() || null;
+  const state = String(formData.get("state") ?? "").trim() || null;
+  const zip = String(formData.get("zip") ?? "").trim() || null;
+
+  const startDate = startDateRaw ? new Date(startDateRaw) : null;
+  const endDate = endDateRaw ? new Date(endDateRaw) : null;
+
+  if (!name || !startDate || !endDate || isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
+    redirect(`/admin/events/${eventId}?error=invalid`);
+  }
+
+  await prisma.event.update({
+    where: { id: eventId },
+    data: { name, startDate, endDate, isAnchor, addressLine, city, state, zip },
+  });
+
+  revalidatePath(`/admin/events/${eventId}`);
+  revalidatePath("/admin/events");
+  redirect(`/admin/events/${eventId}?success=1`);
+}
 
 async function createDivision(eventId: string, formData: FormData) {
   "use server";
@@ -54,10 +85,10 @@ export default async function EventDetailPage({
   searchParams,
 }: {
   params: Promise<{ eventId: string }>;
-  searchParams: Promise<{ error?: string }>;
+  searchParams: Promise<{ error?: string; success?: string }>;
 }) {
   const { eventId } = await params;
-  const { error } = await searchParams;
+  const { error, success } = await searchParams;
 
   const event = await prisma.event.findUnique({
     where: { id: eventId },
@@ -72,6 +103,7 @@ export default async function EventDetailPage({
   if (!event) notFound();
 
   const createDivisionWithEvent = createDivision.bind(null, eventId);
+  const updateEventWithId = updateEvent.bind(null, eventId);
 
   return (
     <div>
@@ -88,8 +120,71 @@ export default async function EventDetailPage({
       </p>
 
       {error === "invalid" && (
-        <p className={errorBannerClass}>Name, age group, and tier are required.</p>
+        <p className={errorBannerClass}>Name and valid start/end dates are required.</p>
       )}
+      {success === "1" && <p className={successBannerClass}>Event saved.</p>}
+
+      <section className="mb-8 max-w-lg">
+        <h2 className="mb-2 text-lg font-medium">Edit event</h2>
+        <form action={updateEventWithId} className="flex flex-col gap-3">
+          <label className="flex flex-col gap-1 text-sm">
+            Name
+            <input name="name" defaultValue={event.name} required className={inputClass} />
+          </label>
+          <div className="flex gap-3">
+            <label className="flex flex-col gap-1 text-sm">
+              Start date
+              <input
+                name="startDate"
+                type="date"
+                defaultValue={event.startDate.toISOString().slice(0, 10)}
+                required
+                className={inputClass}
+              />
+            </label>
+            <label className="flex flex-col gap-1 text-sm">
+              End date
+              <input
+                name="endDate"
+                type="date"
+                defaultValue={event.endDate.toISOString().slice(0, 10)}
+                required
+                className={inputClass}
+              />
+            </label>
+          </div>
+          <label className="flex flex-col gap-1 text-sm">
+            Address
+            <input name="addressLine" defaultValue={event.addressLine ?? ""} className={inputClass} />
+          </label>
+          <div className="flex gap-3">
+            <label className="flex flex-col gap-1 text-sm">
+              City
+              <input name="city" defaultValue={event.city ?? ""} className={inputClass} />
+            </label>
+            <label className="flex flex-col gap-1 text-sm">
+              State
+              <input
+                name="state"
+                defaultValue={event.state ?? ""}
+                maxLength={2}
+                className={`${inputClass} w-16`}
+              />
+            </label>
+            <label className="flex flex-col gap-1 text-sm">
+              Zip
+              <input name="zip" defaultValue={event.zip ?? ""} className={`${inputClass} w-24`} />
+            </label>
+          </div>
+          <label className="flex items-center gap-2 text-sm">
+            <input name="isAnchor" type="checkbox" defaultChecked={event.isAnchor} />
+            Anchor event
+          </label>
+          <button type="submit" className={`${primaryButtonClass} self-start`}>
+            Save
+          </button>
+        </form>
+      </section>
 
       <table className={`${tableClass} mb-8`}>
         <thead>

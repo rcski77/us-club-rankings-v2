@@ -8,11 +8,6 @@ import { blockingReason } from "./rowBlocking";
 
 export type CommitResult = { ok: true } | { ok: false; reason: string };
 
-function titleCaseTier(tier: string): string {
-  if (tier === "USA") return "USA";
-  return tier.charAt(0) + tier.slice(1).toLowerCase();
-}
-
 type PendingAuditFlag = {
   type: "NEW_DIVISION" | "NEW_CLUB" | "NEW_TEAM" | "REIMPORT_UPDATE" | "TIER_DEFAULTED" | "REGION_MISMATCH";
   message: string;
@@ -68,6 +63,7 @@ export async function commitImportBatch(batchId: string): Promise<CommitResult> 
     (r) =>
       r.parsedRank == null ||
       r.parsedAgeGroup == null ||
+      r.parsedTeamAgeGroup == null ||
       r.parsedTierLabel == null ||
       r.parsedClubExternalCode == null ||
       r.parsedTeamNumber == null ||
@@ -106,10 +102,15 @@ export async function commitImportBatch(batchId: string): Promise<CommitResult> 
   await prisma.$transaction(
     async (tx) => {
       // --- 1. New Divisions ------------------------------------------------------
+      // Grouped (and named) by the raw label text verbatim, not a synthesized
+      // "${age} ${tier}" guess -- matches resolve.ts's effectiveDivisionKey so the
+      // duplicate check and actual division creation always agree, and preserves
+      // whatever the source event actually calls its divisions (e.g. "12/13 Club")
+      // instead of imposing a renamed "13 Open".
       const newDivisionGroups = new Map<string, typeof rows>();
       for (const row of rows) {
         if (row.divisionMatchType === "NEW" && !row.overrideDivisionId) {
-          const key = `${row.parsedAgeGroup}|${row.parsedTierLabel}|${row.parsedTierLevel ?? ""}`;
+          const key = row.ageGroupLabelRaw.trim().toLowerCase();
           const group = newDivisionGroups.get(key) ?? [];
           group.push(row);
           newDivisionGroups.set(key, group);
@@ -120,7 +121,7 @@ export async function commitImportBatch(batchId: string): Promise<CommitResult> 
         const ageGroup = first.parsedAgeGroup!;
         const tierLabel = first.parsedTierLabel!;
         const tierLevel = first.parsedTierLevel;
-        const name = `${ageGroup} ${titleCaseTier(tierLabel)}${tierLevel ? ` ${tierLevel}` : ""}`;
+        const name = first.ageGroupLabelRaw.trim();
         const slug = await uniqueSlug(name, async (candidate) => {
           const existing = await tx.division.findUnique({
             where: { eventId_slug: { eventId: batch.eventId, slug: candidate } },
@@ -200,13 +201,15 @@ export async function commitImportBatch(batchId: string): Promise<CommitResult> 
       }
 
       // --- 3. New Teams + TeamSeasons -----------------------------------------------
-      // Grouped by (lineageKey, ageGroup) -- NOT lineageKey alone. A club's "team 1"
-      // at 14u and "team 1" at 17u share a lineageKey (same code+teamNumber) but are
-      // two unrelated rosters; lineageKey alone would incorrectly merge every age
-      // group's same-numbered team into one. Team.lineageKey itself still only
+      // Grouped by (lineageKey, team's own age) -- NOT lineageKey alone. A club's
+      // "team 1" at 14u and "team 1" at 17u share a lineageKey (same code+teamNumber)
+      // but are two unrelated rosters; lineageKey alone would incorrectly merge every
+      // age group's same-numbered team into one. Team.lineageKey itself still only
       // stores the age-independent value, since it's used to find a *returning*
       // team across seasons (see resolve.ts) -- the age-scoping only applies to
-      // *this* grouping decision.
+      // *this* grouping decision. Uses parsedTeamAgeGroup (the team's own decoded
+      // age), not parsedAgeGroup (the division's nominal age) -- those differ for a
+      // team playing up in a combined/mismatched division.
       const newTeamGroups = new Map<string, typeof rows>();
       for (const row of rows) {
         if (row.teamMatchType === "NEW" && !row.overrideTeamId) {
@@ -215,7 +218,7 @@ export async function commitImportBatch(batchId: string): Promise<CommitResult> 
             row.parsedRegionCodeFromCode!,
             row.parsedTeamNumber!,
           );
-          const key = `${lineageKey}|${row.parsedAgeGroup}`;
+          const key = `${lineageKey}|${row.parsedTeamAgeGroup}`;
           const group = newTeamGroups.get(key) ?? [];
           group.push(row);
           newTeamGroups.set(key, group);
@@ -237,7 +240,7 @@ export async function commitImportBatch(batchId: string): Promise<CommitResult> 
             seasons: {
               create: {
                 seasonId: batch.event.seasonId,
-                ageGroup: first.parsedAgeGroup!,
+                ageGroup: first.parsedTeamAgeGroup!,
                 teamNumber: first.parsedTeamNumber!,
                 externalTeamCode: first.teamCodeRaw,
               },
@@ -271,7 +274,7 @@ export async function commitImportBatch(batchId: string): Promise<CommitResult> 
             data: {
               teamId,
               seasonId: batch.event.seasonId,
-              ageGroup: row.parsedAgeGroup!,
+              ageGroup: row.parsedTeamAgeGroup!,
               teamNumber: row.parsedTeamNumber!,
               externalTeamCode: row.teamCodeRaw,
             },
@@ -292,7 +295,11 @@ export async function commitImportBatch(batchId: string): Promise<CommitResult> 
       // --- 4. TeamFinish upsert (batched) --------------------------------------------
       const divisionCache = new Map<
         string,
-        { scoringStatus: string; pointBands: { fromRank: number; toRank: number; points: number }[] }
+        {
+          ageGroup: number;
+          scoringStatus: string;
+          pointBands: { fromRank: number; toRank: number; points: number }[];
+        }
       >();
       const finishesToCreate: {
         divisionId: string;
@@ -300,12 +307,14 @@ export async function commitImportBatch(batchId: string): Promise<CommitResult> 
         rank: number;
         tiebreakOrder: number | null;
         points: number | null;
+        ignoreAge: boolean;
       }[] = [];
       const finishesToUpdate: {
         id: string;
         rank: number;
         tiebreakOrder: number | null;
         points: number | null;
+        ignoreAge: boolean;
       }[] = [];
 
       for (const row of rows) {
@@ -328,6 +337,10 @@ export async function commitImportBatch(batchId: string): Promise<CommitResult> 
         // that's already CONFIRMED resolves points immediately so the finish doesn't
         // silently fall out of an already-locked-in ranking.
         const points = division.scoringStatus === "CONFIRMED" ? resolvePoints(rank, division.pointBands) : null;
+        // A team playing up (or down) from the division's nominal age still earns
+        // these points, but its rating comparisons should route to its own natural
+        // age group, not the division's -- see docs/plan.md's combined-division notes.
+        const ignoreAge = row.parsedTeamAgeGroup !== division.ageGroup;
 
         if (row.existingTeamFinishId) {
           finishesToUpdate.push({
@@ -335,6 +348,7 @@ export async function commitImportBatch(batchId: string): Promise<CommitResult> 
             rank,
             tiebreakOrder: row.parsedTiebreakOrder,
             points,
+            ignoreAge,
           });
           pendingAuditFlags.push({
             type: "REIMPORT_UPDATE",
@@ -343,7 +357,14 @@ export async function commitImportBatch(batchId: string): Promise<CommitResult> 
             message: `Updated existing finish to rank ${rank} from re-import.`,
           });
         } else {
-          finishesToCreate.push({ divisionId, teamId, rank, tiebreakOrder: row.parsedTiebreakOrder, points });
+          finishesToCreate.push({
+            divisionId,
+            teamId,
+            rank,
+            tiebreakOrder: row.parsedTiebreakOrder,
+            points,
+            ignoreAge,
+          });
         }
 
         if (row.tierWasDefaulted) {
@@ -361,9 +382,7 @@ export async function commitImportBatch(batchId: string): Promise<CommitResult> 
       }
 
       if (finishesToCreate.length > 0) {
-        await tx.teamFinish.createMany({
-          data: finishesToCreate.map((f) => ({ ...f, ignoreAge: false })),
-        });
+        await tx.teamFinish.createMany({ data: finishesToCreate });
       }
       // Updates vary per row (different existing ids), so createMany doesn't apply --
       // expected to be a small set (re-imports correcting an already-committed
@@ -371,7 +390,7 @@ export async function commitImportBatch(batchId: string): Promise<CommitResult> 
       for (const f of finishesToUpdate) {
         await tx.teamFinish.update({
           where: { id: f.id },
-          data: { rank: f.rank, tiebreakOrder: f.tiebreakOrder, points: f.points },
+          data: { rank: f.rank, tiebreakOrder: f.tiebreakOrder, points: f.points, ignoreAge: f.ignoreAge },
         });
       }
 
