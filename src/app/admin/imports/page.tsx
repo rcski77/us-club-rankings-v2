@@ -5,7 +5,9 @@ import Link from "next/link";
 import {
   selectClass,
   primaryButtonClass,
+  smallSecondaryButtonClass,
   errorBannerClass,
+  successBannerClass,
   tableClass,
   thClass,
   tdClass,
@@ -32,6 +34,17 @@ async function startImportBatch(formData: FormData) {
   redirect(`/admin/imports/${batch.id}`);
 }
 
+async function deleteImportBatch(batchId: string) {
+  "use server";
+
+  const batch = await prisma.importBatch.findUnique({ where: { id: batchId } });
+  if (!batch || batch.status === "COMMITTED") {
+    redirect("/admin/imports?error=delete-committed");
+  }
+  await prisma.importBatch.delete({ where: { id: batchId } });
+  redirect("/admin/imports?success=deleted");
+}
+
 const STATUS_LABELS: Record<string, string> = {
   DRAFT: "Draft",
   RESOLVED: "Resolved",
@@ -42,9 +55,9 @@ const STATUS_LABELS: Record<string, string> = {
 export default async function ImportsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string }>;
+  searchParams: Promise<{ error?: string; success?: string }>;
 }) {
-  const { error } = await searchParams;
+  const { error, success } = await searchParams;
 
   // Sequential, not Promise.all -- see docs/dev-environment.md.
   const batches = await prisma.importBatch.findMany({
@@ -63,6 +76,10 @@ export default async function ImportsPage({
       <h1 className="mb-6 text-2xl font-semibold">Imports</h1>
 
       {error === "invalid" && <p className={errorBannerClass}>Select an event to import into.</p>}
+      {error === "delete-committed" && (
+        <p className={errorBannerClass}>Committed imports can&apos;t be deleted.</p>
+      )}
+      {success === "deleted" && <p className={successBannerClass}>Import deleted.</p>}
 
       <table className={`${tableClass} mb-8`}>
         <thead>
@@ -72,6 +89,7 @@ export default async function ImportsPage({
             <th className={thClass}>Status</th>
             <th className={thClass}>Summary</th>
             <th className={thClass}>Created</th>
+            <th className={thClass}></th>
           </tr>
         </thead>
         <tbody>
@@ -79,6 +97,7 @@ export default async function ImportsPage({
             const summary = b.summaryJson as
               | { ok?: number; warning?: number; error?: number }
               | null;
+            const deleteWithId = deleteImportBatch.bind(null, b.id);
             return (
               <tr key={b.id}>
                 <td className={tdClass}>
@@ -94,12 +113,21 @@ export default async function ImportsPage({
                     : ""}
                 </td>
                 <td className={tdClass}>{b.createdAt.toISOString().slice(0, 10)}</td>
+                <td className={tdClass}>
+                  {b.status !== "COMMITTED" && (
+                    <form action={deleteWithId}>
+                      <SubmitButton className={smallSecondaryButtonClass} pendingText="Deleting…">
+                        Delete
+                      </SubmitButton>
+                    </form>
+                  )}
+                </td>
               </tr>
             );
           })}
           {batches.length === 0 && (
             <tr>
-              <td className={tdClass} colSpan={5}>
+              <td className={tdClass} colSpan={6}>
                 No imports yet.
               </td>
             </tr>

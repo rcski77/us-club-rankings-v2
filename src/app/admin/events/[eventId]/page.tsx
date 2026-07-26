@@ -13,7 +13,7 @@ import {
   tdClass,
 } from "@/lib/ui";
 import { uniqueSlug } from "@/lib/slug";
-import type { DivisionTierLabel } from "@/generated/prisma/enums";
+import type { DivisionTierLabel, ImportSource } from "@/generated/prisma/enums";
 
 const TIER_LABELS: DivisionTierLabel[] = [
   "OPEN",
@@ -24,6 +24,8 @@ const TIER_LABELS: DivisionTierLabel[] = [
   "USA",
   "FREEDOM",
 ];
+
+const SCHEDULE_SOURCES: ImportSource[] = ["AES", "SPORTWRENCH", "TM2", "VBSCHEDULE"];
 
 async function updateEvent(eventId: string, formData: FormData) {
   "use server";
@@ -36,6 +38,11 @@ async function updateEvent(eventId: string, formData: FormData) {
   const city = String(formData.get("city") ?? "").trim() || null;
   const state = String(formData.get("state") ?? "").trim() || null;
   const zip = String(formData.get("zip") ?? "").trim() || null;
+  const scheduleUrl = String(formData.get("scheduleUrl") ?? "").trim() || null;
+  const scheduleSourceRaw = String(formData.get("scheduleSource") ?? "").trim();
+  const scheduleSource = SCHEDULE_SOURCES.includes(scheduleSourceRaw as ImportSource)
+    ? (scheduleSourceRaw as ImportSource)
+    : null;
 
   const startDate = startDateRaw ? new Date(startDateRaw) : null;
   const endDate = endDateRaw ? new Date(endDateRaw) : null;
@@ -46,7 +53,7 @@ async function updateEvent(eventId: string, formData: FormData) {
 
   await prisma.event.update({
     where: { id: eventId },
-    data: { name, startDate, endDate, isAnchor, addressLine, city, state, zip },
+    data: { name, startDate, endDate, isAnchor, addressLine, city, state, zip, scheduleUrl, scheduleSource },
   });
 
   revalidatePath(`/admin/events/${eventId}`);
@@ -180,6 +187,32 @@ export default async function EventDetailPage({
             <input name="isAnchor" type="checkbox" defaultChecked={event.isAnchor} />
             Anchor event
           </label>
+          <div className="flex gap-3">
+            <label className="flex flex-1 flex-col gap-1 text-sm">
+              Schedule URL
+              <input
+                name="scheduleUrl"
+                placeholder="https://results.advancedeventsystems.com/event/..."
+                defaultValue={event.scheduleUrl ?? ""}
+                className={inputClass}
+              />
+            </label>
+            <label className="flex flex-col gap-1 text-sm">
+              Platform
+              <select
+                name="scheduleSource"
+                className={selectClass}
+                defaultValue={event.scheduleSource ?? ""}
+              >
+                <option value="">Not set</option>
+                {SCHEDULE_SOURCES.map((s) => (
+                  <option key={s} value={s}>
+                    {s}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
           <button type="submit" className={`${primaryButtonClass} self-start`}>
             Save
           </button>

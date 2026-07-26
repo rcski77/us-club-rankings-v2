@@ -6,12 +6,14 @@ import { blockingReason } from "@/lib/import/rowBlocking";
 import { SubmitButton } from "@/components/SubmitButton";
 import {
   uploadImportFile,
+  fetchAesStandings,
   resolveBatch,
   overrideRowDivision,
   overrideRowClub,
   overrideRowTeam,
   toggleRowExclude,
   commitBatch,
+  deleteBatch,
   saveAllSuggestedClubNames,
 } from "./actions";
 import {
@@ -101,8 +103,10 @@ export default async function ImportBatchPage({
     | null;
 
   const uploadWithId = uploadImportFile.bind(null, batchId);
+  const fetchAesStandingsWithId = fetchAesStandings.bind(null, batchId);
   const resolveWithId = resolveBatch.bind(null, batchId);
   const commitWithId = commitBatch.bind(null, batchId);
+  const deleteWithId = deleteBatch.bind(null, batchId);
   const saveAllSuggestedClubNamesWithId = saveAllSuggestedClubNames.bind(null, batchId);
 
   return (
@@ -112,9 +116,21 @@ export default async function ImportBatchPage({
           Imports
         </Link>
       </div>
-      <h1 className="mb-1 text-2xl font-semibold">
-        {batch.event.season.label} — {batch.event.name}
-      </h1>
+      <div className="mb-1 flex items-start justify-between gap-4">
+        <h1 className="text-2xl font-semibold">
+          {batch.event.season.label} — {batch.event.name}
+        </h1>
+        {!isCommitted && (
+          <form action={deleteWithId}>
+            <SubmitButton
+              className="rounded border border-red-300 px-3 py-1.5 text-sm text-red-700 hover:bg-red-50"
+              pendingText="Deleting…"
+            >
+              Delete this import
+            </SubmitButton>
+          </form>
+        )}
+      </div>
       <p className="mb-6 text-sm text-slate-500">
         Source: {batch.source} · Status: <span className="font-medium">{batch.status}</span>
         {summary && (
@@ -125,9 +141,23 @@ export default async function ImportBatchPage({
         )}
       </p>
 
+      {error === "delete-committed" && (
+        <p className={errorBannerClass}>Committed imports can&apos;t be deleted.</p>
+      )}
       {error === "upload-invalid" && <p className={errorBannerClass}>Select a file to upload.</p>}
       {error === "upload-duplicate" && (
         <p className={errorBannerClass}>A file with that name was already uploaded to this batch.</p>
+      )}
+      {error === "no-schedule-url" && (
+        <p className={errorBannerClass}>
+          This event has no AES schedule URL set — add one on the event&apos;s page first.
+        </p>
+      )}
+      {error === "bad-schedule-url" && (
+        <p className={errorBannerClass}>Could not find an AES event id in this event&apos;s schedule URL.</p>
+      )}
+      {error === "fetch-failed" && (
+        <p className={errorBannerClass}>Fetching standings from AES failed: {reason ?? "unknown error"}.</p>
       )}
       {error === "commit-blocked" && (
         <p className={errorBannerClass}>Could not commit: {reason ?? "see row statuses below."}</p>
@@ -184,6 +214,25 @@ export default async function ImportBatchPage({
               Upload file
             </SubmitButton>
           </form>
+        )}
+
+        {!isCommitted && batch.event.scheduleUrl && (
+          <div className="mt-4 flex items-center gap-3 border-t border-slate-200 pt-4">
+            {batch.event.scheduleSource === "AES" ? (
+              <form action={fetchAesStandingsWithId}>
+                <input type="hidden" name="filter" value={filter ?? ""} />
+                <SubmitButton className={secondaryButtonClass} pendingText="Fetching…">
+                  Fetch standings from AES
+                </SubmitButton>
+              </form>
+            ) : (
+              <p className="text-sm text-slate-500">
+                Schedule URL set ({batch.event.scheduleSource ?? "platform not set"}), but fetching
+                isn&apos;t supported for that platform yet.
+              </p>
+            )}
+            <span className="truncate text-xs text-slate-400">{batch.event.scheduleUrl}</span>
+          </div>
         )}
       </section>
 

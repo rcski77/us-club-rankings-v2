@@ -3,6 +3,8 @@
 import { prisma } from "@/lib/prisma";
 import { redirect } from "next/navigation";
 import { parseAesCsv } from "@/lib/import/aesCsv";
+import { parseAesEventIdFromUrl } from "@/lib/import/aesEventId";
+import { fetchAesStandingsRows } from "@/lib/import/aesStandings";
 import { resolveImportBatch } from "@/lib/import/resolve";
 import { commitImportBatch } from "@/lib/import/commit";
 import { suggestClubName } from "@/lib/import/clubNameSuggestion";
@@ -85,6 +87,71 @@ export async function uploadImportFile(batchId: string, formData: FormData) {
         rankRaw: r.rank,
         teamNameRaw: r.teamNameField,
         teamCodeRaw: r.teamCode,
+      })),
+    });
+  }
+
+  redirect(batchPath(batchId, { filter }));
+}
+
+export async function fetchAesStandings(batchId: string, formData: FormData) {
+  const filter = currentFilter(formData);
+
+  const batch = await prisma.importBatch.findUniqueOrThrow({
+    where: { id: batchId },
+    include: { event: true },
+  });
+
+  if (batch.event.scheduleSource !== "AES" || !batch.event.scheduleUrl) {
+    redirect(batchPath(batchId, { filter, error: "no-schedule-url" }));
+  }
+
+  const aesEventId = parseAesEventIdFromUrl(batch.event.scheduleUrl!);
+  if (!aesEventId) {
+    redirect(batchPath(batchId, { filter, error: "bad-schedule-url" }));
+  }
+
+  let result;
+  try {
+    result = await fetchAesStandingsRows(aesEventId!);
+  } catch (err) {
+    redirect(
+      batchPath(batchId, {
+        filter,
+        error: "fetch-failed",
+        reason: err instanceof Error ? err.message : String(err),
+      }),
+    );
+  }
+
+  const filename = `aes-fetch-${Date.now()}.json`;
+  const importFile = await prisma.importFile.create({
+    data: {
+      importBatchId: batchId,
+      filename,
+      partNumber: null,
+      rawContent: JSON.stringify(result.raw),
+      status: "PARSED",
+      parseError: null,
+      rowCount: result.rows.length,
+    },
+  });
+
+  if (result.rows.length > 0) {
+    await prisma.importRow.createMany({
+      data: result.rows.map((r) => ({
+        importFileId: importFile.id,
+        rowNumber: r.rowNumber,
+        ageGroupLabelRaw: r.ageGroupLabel,
+        rankRaw: r.rank,
+        teamNameRaw: r.teamNameField,
+        teamCodeRaw: r.teamCode,
+        // AES's standings API gives us the club's real name directly -- pre-fill it
+        // as the override so a NEW club never needs an admin-typed/heuristic-guessed
+        // name (see resolve.ts's "needs an admin-supplied name" warning). Harmless for
+        // rows that end up matching an EXISTING club -- commit.ts only reads this
+        // field when creating a new Club.
+        overrideClubName: r.clubName,
       })),
     });
   }
@@ -186,6 +253,20 @@ export async function toggleRowExclude(batchId: string, rowId: string, formData:
   const row = await prisma.importRow.findUniqueOrThrow({ where: { id: rowId } });
   await prisma.importRow.update({ where: { id: rowId }, data: { excluded: !row.excluded } });
   redirect(batchPath(batchId, { filter: currentFilter(formData) }));
+}
+
+// Deletes a not-yet-committed batch entirely (files/rows cascade), so a batch
+// started with stale/wrong data (e.g. fetched before an import-adapter fix landed)
+// can be thrown away and restarted from scratch instead of patched row-by-row.
+// COMMITTED batches are the durable audit trail for real TeamFinish data that's
+// already live -- never deletable from here.
+export async function deleteBatch(batchId: string) {
+  const batch = await prisma.importBatch.findUniqueOrThrow({ where: { id: batchId } });
+  if (batch.status === "COMMITTED") {
+    redirect(batchPath(batchId, { error: "delete-committed" }));
+  }
+  await prisma.importBatch.delete({ where: { id: batchId } });
+  redirect("/admin/imports?success=deleted");
 }
 
 export async function commitBatch(batchId: string, formData: FormData) {
