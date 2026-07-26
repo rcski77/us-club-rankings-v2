@@ -47,7 +47,7 @@ preference, non-negotiable.
 | 1 | Manual parity core — Events/Divisions/PointTemplates/scoring/TeamFinish/Rankings | ✅ Done |
 | 1.5 | Team/TeamSeason restructuring, Regions+zones (post-Phase-1 additions) | ✅ Done |
 | 2 | CSV import pipeline (AES adapter first) | ✅ Done (AES adapter, TEAM_FINISHES only) |
-| 3 | Tier 1 rating engine (Colley) + algorithmic scoring suggestion | In progress (Colley solve ✅; FSS + suggestion + scoring-review screen ✅; Analysis view + histogram ✅; non-anchor template seeding + prior-run FSS-history comparison not started) |
+| 3 | Tier 1 rating engine (Colley) + algorithmic scoring suggestion | ✅ Done (Colley solve; FSS + suggestion + scoring-review screen; Analysis view + histogram; non-anchor template seeding; prior-run FSS-history comparison) |
 | 4 | Cross-season bootstrapping and calibration | Not started |
 | 5 | Tier 2 upgrade (Elo + Massey from real match data) | In progress (MATCH_RESULTS import ✅; Elo/Massey engines not started) |
 | 6 | Polish — flags, ballots, weight config, background jobs, hosting | Not started |
@@ -124,9 +124,18 @@ against every other division's in the same age group. Verified in the browser ag
 real seed data: the confirmed 14 Open/Triple Crown NIT division shows its full
 snapshot (FSS 0.732, 77th percentile, "Strong regional", histogram shaped as expected)
 next to five still-DRAFT USAV Nationals divisions with no snapshot yet (shown as "—").
-**Not yet built**: prior-run FSS-history comparison (how a division's FSS/suggested
-tier has shifted across snapshots over time — needs weekly `TeamRatingHistory`
-snapshots to accumulate first, so deferred past Phase 3).
+**Phase 3, fourth slice — prior-run FSS-history comparison — done.** The scoring-review
+screen (`.../scoring/page.tsx`) now fetches every `DivisionScoringSnapshot` for the
+division (not just the latest), and renders a "History" table below the current
+suggestion — run date, FSS, percentile, band, suggested template, and snapshot status
+for each prior run, most-recent first, with the current row marked — whenever more
+than one snapshot exists. No schema change needed (`DivisionScoringSnapshot` rows were
+already append-only with `createdAt`); this is purely a read of existing history that
+had no UI yet. Verified in the browser against the real "The Nike Classic / 14 Open"
+division (already CONFIRMED from an earlier manual run): regenerating a second
+suggestion correctly showed both runs in the History table (FSS 0.639→0.678,
+"Solid regional"→"Strong regional" as more matches connected into the rating graph)
+with the newer one marked current. This completes Phase 3.
 
 **Phase 5, first slice — Match Results import (AES) — done.** New `Match` model
 (`prisma/schema.prisma` — eventId/divisionId/teamAId/teamBId/winnerTeamId/matchDate/
@@ -513,13 +522,12 @@ confirmed sample formats — Open Question 1); DIVISIONS/MATCH_RESULTS import ty
 fuzzy team/club matching beyond AES's structured code; Unlinked/Inactive audit list
 pages (`/admin/teams/unlinked` etc.); region-code alias reconciliation table.
 
-**Phase 3 — Tier 1 rating engine (Colley) + algorithmic scoring.** In progress. Colley
-batch solve + `TeamRatingHistory` snapshot + a basic Power Rankings view are done, and
-so is FSS computation + suggestion generation + the Division scoring-review screen +
-`DivisionScoringSnapshot` audit trail + the Colley-rating distribution histogram + the
-Analysis view (see Status above); still to do: prior-run FSS-history comparison
-(needs weekly snapshots to accumulate) and seeding a non-anchor `PointTemplate`
-library for realistic suggestion testing.
+**Phase 3 — Tier 1 rating engine (Colley) + algorithmic scoring.** ✅ Done. Colley
+batch solve + `TeamRatingHistory` snapshot + a basic Power Rankings view, FSS
+computation + suggestion generation + the Division scoring-review screen +
+`DivisionScoringSnapshot` audit trail + the Colley-rating distribution histogram, the
+Analysis view, the non-anchor `PointTemplate` library, and the prior-run FSS-history
+comparison table on the scoring-review screen (see Status above).
 
 **Phase 4 — Cross-season bootstrapping and calibration.** Not started. Prior-season
 carry-forward with regression-to-mean; calibrate FSS thresholds against real
