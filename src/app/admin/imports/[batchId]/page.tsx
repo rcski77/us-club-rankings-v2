@@ -7,6 +7,7 @@ import { SubmitButton } from "@/components/SubmitButton";
 import {
   uploadImportFile,
   fetchAesStandings,
+  fetchAndCommitAesMatches,
   resolveBatch,
   overrideRowDivision,
   overrideRowClub,
@@ -57,6 +58,10 @@ export default async function ImportBatchPage({
     },
   });
   if (!batch) notFound();
+
+  if (batch.importType === "MATCH_RESULTS") {
+    return <MatchResultsBatchView batch={batch} error={error} reason={reason} success={success} />;
+  }
 
   const divisions = await prisma.division.findMany({
     where: { eventId: batch.eventId },
@@ -503,6 +508,193 @@ export default async function ImportBatchPage({
               Commit
             </SubmitButton>
           </form>
+        </section>
+      )}
+    </div>
+  );
+}
+
+type MatchResultsBatch = NonNullable<Awaited<ReturnType<typeof prisma.importBatch.findUnique>>> & {
+  event: { name: string; season: { label: string }; scheduleUrl: string | null; scheduleSource: string | null };
+};
+
+// MATCH_RESULTS batches don't use the ImportRow-based upload/preview/override
+// pipeline above -- match rows resolve deterministically from data the event's
+// TEAM_FINISHES import already committed (team codes, division labels), so there's
+// no free-text admin judgment call to stage a grid for. Fetch, resolve, and commit
+// all happen in one action; this view just shows the trigger and the result. See
+// docs/plan.md Phase 5 and src/lib/import/commitMatches.ts.
+async function MatchResultsBatchView({
+  batch,
+  error,
+  reason,
+  success,
+}: {
+  batch: MatchResultsBatch;
+  error?: string;
+  reason?: string;
+  success?: string;
+}) {
+  const isCommitted = batch.status === "COMMITTED";
+  const summary = batch.summaryJson as
+    | {
+        matchesFetched?: number;
+        created?: number;
+        updated?: number;
+        skipped?: number;
+        skippedReasonSample?: string[];
+      }
+    | null;
+
+  const matches = isCommitted
+    ? await prisma.match.findMany({
+        where: { eventId: batch.eventId },
+        include: { division: true, teamA: true, teamB: true, winner: true },
+        orderBy: [{ matchDate: "asc" }],
+        take: 500,
+      })
+    : [];
+
+  const fetchAndCommitWithId = fetchAndCommitAesMatches.bind(null, batch.id);
+  const deleteWithId = deleteBatch.bind(null, batch.id);
+
+  return (
+    <div>
+      <div className="mb-2 text-sm text-slate-500">
+        <Link href="/admin/imports" className="underline">
+          Imports
+        </Link>
+      </div>
+      <div className="mb-1 flex items-start justify-between gap-4">
+        <h1 className="text-2xl font-semibold">
+          {batch.event.season.label} — {batch.event.name} (Match Results)
+        </h1>
+        {!isCommitted && (
+          <form action={deleteWithId}>
+            <SubmitButton
+              className="rounded border border-red-300 px-3 py-1.5 text-sm text-red-700 hover:bg-red-50"
+              pendingText="Deleting…"
+            >
+              Delete this import
+            </SubmitButton>
+          </form>
+        )}
+      </div>
+      <p className="mb-6 text-sm text-slate-500">
+        Source: {batch.source} · Status: <span className="font-medium">{batch.status}</span>
+        {summary && (
+          <>
+            {" "}
+            · {summary.matchesFetched ?? 0} fetched · {summary.created ?? 0} created ·{" "}
+            {summary.updated ?? 0} updated · {summary.skipped ?? 0} skipped
+          </>
+        )}
+      </p>
+
+      {error === "delete-committed" && (
+        <p className={errorBannerClass}>Committed imports can&apos;t be deleted.</p>
+      )}
+      {error === "no-schedule-url" && (
+        <p className={errorBannerClass}>
+          This event has no AES schedule URL set — add one on the event&apos;s page first.
+        </p>
+      )}
+      {error === "bad-schedule-url" && (
+        <p className={errorBannerClass}>Could not find an AES event id in this event&apos;s schedule URL.</p>
+      )}
+      {error === "fetch-failed" && (
+        <p className={errorBannerClass}>Fetching match results from AES failed: {reason ?? "unknown error"}.</p>
+      )}
+      {success === "committed" && <p className={successBannerClass}>Match results imported.</p>}
+
+      <section className="mb-8">
+        {batch.event.scheduleSource === "AES" && batch.event.scheduleUrl ? (
+          <>
+            <form action={fetchAndCommitWithId}>
+              <SubmitButton className={primaryButtonClass} pendingText="Fetching & importing…">
+                {isCommitted ? "Re-fetch match results from AES" : "Fetch match results from AES"}
+              </SubmitButton>
+            </form>
+            <p className="mt-2 text-xs text-slate-500">
+              Pulls every completed match for this event from AES and imports it
+              immediately (re-running is safe — matches are matched and updated by
+              AES&apos;s own match id, not duplicated). Teams/divisions must already
+              exist from a Team Finishes import of this same event; unmatched matches
+              are skipped, not created as new records — re-running after importing
+              more Team Finishes for this event can pick up previously-skipped ones.
+            </p>
+            <p className="mt-2 truncate text-xs text-slate-400">{batch.event.scheduleUrl}</p>
+          </>
+        ) : (
+          <p className="text-sm text-slate-500">
+            This event has no AES schedule URL set, or its platform isn&apos;t AES —
+            add one on the event&apos;s page first.
+          </p>
+        )}
+      </section>
+
+      {isCommitted && (
+        <section>
+          <h2 className="mb-2 text-lg font-medium">Matches ({matches.length})</h2>
+          <table className={tableClass}>
+            <thead>
+              <tr>
+                <th className={thClass}>Date</th>
+                <th className={thClass}>Division</th>
+                <th className={thClass}>Team A</th>
+                <th className={thClass}>Team B</th>
+                <th className={thClass}>Sets</th>
+                <th className={thClass}>Winner</th>
+                <th className={thClass}>Stage</th>
+              </tr>
+            </thead>
+            <tbody>
+              {matches.map((m) => (
+                <tr key={m.id}>
+                  <td className={tdClass}>{m.matchDate ? m.matchDate.toISOString().slice(0, 16).replace("T", " ") : ""}</td>
+                  <td className={tdClass}>{m.division?.name ?? ""}</td>
+                  <td className={tdClass}>{m.teamA?.name ?? ""}</td>
+                  <td className={tdClass}>{m.teamB?.name ?? ""}</td>
+                  <td className={tdClass}>
+                    {m.setsA}-{m.setsB}
+                  </td>
+                  <td className={tdClass}>{m.winner?.name ?? ""}</td>
+                  <td className={tdClass}>{m.stage ?? ""}</td>
+                </tr>
+              ))}
+              {matches.length === 0 && (
+                <tr>
+                  <td className={tdClass} colSpan={7}>
+                    No matches imported.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </section>
+      )}
+
+      {isCommitted && summary && (summary.skipped ?? 0) > 0 && (
+        <section className="mt-8">
+          <h2 className="mb-2 text-lg font-medium">
+            Skipped ({summary.skipped})
+          </h2>
+          <p className="mb-2 text-sm text-slate-500">
+            Most commonly a team that played a match but never received an official
+            rank in this event&apos;s Team Finishes import (e.g. a pool-only team that
+            didn&apos;t advance) — re-run this fetch after importing/correcting that
+            event&apos;s Team Finishes to pick these up.
+          </p>
+          {summary.skippedReasonSample && summary.skippedReasonSample.length > 0 && (
+            <ul className="list-disc pl-5 text-xs text-slate-500">
+              {summary.skippedReasonSample.map((r, i) => (
+                <li key={i}>{r}</li>
+              ))}
+              {summary.skipped! > summary.skippedReasonSample.length && (
+                <li>…and {summary.skipped! - summary.skippedReasonSample.length} more.</li>
+              )}
+            </ul>
+          )}
         </section>
       )}
     </div>

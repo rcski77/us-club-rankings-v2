@@ -122,12 +122,15 @@ model Team {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  seasons        TeamSeason[]
-  finishes       TeamFinish[]
-  rankingResults RankingResult[]
-  ratingHistory  TeamRatingHistory[]
-  importRows     ImportRow[]
-  auditFlags     AuditFlag[]
+  seasons          TeamSeason[]
+  finishes         TeamFinish[]
+  rankingResults   RankingResult[]
+  ratingHistory    TeamRatingHistory[]
+  importRows       ImportRow[]
+  auditFlags       AuditFlag[]
+  matchesAsTeamA   Match[]             @relation("MatchTeamA")
+  matchesAsTeamB   Match[]             @relation("MatchTeamB")
+  matchesWon       Match[]             @relation("MatchWinner")
 
   @@index([lineageKey])
 }
@@ -183,6 +186,7 @@ model Event {
   // recorded here for future adapters, they just don't have a "Fetch" button yet.
   divisions     Division[]
   importBatches ImportBatch[]
+  matches       Match[]
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
 }
@@ -216,6 +220,7 @@ model Division {
   ignoreAgeDefault  Boolean               @default(false)
   pointBands        DivisionPointBand[]
   finishes          TeamFinish[]
+  matches           Match[]
   importRows        ImportRow[]
   auditFlags        AuditFlag[]
   scoringSnapshots  DivisionScoringSnapshot[]
@@ -278,6 +283,46 @@ model TeamFinish {
 
   @@unique([divisionId, teamId])
   @@index([teamId])
+}
+
+// --- Phase 5: match-level results (feeds Elo/Massey, not built yet) ---------
+// Populated by the MATCH_RESULTS import type (AES adapter -- see
+// src/lib/import/aesMatches.ts and docs/plan.md §3/§6 Phase 5). Division/team
+// resolution reuses whatever Division/TeamSeason rows the event's TEAM_FINISHES
+// import already created -- a match import expects team finishes to already
+// exist for the event, rather than re-deriving clubs/teams/divisions itself.
+model Match {
+  id         String    @id @default(cuid())
+  eventId    String
+  event      Event     @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  divisionId String?
+  division   Division? @relation(fields: [divisionId], references: [id])
+
+  teamAId String?
+  teamA   Team?   @relation("MatchTeamA", fields: [teamAId], references: [id])
+  teamBId String?
+  teamB   Team?   @relation("MatchTeamB", fields: [teamBId], references: [id])
+
+  winnerTeamId String?
+  winner       Team?   @relation("MatchWinner", fields: [winnerTeamId], references: [id])
+
+  matchDate DateTime?
+  stage     String? // e.g. "Round 1 Pool C", "Gold Bracket" -- AES's Play.FullName, display-only
+  setsA     Int
+  setsB     Int
+  setScores Json // [{ a: number, b: number }, ...] per-set point scores, in order
+
+  externalMatchId String // AES's numeric MatchId (string form) -- idempotent re-import key
+  importBatchId   String?
+  importBatch     ImportBatch? @relation(fields: [importBatchId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([eventId, externalMatchId])
+  @@index([divisionId])
+  @@index([teamAId])
+  @@index([teamBId])
 }
 
 model RankingResult {
@@ -453,6 +498,7 @@ model ImportBatch {
   createdBy   User?     @relation(fields: [createdById], references: [id])
   files       ImportFile[]
   auditFlags  AuditFlag[]
+  matches     Match[]
   committedAt DateTime?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt

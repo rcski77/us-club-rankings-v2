@@ -49,7 +49,7 @@ preference, non-negotiable.
 | 2 | CSV import pipeline (AES adapter first) | ✅ Done (AES adapter, TEAM_FINISHES only) |
 | 3 | Tier 1 rating engine (Colley) + algorithmic scoring suggestion | In progress (Colley solve ✅; FSS + suggestion + scoring-review screen ✅; Analysis view + histogram ✅; non-anchor template seeding + prior-run FSS-history comparison not started) |
 | 4 | Cross-season bootstrapping and calibration | Not started |
-| 5 | Tier 2 upgrade (Elo + Massey from real match data) | Not started |
+| 5 | Tier 2 upgrade (Elo + Massey from real match data) | In progress (MATCH_RESULTS import ✅; Elo/Massey engines not started) |
 | 6 | Polish — flags, ballots, weight config, background jobs, hosting | Not started |
 
 **Where things actually stand right now:** a fully working admin app for hand-operated
@@ -127,6 +127,51 @@ next to five still-DRAFT USAV Nationals divisions with no snapshot yet (shown as
 **Not yet built**: prior-run FSS-history comparison (how a division's FSS/suggested
 tier has shifted across snapshots over time — needs weekly `TeamRatingHistory`
 snapshots to accumulate first, so deferred past Phase 3).
+
+**Phase 5, first slice — Match Results import (AES) — done.** New `Match` model
+(`prisma/schema.prisma` — eventId/divisionId/teamAId/teamBId/winnerTeamId/matchDate/
+stage/setsA/setsB/setScores JSON/externalMatchId, unique on `(eventId,
+externalMatchId)` for idempotent re-import; the model plan §1.4 described as "modeled
+now" hadn't actually been added to the schema until this slice). `src/lib/import/
+aesMatches.ts` fetches every completed match for an AES event: AES has no single
+"all matches" endpoint, so this fetches standings first (per-division team list, each
+team's AES numeric TeamId + structured TeamCode) then queries every team's
+`schedule/past` endpoint and de-dupes by MatchId since a completed match appears in
+both participants' schedules — the approach ported from a sibling repo's already-
+working scraper (`AES Scraping/Match Results/aes_match_results.py`), not new
+reverse-engineering. `src/lib/import/resolveMatches.ts` (pure, unit-tested) resolves
+each fetched match's two team codes against the event's already-imported
+`TeamSeason` rows and — this is the key design decision — resolves the match's
+Division from the team's own existing `TeamFinish.divisionId`, **not** by re-parsing
+AES's division-name text a second time: AES's JSON standings API gives a division's
+bare name (e.g. "13 Club"), while the CSV export's `ageGroupLabel` column that
+TEAM_FINISHES divisions are actually named from can carry a combined-age label for
+that same division (e.g. "12/13 Club", see `divisionLabel.ts`) whenever a younger
+team played up into it — re-parsing the JSON label the same way TEAM_FINISHES parses
+CSV text would silently mismatch on every combined-age division. Going through the
+team's real recorded finish instead sidesteps that gap entirely and reuses the same
+ground truth the ranking/rating engines already trust. A match with either team
+unresolved (no TeamSeason/TeamFinish yet — most commonly a pool-only team that never
+received an official numeric rank, so was never part of the TEAM_FINISHES import) is
+skipped with a reason, not created as a new record — the review UI shows a sample of
+skip reasons. `src/lib/import/commitMatches.ts` runs fetch+resolve+commit as one
+action (unlike TEAM_FINISHES's multi-step resolve/preview/override/commit staging —
+match rows are deterministic from data that's already trusted, no free-text admin
+judgment call to stage a grid for) and is safe to re-run (upserts by
+`(eventId, externalMatchId)`), which matters in practice since re-running after a
+later, more-complete TEAM_FINISHES import picks up previously-skipped matches. Wired
+into `/admin/imports` (new "Type" selector alongside the existing Team Finishes
+start-batch flow) and a dedicated view at `/admin/imports/[batchId]` for
+`MATCH_RESULTS` batches (no ImportRow grid — a Fetch/Re-fetch button, a
+read-only match table, and a skipped-reasons list). Verified end-to-end against the
+real 2026 Triple Crown Colorado Challenge event already in the dev DB (727 completed
+matches fetched from AES; ~364 resolved and imported, ~363 correctly skipped as
+teams with no official TEAM_FINISHES rank) — confirmed the division-via-TeamFinish
+fix specifically against that event's real "12/13 Club" combined-age division, which
+is exactly the case that would have silently mismatched under label re-parsing.
+**Not yet built**: Elo/Massey engines that actually consume `Match` rows (Phase 5's
+remaining scope — see §2/§6), Sportwrench/TM2/VBSchedule match-level fetchers (AES
+only so far, matching TEAM_FINISHES's existing source coverage).
 
 **Non-anchor `PointTemplate` library — seeded.** `prisma/seedPointTemplates.ts` (new
 `db:seed-point-templates` script, idempotent — upserts by name, replaces bands
@@ -225,8 +270,10 @@ implementation is `Team` + `TeamSeason`.)*
   embedded seed/order number, display-only), points (resolved from DivisionPointBand
   at confirm time), ignoreAge. Source of truth for the official points-based ranking.
 - Match — eventId, divisionId, teamAId, teamBId, matchDate, stage, setsA/setsB,
-  setScores (JSON), winnerTeamId. **Not populated until Phase 5** — modeled now so the
-  schema doesn't need to change when match-level import lands, but inert until then.
+  setScores (JSON), winnerTeamId, externalMatchId (AES's numeric match id, for
+  idempotent re-import). **Populated via the MATCH_RESULTS import — see §6 Phase 5 —
+  but nothing consumes these rows yet** (Elo/Massey engines are the remaining Phase 5
+  scope).
 - TeamRatingHistory — weekly persisted snapshot: teamId, seasonId, ageGroup,
   weekEndingDate, ratingEngine (COLLEY|ELO), rating, rank, masseyRating?, masseyRank?.
   Not built yet — Phase 3 (Colley) / Phase 5 (Elo/Massey).
@@ -434,6 +481,11 @@ Built (Phase 3, third slice): `/admin/analysis` (season/age-group selector),
 `/admin/analysis/[seasonId]/[ageGroup]` (per-division FSS/percentile/band/bucket-count
 breakdown across a whole season/age group).
 
+Built (Phase 5, first slice): `/admin/imports` gained a Type selector (Team
+Finishes/Match Results); `/admin/imports/[batchId]` renders a dedicated
+fetch/re-fetch + read-only match table + skipped-reasons view for `MATCH_RESULTS`
+batches instead of the ImportRow grid.
+
 Planned, not built: `/admin/teams/unlinked`, `/admin/teams/inactive`,
 `/admin/clubs/unlinked`, `/admin/clubs/inactive` (Phase 2 follow-up audits),
 `/admin/flags` (Phase 6), `/admin/ballots` (Phase 6),
@@ -473,10 +525,13 @@ library for realistic suggestion testing.
 carry-forward with regression-to-mean; calibrate FSS thresholds against real
 historical data; confidence/warning banners; capture override-reason data.
 
-**Phase 5 — Tier 2 upgrade (Elo + Massey).** Not started. Match Results import type
-(AES first, reusing `aes-tourney-director`'s proven fetch pattern), incremental Elo
-with chronological backfill, periodic Massey cross-check, CPI activation, Power
-Rankings switches from Colley to Elo labeling.
+**Phase 5 — Tier 2 upgrade (Elo + Massey).** In progress. Match Results import type
+✅ done (AES only, see Status above — ported the per-team `schedule/past` fetch
+approach from `AES Scraping/Match Results/aes_match_results.py`, not
+`aes-tourney-director`'s live-sync `matchSync.ts`, since this is a one-shot
+historical pull rather than a continuously-polled live-scoring sync). **Not started**:
+incremental Elo with chronological backfill, periodic Massey cross-check, CPI
+activation, Power Rankings switches from Colley to Elo labeling.
 
 **Phase 6 — Polish.** Not started. Team Finish Error/Flags workflow, Ballots stub,
 ClubContacts, RankingWeightConfig UI, background-job infra for recompute/weekly jobs,

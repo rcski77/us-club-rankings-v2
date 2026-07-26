@@ -19,13 +19,15 @@ async function startImportBatch(formData: FormData) {
 
   const session = await auth();
   const eventId = String(formData.get("eventId") ?? "");
+  const importTypeRaw = String(formData.get("importType") ?? "TEAM_FINISHES");
+  const importType = importTypeRaw === "MATCH_RESULTS" ? "MATCH_RESULTS" : "TEAM_FINISHES";
   if (!eventId) redirect("/admin/imports?error=invalid");
 
   const batch = await prisma.importBatch.create({
     data: {
       eventId,
       source: "AES",
-      importType: "TEAM_FINISHES",
+      importType,
       status: "DRAFT",
       createdById: session?.user?.id ?? null,
     },
@@ -50,6 +52,12 @@ const STATUS_LABELS: Record<string, string> = {
   RESOLVED: "Resolved",
   COMMITTED: "Committed",
   FAILED: "Failed",
+};
+
+const IMPORT_TYPE_LABELS: Record<string, string> = {
+  TEAM_FINISHES: "Team Finishes",
+  MATCH_RESULTS: "Match Results",
+  DIVISIONS: "Divisions",
 };
 
 export default async function ImportsPage({
@@ -86,6 +94,7 @@ export default async function ImportsPage({
           <tr>
             <th className={thClass}>Event</th>
             <th className={thClass}>Source</th>
+            <th className={thClass}>Type</th>
             <th className={thClass}>Status</th>
             <th className={thClass}>Summary</th>
             <th className={thClass}>Created</th>
@@ -94,10 +103,19 @@ export default async function ImportsPage({
         </thead>
         <tbody>
           {batches.map((b) => {
-            const summary = b.summaryJson as
-              | { ok?: number; warning?: number; error?: number }
-              | null;
             const deleteWithId = deleteImportBatch.bind(null, b.id);
+            const summaryText =
+              b.importType === "MATCH_RESULTS"
+                ? (() => {
+                    const s = b.summaryJson as
+                      | { created?: number; updated?: number; skipped?: number }
+                      | null;
+                    return s ? `${s.created ?? 0} created · ${s.updated ?? 0} updated · ${s.skipped ?? 0} skipped` : "";
+                  })()
+                : (() => {
+                    const s = b.summaryJson as { ok?: number; warning?: number; error?: number } | null;
+                    return s ? `${s.ok ?? 0} ok · ${s.warning ?? 0} warning · ${s.error ?? 0} error` : "";
+                  })();
             return (
               <tr key={b.id}>
                 <td className={tdClass}>
@@ -106,12 +124,9 @@ export default async function ImportsPage({
                   </Link>
                 </td>
                 <td className={tdClass}>{b.source}</td>
+                <td className={tdClass}>{IMPORT_TYPE_LABELS[b.importType] ?? b.importType}</td>
                 <td className={tdClass}>{STATUS_LABELS[b.status] ?? b.status}</td>
-                <td className={tdClass}>
-                  {summary
-                    ? `${summary.ok ?? 0} ok · ${summary.warning ?? 0} warning · ${summary.error ?? 0} error`
-                    : ""}
-                </td>
+                <td className={tdClass}>{summaryText}</td>
                 <td className={tdClass}>{b.createdAt.toISOString().slice(0, 10)}</td>
                 <td className={tdClass}>
                   {b.status !== "COMMITTED" && (
@@ -127,7 +142,7 @@ export default async function ImportsPage({
           })}
           {batches.length === 0 && (
             <tr>
-              <td className={tdClass} colSpan={6}>
+              <td className={tdClass} colSpan={7}>
                 No imports yet.
               </td>
             </tr>
@@ -137,7 +152,9 @@ export default async function ImportsPage({
 
       <h2 className="mb-2 text-lg font-medium">Start import</h2>
       <p className="mb-2 text-xs text-slate-500">
-        Source: AES · Type: Team Finishes. Other sources/types aren&apos;t supported yet.
+        Source: AES only. Match Results requires the event&apos;s Team Finishes to
+        already be imported (it resolves teams/divisions from that data, not from
+        scratch).
       </p>
       <form action={startImportBatch} className="flex flex-wrap items-end gap-3">
         <label className="flex flex-col gap-1 text-sm">
@@ -151,6 +168,13 @@ export default async function ImportsPage({
                 {e.season.label} — {e.name}
               </option>
             ))}
+          </select>
+        </label>
+        <label className="flex flex-col gap-1 text-sm">
+          Type
+          <select name="importType" className={selectClass} defaultValue="TEAM_FINISHES">
+            <option value="TEAM_FINISHES">Team Finishes</option>
+            <option value="MATCH_RESULTS">Match Results</option>
           </select>
         </label>
         <SubmitButton className={primaryButtonClass} pendingText="Starting…">

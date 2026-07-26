@@ -7,6 +7,7 @@ import { parseAesEventIdFromUrl } from "@/lib/import/aesEventId";
 import { fetchAesStandingsRows } from "@/lib/import/aesStandings";
 import { resolveImportBatch } from "@/lib/import/resolve";
 import { commitImportBatch } from "@/lib/import/commit";
+import { importAesMatchResults } from "@/lib/import/commitMatches";
 import { suggestClubName } from "@/lib/import/clubNameSuggestion";
 
 function batchPath(batchId: string, params: Record<string, string | undefined> = {}) {
@@ -157,6 +158,31 @@ export async function fetchAesStandings(batchId: string, formData: FormData) {
   }
 
   redirect(batchPath(batchId, { filter }));
+}
+
+export async function fetchAndCommitAesMatches(batchId: string, formData: FormData) {
+  const filter = currentFilter(formData);
+
+  const batch = await prisma.importBatch.findUniqueOrThrow({
+    where: { id: batchId },
+    include: { event: true },
+  });
+
+  if (batch.event.scheduleSource !== "AES" || !batch.event.scheduleUrl) {
+    redirect(batchPath(batchId, { filter, error: "no-schedule-url" }));
+  }
+
+  const aesEventId = parseAesEventIdFromUrl(batch.event.scheduleUrl!);
+  if (!aesEventId) {
+    redirect(batchPath(batchId, { filter, error: "bad-schedule-url" }));
+  }
+
+  const result = await importAesMatchResults(batchId, aesEventId!);
+  if (!result.ok) {
+    redirect(batchPath(batchId, { filter, error: "fetch-failed", reason: result.reason }));
+  }
+
+  redirect(batchPath(batchId, { filter, success: "committed" }));
 }
 
 export async function resolveBatch(batchId: string, formData: FormData) {

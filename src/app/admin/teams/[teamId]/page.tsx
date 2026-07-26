@@ -81,6 +81,32 @@ export default async function TeamDetailPage({
     },
   });
   if (!team) notFound();
+
+  // Sequential, not Promise.all -- see docs/dev-environment.md.
+  const matchesAsA = await prisma.match.findMany({
+    where: { teamAId: teamId },
+    include: {
+      event: { include: { season: true } },
+      division: true,
+      teamB: true,
+    },
+    orderBy: { matchDate: "desc" },
+  });
+  const matchesAsB = await prisma.match.findMany({
+    where: { teamBId: teamId },
+    include: {
+      event: { include: { season: true } },
+      division: true,
+      teamA: true,
+    },
+    orderBy: { matchDate: "desc" },
+  });
+  // Normalize both sides into "this team" vs. "opponent" so the table doesn't need to
+  // care which side of the match this team happened to be on.
+  const matches = [
+    ...matchesAsA.map((m) => ({ ...m, opponent: m.teamB, wonByThisTeam: m.winnerTeamId === teamId, opponentSets: m.setsB, thisTeamSets: m.setsA })),
+    ...matchesAsB.map((m) => ({ ...m, opponent: m.teamA, wonByThisTeam: m.winnerTeamId === teamId, opponentSets: m.setsA, thisTeamSets: m.setsB })),
+  ].sort((a, b) => (b.matchDate?.getTime() ?? 0) - (a.matchDate?.getTime() ?? 0));
   const clubs = await prisma.club.findMany({ orderBy: { name: "asc" } });
   const seasons = await prisma.season.findMany({ orderBy: { startDate: "desc" } });
 
@@ -88,9 +114,11 @@ export default async function TeamDetailPage({
   const availableSeasons = seasons.filter((s) => !enrolledSeasonIds.has(s.id));
 
   // Season tabs: any season the team is enrolled in, plus any season it has a finish
-  // in (a team can have results recorded before/without an explicit TeamSeason row).
+  // or match result in (a team can have results recorded before/without an explicit
+  // TeamSeason row).
   const finishSeasons = new Map(team.finishes.map((f) => [f.division.event.season.id, f.division.event.season]));
-  const tabSeasons = [...team.seasons.map((ts) => ts.season), ...finishSeasons.values()]
+  const matchSeasons = new Map(matches.map((m) => [m.event.season.id, m.event.season]));
+  const tabSeasons = [...team.seasons.map((ts) => ts.season), ...finishSeasons.values(), ...matchSeasons.values()]
     .filter((s, i, arr) => arr.findIndex((x) => x.id === s.id) === i)
     .sort((a, b) => b.startDate.getTime() - a.startDate.getTime());
 
@@ -100,6 +128,7 @@ export default async function TeamDetailPage({
     tabSeasons[0]?.id;
 
   const finishesForSeason = team.finishes.filter((f) => f.division.event.season.id === activeSeasonId);
+  const matchesForSeason = matches.filter((m) => m.event.season.id === activeSeasonId);
 
   const updateTeamWithId = updateTeam.bind(null, teamId);
   const addTeamSeasonWithId = addTeamSeason.bind(null, teamId);
@@ -317,6 +346,78 @@ export default async function TeamDetailPage({
               </tbody>
             </table>
           </>
+        )}
+      </section>
+
+      <section className="mt-8">
+        <h2 className="mb-2 text-lg font-medium">Match Results ({matchesForSeason.length})</h2>
+
+        {tabSeasons.length === 0 || matches.length === 0 ? (
+          <p className="text-sm text-slate-500">
+            No match results imported for this team yet — see{" "}
+            <Link href="/admin/imports" className="underline">
+              Imports
+            </Link>{" "}
+            (Match Results type).
+          </p>
+        ) : (
+          <table className={tableClass}>
+            <thead>
+              <tr>
+                <th className={thClass}>Date</th>
+                <th className={thClass}>Event</th>
+                <th className={thClass}>Division</th>
+                <th className={thClass}>Opponent</th>
+                <th className={thClass}>Sets</th>
+                <th className={thClass}>Result</th>
+                <th className={thClass}>Stage</th>
+              </tr>
+            </thead>
+            <tbody>
+              {matchesForSeason.map((m) => (
+                <tr key={m.id}>
+                  <td className={tdClass}>
+                    {m.matchDate ? m.matchDate.toISOString().slice(0, 10) : ""}
+                  </td>
+                  <td className={tdClass}>
+                    <Link href={`/admin/events/${m.eventId}`} className="text-slate-900 underline">
+                      {m.event.name}
+                    </Link>
+                  </td>
+                  <td className={tdClass}>{m.division?.name ?? ""}</td>
+                  <td className={tdClass}>
+                    {m.opponent ? (
+                      <Link href={`/admin/teams/${m.opponent.id}`} className="text-slate-900 underline">
+                        {m.opponent.name}
+                      </Link>
+                    ) : (
+                      <span className="text-slate-400">(unresolved)</span>
+                    )}
+                  </td>
+                  <td className={tdClass}>
+                    {m.thisTeamSets}-{m.opponentSets}
+                  </td>
+                  <td className={tdClass}>
+                    {m.winnerTeamId ? (
+                      <span className={m.wonByThisTeam ? "font-medium text-green-700" : "text-red-700"}>
+                        {m.wonByThisTeam ? "Win" : "Loss"}
+                      </span>
+                    ) : (
+                      ""
+                    )}
+                  </td>
+                  <td className={tdClass}>{m.stage ?? ""}</td>
+                </tr>
+              ))}
+              {matchesForSeason.length === 0 && (
+                <tr>
+                  <td className={tdClass} colSpan={7}>
+                    No match results for this season.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
         )}
       </section>
     </div>

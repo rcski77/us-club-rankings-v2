@@ -21,11 +21,15 @@ export async function fetchAesEventInfo(aesEventId: string): Promise<AesEventInf
   };
 }
 
-type ApiStandingTeam = {
+export type ApiStandingTeam = {
+  TeamId?: number; // AES's internal numeric team id -- not exposed anywhere else in
+  // this file's row shape (team code is what the rest of the pipeline resolves by),
+  // but needed by aesMatches.ts to map a match's FirstTeamId/SecondTeamId back to a
+  // structured team code.
   TeamName?: string;
   TeamCode?: string;
   FinishRank?: number;
-  Division?: { Name?: string };
+  Division?: { DivisionId?: number; Name?: string };
   Club?: { ClubId?: number; Name?: string };
 };
 type ApiStandingsResponse = { value?: ApiStandingTeam[] };
