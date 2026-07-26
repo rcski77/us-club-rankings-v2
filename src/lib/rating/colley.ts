@@ -102,3 +102,22 @@ export function buildDivisionComparisons(
   }
   return comparisons;
 }
+
+/**
+ * Builds one comparison per completed Match row -- the Phase 5 (real match data) input,
+ * used in place of buildDivisionComparisons() for a division once it has imported Match
+ * results, per computeColleyRatings()'s per-division fallback. A match with no resolved
+ * winner (or a null team side -- Match's FKs are nullable in the schema, though never in
+ * practice for a committed row) is skipped rather than producing a degenerate comparison.
+ */
+export function buildMatchComparisons(
+  matches: { teamAId: string | null; teamBId: string | null; winnerTeamId: string | null }[],
+): Comparison[] {
+  const comparisons: Comparison[] = [];
+  for (const m of matches) {
+    if (!m.teamAId || !m.teamBId || !m.winnerTeamId) continue;
+    const loserTeamId = m.winnerTeamId === m.teamAId ? m.teamBId : m.teamAId;
+    comparisons.push({ winnerTeamId: m.winnerTeamId, loserTeamId });
+  }
+  return comparisons;
+}

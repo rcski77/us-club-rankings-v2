@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildDivisionComparisons, solveColley } from "./colley";
+import { buildDivisionComparisons, buildMatchComparisons, solveColley } from "./colley";
 
 describe("buildDivisionComparisons", () => {
   it("generates a comparison for every distinct-rank pair", () => {
@@ -23,6 +23,33 @@ describe("buildDivisionComparisons", () => {
     expect(comparisons).toHaveLength(2);
     expect(comparisons).toContainEqual({ winnerTeamId: "a", loserTeamId: "c" });
     expect(comparisons).toContainEqual({ winnerTeamId: "b", loserTeamId: "c" });
+  });
+});
+
+describe("buildMatchComparisons", () => {
+  it("produces one comparison per match, oriented from winner to loser", () => {
+    const comparisons = buildMatchComparisons([
+      { teamAId: "a", teamBId: "b", winnerTeamId: "a" },
+      { teamAId: "c", teamBId: "b", winnerTeamId: "b" },
+    ]);
+    expect(comparisons).toHaveLength(2);
+    expect(comparisons).toContainEqual({ winnerTeamId: "a", loserTeamId: "b" });
+    expect(comparisons).toContainEqual({ winnerTeamId: "b", loserTeamId: "c" });
+  });
+
+  it("skips matches with no resolved winner", () => {
+    const comparisons = buildMatchComparisons([
+      { teamAId: "a", teamBId: "b", winnerTeamId: null },
+    ]);
+    expect(comparisons).toHaveLength(0);
+  });
+
+  it("skips matches with a null team side", () => {
+    const comparisons = buildMatchComparisons([
+      { teamAId: null, teamBId: "b", winnerTeamId: "b" },
+      { teamAId: "a", teamBId: null, winnerTeamId: "a" },
+    ]);
+    expect(comparisons).toHaveLength(0);
   });
 });
 

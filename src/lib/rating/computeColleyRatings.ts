@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { buildDivisionComparisons, solveColley } from "./colley";
+import { buildDivisionComparisons, buildMatchComparisons, solveColley } from "./colley";
 
 /**
  * Recomputes Colley ratings for one (season, ageGroup) partition as of asOfDate, and
@@ -9,6 +9,14 @@ import { buildDivisionComparisons, solveColley } from "./colley";
  * comparisons feed the TEAM's natural age group (per that season's TeamSeason row),
  * not necessarily the division's own age group -- consistent with how ignoreAge
  * finishes already count toward the points-based ranking.
+ *
+ * Per division, imported Match results are preferred over standings when available --
+ * real head-to-head results are a stronger signal than rank-inferred comparisons --
+ * and the standings (TeamFinish rank) fallback is used otherwise, since match import
+ * coverage (Phase 5) currently trails standings import coverage (Phase 2) and most
+ * divisions won't have Match rows yet. This is a per-division, not per-team or
+ * per-match, decision: a division with any completed Match rows uses match results
+ * exclusively (not a mix of the two signals for the same division).
  */
 export async function computeColleyRatings(
   seasonId: string,
@@ -42,7 +50,26 @@ export async function computeColleyRatings(
     byDivision.set(finish.divisionId, list);
   }
 
-  const comparisons = Array.from(byDivision.values()).flatMap(buildDivisionComparisons);
+  const divisionIds = Array.from(byDivision.keys());
+  const matches = divisionIds.length
+    ? await prisma.match.findMany({
+        where: { divisionId: { in: divisionIds }, winnerTeamId: { not: null } },
+      })
+    : [];
+  const matchesByDivision = new Map<string, typeof matches>();
+  for (const m of matches) {
+    if (!m.divisionId) continue;
+    const list = matchesByDivision.get(m.divisionId) ?? [];
+    list.push(m);
+    matchesByDivision.set(m.divisionId, list);
+  }
+
+  const comparisons = Array.from(byDivision.entries()).flatMap(([divisionId, finishes]) => {
+    const divisionMatches = matchesByDivision.get(divisionId);
+    return divisionMatches && divisionMatches.length > 0
+      ? buildMatchComparisons(divisionMatches)
+      : buildDivisionComparisons(finishes);
+  });
   const ratings = solveColley(comparisons);
 
   ratings.sort((a, b) => b.rating - a.rating);
