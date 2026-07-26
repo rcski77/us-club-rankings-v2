@@ -103,7 +103,10 @@ export default async function EventDetailPage({
       season: true,
       divisions: {
         orderBy: [{ ageGroup: "desc" }, { name: "asc" }],
-        include: { _count: { select: { finishes: true } } },
+        include: {
+          _count: { select: { finishes: true } },
+          pointBands: { orderBy: { fromRank: "asc" }, take: 1 },
+        },
       },
     },
   });
@@ -226,6 +229,7 @@ export default async function EventDetailPage({
             <th className={thClass}>Age</th>
             <th className={thClass}>Tier</th>
             <th className={thClass}>Status</th>
+            <th className={thClass}>Max points</th>
             <th className={thClass}>Finishes</th>
           </tr>
         </thead>
@@ -246,12 +250,13 @@ export default async function EventDetailPage({
                 {d.tierLevel ? ` ${d.tierLevel}` : ""}
               </td>
               <td className={tdClass}>{d.scoringStatus}</td>
+              <td className={tdClass}>{d.pointBands[0]?.points ?? "—"}</td>
               <td className={tdClass}>{d._count.finishes}</td>
             </tr>
           ))}
           {event.divisions.length === 0 && (
             <tr>
-              <td className={tdClass} colSpan={5}>
+              <td className={tdClass} colSpan={6}>
                 No divisions yet.
               </td>
             </tr>
