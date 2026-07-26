@@ -29,11 +29,13 @@ export default async function DivisionScoringPage({
   const division = await prisma.division.findUnique({ where: { id: divisionId }, include: { event: true } });
   if (!division || division.eventId !== eventId) notFound();
 
-  const snapshot = await prisma.divisionScoringSnapshot.findFirst({
+  const snapshots = await prisma.divisionScoringSnapshot.findMany({
     where: { divisionId },
     include: { suggestedTemplate: true },
     orderBy: { createdAt: "desc" },
   });
+  const snapshot = snapshots[0];
+  const priorSnapshots = snapshots.slice(1);
 
   const generateWithIds = generateSuggestion.bind(null, eventId, divisionId);
   const bucketCounts = (snapshot?.bucketCounts as Record<string, number> | undefined) ?? {};
@@ -187,6 +189,50 @@ export default async function DivisionScoringPage({
             <p className="text-sm text-slate-500">
               Overridden: {snapshot.overrideReason}
             </p>
+          )}
+
+          {priorSnapshots.length > 0 && (
+            <section className="mb-8">
+              <h2 className="mb-2 text-lg font-medium">History</h2>
+              <p className="mb-2 text-sm text-slate-500">
+                How this division&apos;s FSS and suggested tier have shifted across prior
+                runs — a division scored early, before its region&apos;s other results
+                connect into the graph, can look weaker than it turns out to be.
+              </p>
+              <table className={tableClass}>
+                <thead>
+                  <tr>
+                    <th className={thClass}>Run date</th>
+                    <th className={thClass}>FSS</th>
+                    <th className={thClass}>Percentile</th>
+                    <th className={thClass}>Band</th>
+                    <th className={thClass}>Suggested template</th>
+                    <th className={thClass}>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {snapshots.map((s) => (
+                    <tr key={s.id} className={s.id === snapshot.id ? "font-medium" : undefined}>
+                      <td className={tdClass}>
+                        {s.createdAt.toLocaleDateString()} {s.createdAt.toLocaleTimeString()}
+                        {s.id === snapshot.id ? " (current)" : ""}
+                      </td>
+                      <td className={tdClass}>{s.fss !== null ? s.fss.toFixed(3) : "—"}</td>
+                      <td className={tdClass}>
+                        {s.percentile !== null ? `${s.percentile.toFixed(0)}th` : "—"}
+                      </td>
+                      <td className={tdClass}>{s.scoreBand ?? "—"}</td>
+                      <td className={tdClass}>
+                        {s.suggestedTemplate
+                          ? `${s.suggestedTemplate.name} (${s.suggestedTemplate.maxPoints} max)`
+                          : "—"}
+                      </td>
+                      <td className={tdClass}>{s.status}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </section>
           )}
         </>
       )}
