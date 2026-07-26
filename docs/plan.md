@@ -49,7 +49,7 @@ preference, non-negotiable.
 | 2 | CSV import pipeline (AES adapter first) | ✅ Done (AES adapter, TEAM_FINISHES only) |
 | 3 | Tier 1 rating engine (Colley) + algorithmic scoring suggestion | ✅ Done (Colley solve; FSS + suggestion + scoring-review screen; Analysis view + histogram; non-anchor template seeding; prior-run FSS-history comparison) |
 | 4 | Cross-season bootstrapping and calibration | Not started |
-| 5 | Tier 2 upgrade (Elo + Massey from real match data) | In progress (MATCH_RESULTS import ✅; Elo/Massey engines not started) |
+| 5 | Tier 2 upgrade (Elo + Massey from real match data) | In progress (MATCH_RESULTS import ✅; Elo engine ✅; Massey not started) |
 | 6 | Polish — flags, ballots, weight config, background jobs, hosting | Not started |
 
 **Where things actually stand right now:** a fully working admin app for hand-operated
@@ -178,9 +178,74 @@ matches fetched from AES; ~364 resolved and imported, ~363 correctly skipped as
 teams with no official TEAM_FINISHES rank) — confirmed the division-via-TeamFinish
 fix specifically against that event's real "12/13 Club" combined-age division, which
 is exactly the case that would have silently mismatched under label re-parsing.
-**Not yet built**: Elo/Massey engines that actually consume `Match` rows (Phase 5's
-remaining scope — see §2/§6), Sportwrench/TM2/VBSchedule match-level fetchers (AES
-only so far, matching TEAM_FINISHES's existing source coverage).
+**Phase 5, second slice — Elo engine — done.** `src/lib/rating/elo.ts` (pure:
+standard logistic Elo — `E_A = 1/(1+10^((R_B-R_A)/400))` — applied via
+`computeEloRatings()` which sorts a match list chronologically and replays it
+sequentially, since Elo is path-dependent, unlike Colley's order-independent batch
+solve; margin-of-victory multiplier from the winner's set fraction (`0.8 + 0.4 *
+fraction`, so a sweep counts for more than a narrow win); per-team provisional K
+(40 vs a base 24) while that team has fewer than 10 season matches so far, tracked
+independently per team as the replay progresses; unit-tested including an
+order-independence check — replaying the same matches in shuffled input order
+produces identical ratings, confirming the explicit sort is what makes replay safe,
+not incidental input ordering) plus `computeEloRatings.ts` (Prisma orchestration:
+same per-`(season, ageGroup)` partitioning, ignoreAge-via-`TeamSeason` resolution,
+and delete-and-replace `TeamRatingHistory` snapshot pattern as `computeColleyRatings.ts`
+— see that file's comment for why. Deliberately **no standings-inferred fallback**:
+Elo only exists once real `Match` rows do, so a division with finishes but no
+imported matches contributes nothing to Elo, unlike Colley which falls back to
+rank-inferred comparisons). New `ELO` value on the `RatingEngine` enum (alongside
+`COLLEY`, both stored in the same `TeamRatingHistory` table, distinguished by
+`ratingEngine`). `/admin/power-rankings` gained a second "Recompute Elo ratings"
+button; the ratings-detail page shows Colley and Elo side by side as separate columns
+in one merged table (per-engine `weekEndingDate` looked up independently, rows sorted
+by Colley rank with any Elo-only team appended after — a division with imported
+matches but no Colley-eligible standings yet, though not seen in practice so far), `—`
+for a team not yet rated by one of the two engines. Verified
+end-to-end in the browser against real imported AES match data (2026 Triple Crown
+Colorado Challenge, 14u): 199 teams rated, ratings ordered sensibly (teams with fewer
+warmed-up matches sit closer to the 1500 default, as expected from the provisional-K
+design), and the Colley and Elo views agree on the top team (Legacy 14-1 ADIDAS)
+despite being fully independent computations over different underlying data
+(rank-inferred comparisons vs. real match results) — a reassuring cross-check, not a
+coincidence the code enforces.
+**Phase 5, third slice — per-team Elo match history — done.** `elo.ts` refactored
+around a shared internal `replay()` so `computeEloRatings()` (final ratings only) and
+the new `computeEloHistory()` (the full per-match trace: both teams' before/after
+rating, win expectation, K, margin multiplier for every match, in chronological order)
+can never drift apart on the actual Elo math. New `explainEloChange()` (pure) turns
+one match's numbers into a plain-language sentence — classifies the team's pre-match
+role (favorite/even/underdog from win expectation) and the match's margin
+(dominant/moderate/narrow from the multiplier) into a combined sentence, e.g. "A win
+you were expected to get, so your rating moved up only a little. The dominant margin
+still earned solid credit." `computeEloRatings.ts` gained `getTeamEloHistory(teamId,
+seasonId, asOfDate)`: resolves the team's natural age group for that season, replays
+the *same* match graph its current rating snapshot came from (factored into a shared
+`getPartitionMatches()` used by both this and `computeEloRatingsForPartition()`, so
+history and current rating are always consistent with each other), then slices out
+just this team's steps and reorients each from "team A/B" into "this team vs.
+opponent." Rendered on `/admin/teams/[teamId]` folded into the existing "Match
+Results" section rather than as a separate list — the two were showing largely the
+same matches twice, so `eloByMatchId` (a `Map` from `getTeamEloHistory()`'s results,
+keyed by `matchId`) looks up each match's Elo data by id and augments the same row
+instead. Each match is a `<details>/<summary>` — plain HTML, no client-side JS —
+whose summary line adds the rating before → after and delta onto the existing
+date/event/division/opponent/sets/result columns, expanding to a "Why your Elo
+changed" panel (opponent link, stage, opponent's rating, win expectation, K, the
+`explainEloChange()` sentence) modeled on a competitor site's own per-match Elo
+breakdown; a match outside the current Elo rating graph (no `matchDate`, or not yet
+picked up by a "Recompute Elo ratings" run) shows "No Elo data" instead of blank
+columns. Verified end-to-end in the browser
+against Legacy 14-1 ADIDAS's real 29-match history (2025-2026, 14u): correctly starts
+its unbeaten run at the season-default 1500 with the full provisional K (+24 per win
+while under 10 matches), gradually settles toward the base K once past game 10, and
+correctly shows a sharp -17 drop on its one real loss (to Dal Skyline 14 Royal-Erin at
+Triple Crown NIT) with an "upset"-appropriate explanation.
+**Not yet built**: Massey engine (Phase 5's remaining scope — see §2/§6), CPI
+activation, Power Rankings switching its default/primary labeling from Colley to Elo
+(both are shown side-by-side today, selectable, neither demoted yet),
+Sportwrench/TM2/VBSchedule match-level fetchers (AES only so far, matching
+TEAM_FINISHES's existing source coverage).
 
 **Non-anchor `PointTemplate` library — seeded.** `prisma/seedPointTemplates.ts` (new
 `db:seed-point-templates` script, idempotent — upserts by name, replaces bands
@@ -495,10 +560,17 @@ Finishes/Match Results); `/admin/imports/[batchId]` renders a dedicated
 fetch/re-fetch + read-only match table + skipped-reasons view for `MATCH_RESULTS`
 batches instead of the ImportRow grid.
 
+Built (Phase 5, second slice): `/admin/power-rankings` gained a "Recompute Elo
+ratings" button; `/admin/power-rankings/[seasonId]/[ageGroup]` shows Colley and Elo
+side by side as columns in one merged table.
+
+Built (Phase 5, third slice): `/admin/teams/[teamId]`'s existing "Match Results"
+section gained inline Elo columns (rating before → after, delta) and an expandable
+"why" panel per match, instead of a separate duplicate section.
+
 Planned, not built: `/admin/teams/unlinked`, `/admin/teams/inactive`,
 `/admin/clubs/unlinked`, `/admin/clubs/inactive` (Phase 2 follow-up audits),
-`/admin/flags` (Phase 6), `/admin/ballots` (Phase 6),
-`/admin/power-rankings/[season]/[ageGroup]` (Phase 5).
+`/admin/flags` (Phase 6), `/admin/ballots` (Phase 6).
 
 ---
 
@@ -537,9 +609,10 @@ historical data; confidence/warning banners; capture override-reason data.
 ✅ done (AES only, see Status above — ported the per-team `schedule/past` fetch
 approach from `AES Scraping/Match Results/aes_match_results.py`, not
 `aes-tourney-director`'s live-sync `matchSync.ts`, since this is a one-shot
-historical pull rather than a continuously-polled live-scoring sync). **Not started**:
-incremental Elo with chronological backfill, periodic Massey cross-check, CPI
-activation, Power Rankings switches from Colley to Elo labeling.
+historical pull rather than a continuously-polled live-scoring sync). Incremental Elo
+with chronological backfill ✅ done (see Status above). **Not started**: periodic
+Massey cross-check, CPI activation, Power Rankings switches from Colley to Elo
+labeling (both shown side-by-side today).
 
 **Phase 6 — Polish.** Not started. Team Finish Error/Flags workflow, Ballots stub,
 ClubContacts, RankingWeightConfig UI, background-job infra for recompute/weekly jobs,
