@@ -633,6 +633,12 @@ confirmed sample formats — Open Question 1); DIVISIONS/MATCH_RESULTS import ty
 fuzzy team/club matching beyond AES's structured code; Unlinked/Inactive audit list
 pages (`/admin/teams/unlinked` etc.); region-code alias reconciliation table.
 
+**Also planned**: streamline event creation + import into one flow off the event
+screen — today, creating an Event (`/admin/events/new`) and starting an import batch
+for it (`/admin/imports`) are separate flows the admin has to stitch together by hand;
+the goal is to let staff go from "new event" straight through to uploading/resolving
+its import files without leaving `/admin/events/[eventId]`.
+
 **Phase 3 — Tier 1 rating engine (Colley) + algorithmic scoring.** ✅ Done. Colley
 batch solve + `TeamRatingHistory` snapshot + a basic Power Rankings view, FSS
 computation + suggestion generation + the Division scoring-review screen +
@@ -655,7 +661,15 @@ labeling (both shown side-by-side today).
 
 **Phase 6 — Polish.** Not started. Team Finish Error/Flags workflow, Ballots stub,
 ClubContacts, RankingWeightConfig UI, background-job infra for recompute/weekly jobs,
-hosting finalization.
+hosting finalization. Also planned: a manual per-division point-band override — let
+staff bump a confirmed division's `DivisionPointBand` points by a small amount (e.g.
++1/+2) without having to swap the whole `PointTemplate` applied to it, for cases where
+the algorithmic/template suggestion is close but not quite right for that one division.
+Also planned: a bulk/batch way to (re)generate scoring suggestions across many
+divisions at once (e.g. a whole event, or every still-DRAFT division in a season),
+instead of only the current one-division-at-a-time flow on the scoring-review screen —
+matters more now that Colley/Elo recompute is a manual trigger and division counts per
+event can be large (e.g. the 352-row USAV Nationals sample spans 6 tiers).
 
 ---
 
@@ -692,3 +706,15 @@ hosting finalization.
     handling) should be reviewed before writing Phase 5's Match Results fetcher.
 12. `miva-data` (a sibling repo in this workspace) contains MIVA match/team results —
     a possible 5th data source beyond the named four, not yet scoped into this plan.
+13. **Club ranking (future phase, not yet scoped/sequenced)**: a club-level ranking
+    is planned in addition to the existing team-level (best-3-of-season) ranking, with
+    its own methodology — explicitly *not* a copy of VolleyLens' Elo-blended club
+    score. **Needs to be scoped out**: the existing (legacy/v1) methodology, published
+    at https://www.usclubrankings.com/methodology.html, is the intended starting point
+    to carry forward here — not yet reviewed/translated into a design for this rebuild.
+    Not yet designed; will need its own phase entry once methodology is scoped.
+    Related need identified 2026-07-27: a way to designate multiple
+    `Club.externalCode`s (e.g. a club that changed/re-registered its AES code across
+    seasons, or fields under more than one code) as the *same* club for club-ranking
+    purposes — some kind of club-alias/grouping mechanism, needed once club rankings
+    are actually built.
