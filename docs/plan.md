@@ -49,7 +49,7 @@ preference, non-negotiable.
 | 2 | CSV import pipeline (AES adapter first) | ✅ Done (AES adapter, TEAM_FINISHES only) |
 | 3 | Tier 1 rating engine (Colley) + algorithmic scoring suggestion | ✅ Done (Colley solve; FSS + suggestion + scoring-review screen; Analysis view + histogram; non-anchor template seeding; prior-run FSS-history comparison) |
 | 4 | Cross-season bootstrapping and calibration | Not started |
-| 5 | Tier 2 upgrade (Elo + Massey from real match data) | In progress (MATCH_RESULTS import ✅; Elo engine ✅; Massey not started) |
+| 5 | Tier 2 upgrade (Elo + Massey from real match data) | In progress (MATCH_RESULTS import ✅; Elo engine ✅; Massey engine ✅; CPI activation/Colley→Elo relabeling not started) |
 | 6 | Polish — flags, ballots, weight config, background jobs, hosting | Not started |
 | 7 | Club-level ranking (new tier, alongside existing team ranking) | Not started — methodology scoped from legacy site, see §8 |
 
@@ -277,10 +277,132 @@ Elite Presence 77%, 83rd percentile, "Strong regional," suggested "215 max" — 
 History table preserves the division's whole calibration trail, including the
 pre-1450-threshold run that had briefly shown only 15% Elite Presence before the
 threshold was corrected.
-**Not yet built**: Massey engine (Phase 5's remaining scope — see §2/§6), CPI
-activation, Power Rankings switching its default/primary labeling from Colley to Elo
-(both are shown side-by-side today, selectable, neither demoted yet),
-Sportwrench/TM2/VBSchedule match-level fetchers (AES only so far, matching
+**Phase 5, fifth slice — Massey engine — done.** `src/lib/rating/massey.ts` (pure:
+standard Massey Matrix Method — for a match between teams i/j with signed point
+differential `d` (i's advantage over j), `M[i][i] += 1, M[j][j] += 1, M[i][j] -= 1,
+M[j][i] -= 1, b[i] += d, b[j] -= d`, then solved via the same hand-rolled Gaussian
+elimination style as `colley.ts` — each rating module stays self-contained rather than
+sharing a solver across files. `computeMatchPointDiff()` sums every set's real
+`(a - b)` across the whole match (all sets, not just the deciding one) — real per-set
+scores were already being imported via `Match.setScores`
+(`src/lib/import/aesMatches.ts`'s `AesMatchSetScore`, sourced from AES's actual
+`FirstTeamScore`/`SecondTeamScore` per set), just not consumed by anything until this
+slice; `setsA`/`setsB` are a *derived* summary of those same real scores, not the
+underlying data itself. The Massey matrix is singular by construction (rows sum to
+zero) — per `docs/plan.md`'s own Tier-2 design, fixed via **ridge regularization**
+(`DEFAULT_RIDGE_LAMBDA` added to every diagonal entry) rather than Colley's
+row-replacement trick; this also naturally damps small/disconnected early-season
+subgraphs instead of needing a separate connectivity check, unit-tested including an
+isolated-pair case that would be exactly singular without the ridge term.
+`computeMasseyRatings.ts` mirrors `computeEloRatingsForPartition()` exactly (same
+per-`(season, ageGroup)` partitioning, ignoreAge resolution, and delete-and-replace
+`TeamRatingHistory` write) and reuses the *same* `getPartitionMatches()` helper Elo
+already built (exported from `computeEloRatings.ts` rather than re-deriving the
+partition/ignoreAge logic a third time). New `MASSEY` value on the `RatingEngine`
+enum — no separate `MasseyRatingRun`/`MasseyTeamRating` models, following Elo's own
+precedent of reusing the shared `TeamRatingHistory` table instead of the original
+plan's now-stale separate-model sketch (§1.4). Like Elo, Massey has no
+standings-inferred fallback: a division with finishes but no imported `Match` rows
+contributes nothing. `/admin/power-rankings` gained a third "Recompute Massey
+ratings" button; the ratings-detail page adds Massey Rank/Rating/Games as a third
+column group, with any Massey-only team (not already covered by Colley or Elo)
+appended after both, `—` where a team isn't yet rated by an engine. Verified
+end-to-end in the browser against the real 2026 Triple Crown Colorado Challenge 14u
+data already in the dev DB: Massey and Colley/Elo independently agree on the top team
+(Legacy 14-1 ADIDAS ranks #1 in both Colley and Massey, #2 in Elo) despite being a
+fully independent computation over point differentials rather than win/loss or
+sequential updates — the same kind of reassuring cross-check the Elo/Colley agreement
+gave in the second slice, not a coincidence the code enforces.
+
+**Bug fix (all three engines) — cross-age-group rating leak.** While verifying the
+Massey slice above, found that a division qualifies as "relevant" to an age-group
+partition as soon as *any one* team's finish belongs there, but every match/comparison
+in that division was being pulled into the graph and solved — including a team playing
+up from a different natural age group (e.g. a 15u team playing up into a 17u
+division). Colley/Elo/Massey all return a rating for every team in the graph they're
+handed, so that playing-up team's own rating was getting persisted into the *wrong*
+age group's `TeamRatingHistory` rows (visibly: a 15u team showing up in the 17u power
+rankings table). Fix: keep pulling in the full division's matches when *solving* (an
+opponent's real strength should reflect having faced that tough playing-up team), but
+filter the final ranked list down to `relevantTeamIds` — teams whose own natural age
+group actually matches the partition — before ranking/persisting.
+`getPartitionMatches()` (`computeEloRatings.ts`) now returns `{ matches,
+relevantTeamIds }` instead of a bare match array; `computeColleyRatings.ts` builds the
+equivalent set inline. This predates the Massey slice — it affected the already-shipped
+Colley (Phase 3) and Elo (Phase 5) engines too, just hadn't surfaced yet since no one
+had inspected an age group with a playing-up team's rating leaking in until this
+session. Verified end-to-end against the real dev DB data that exposed it (a 2025-2026
+15u DYNASTY team that had been appearing in the 17u Colley/Elo/Massey tables) — gone
+from all three after recompute, with no change to genuinely-17u teams' own ratings
+(the graph they're solved against is unchanged, only the persisted row set is
+filtered).
+
+**Elo division-strength weighting.** `src/lib/rating/elo.ts`'s `replay()` gained a
+third multiplicative factor alongside K and the margin multiplier: `divisionWeight`
+(defaults to 1 if omitted — every pre-existing `elo.test.ts` case still passes
+unmodified). The signal: `src/lib/rating/divisionWeight.ts`'s `computeDivisionWeight()`
+ranks a division's Colley FSS percentile (reusing `computeDivisionFieldStrength.ts` +
+`suggestPointTemplate.ts`'s `computeFssPercentile()` — no new percentile math)
+against every *other* division's percentile currently known in the same
+`(season, ageGroup)` partition — an empirical rank transform (quantile
+normalization), not a fixed floor/ceiling. Deliberately Colley-only, never the
+Elo/DCI-based percentile `computeDivisionScoringSuggestion.ts` sometimes uses instead
+— using an Elo-derived signal to weight Elo itself would be circular; Colley never
+reads an Elo rating anywhere, so Colley → Elo weighting is one-directional. New
+`src/lib/rating/computeMatchDivisionWeights.ts` (orchestration) gathers that whole
+per-partition reference population (every division with any `TeamFinish` in the
+partition, not just the ones with matches) and builds the `Map<divisionId, weight>`
+`computeEloRatings.ts`'s `withDivisionWeights()` helper attaches to each match before
+`buildEloMatches`/`solveElo`/`computeEloHistory`.
+
+A first version anchored the range at fixed percentile cutoffs (`[0, 95] ->
+[0.7, 1.6]`, the ceiling checked against real NIT/Nationals Open divisions landing
+93.3–98.9), but verifying it against real data found a real problem: all 24 real 14u
+divisions with trustworthy Colley signal actually spanned percentile **53.3–98.1**,
+not 0–100 — a division needs enough Colley-connected teams to get a trustworthy
+signal at all (the existing `LOW_PERCENT_RATED` gate filters out the rest), so almost
+no real division lands below ~50th percentile. That meant the fixed floor wasted its
+entire bottom half on percentiles that essentially never occur — a division staff
+scored at only 50 points (clearly meant to be weak) landed at percentile 71.7 -> weight
+1.38, most of the way to the ceiling. The rank-transform version fixes this by
+construction: ranking against the *live* population of division percentiles instead
+of fixed anchors, so the weakest division currently known always gets `WEIGHT_MIN`
+and the strongest always gets `WEIGHT_MAX`, evenly spread between — no floor/ceiling
+constant to guess or revisit as more of the season's divisions get scored. Verified
+against real 2025-2026 14u data after the fix: the same 24 divisions now spread evenly
+from weight 0.700 ("26 The Nike Classic / 14 Premier", percentile 53.3) to 1.600
+(USAV Nationals 14 Open, percentile 98.1), with Triple Crown NIT 14 Open close behind
+at 1.561 and — the case that specifically motivated this — USAV Nationals' own weaker
+tiers within the *same anchor event* (14 Liberty/Freedom, weight 1.170) landing well
+below its own Open division, proving the weighting is genuinely division-strength-based
+rather than a flat anchor-event boost. Also spot-checked end-to-end on a real team
+(Boss CLE 14-2): its early-season matches in the weakest division (weight 0.7,
+provisional K=40) and its later USAV Nationals American-tier matches (weight 1.209,
+base K=24) produced similar real rating swings despite the different K bucket
+(effective K×weight ≈28 vs ≈29) — the weighting compensating sensibly, not just
+applying a cosmetic multiplier. Scoped to Elo only for this pass; Massey's analogous
+weighting (scaling matrix entries rather than a K-factor) is a natural follow-up, not
+yet built.
+
+`/admin/analysis`'s division detail page gained an "Elo Weight" column (a new exported
+`computeDivisionWeightsForPartition(seasonId, ageGroup)` in
+`computeMatchDivisionWeights.ts`, factored out of `computeMatchDivisionWeights()` so
+both share one implementation) — a live, on-demand view of the same number Elo
+recompute would use to weight that division's matches, shown next to the existing
+Band/Pctl columns. Deliberately kept as a separate column rather than merged into
+Band: Band's percentile is sometimes Elo/DCI-based depending on a division's own match
+coverage, while Elo Weight is always Colley-only (per the circularity concern above),
+so the two numbers answer different questions and don't generally agree. Verified in
+the browser against real 14u data: Elo Weight populates even for DRAFT divisions with
+no scoring snapshot at all (Band/Pctl show "—", Elo Weight still shows a real number),
+confirming the two are genuinely independent computations, not just two views of the
+same underlying value.
+
+**Not yet built**: the Massey analog of the above, CPI activation, Power Rankings
+switching its default/primary labeling from Colley to Elo (all three engines are shown
+side-by-side today, selectable, none demoted), a periodic/scheduled Massey cross-check
+re-run (today it's the same manual-trigger button as Colley/Elo — background-job
+infra is Phase 6), Sportwrench/TM2/VBSchedule match-level fetchers (AES only so far, matching
 TEAM_FINISHES's existing source coverage).
 
 **Non-anchor `PointTemplate` library — seeded.** `prisma/seedPointTemplates.ts` (new
@@ -608,6 +730,30 @@ Built (Phase 5, fourth slice): `/admin/analysis` and the division scoring-review
 screen gained Engine/Elite % columns, reflecting the new Elo/DCI path in
 `computeDivisionScoringSuggestion.ts`.
 
+Built (Phase 5, fifth slice): `/admin/power-rankings` gained a "Recompute Massey
+ratings" button; `/admin/power-rankings/[seasonId]/[ageGroup]` shows Massey as a
+third Rank/Rating/Games column group alongside Colley and Elo in the same merged
+table.
+
+**Nav consolidation (post-Phase-5, UI-only).** Per user direction, `/admin/rankings`,
+`/admin/power-rankings`, and their `[seasonId]/[ageGroup]` detail routes were all
+removed and fully inlined into a single page, `/admin/team-rankings` — no more
+separate index-page-then-detail-page navigation for either ranking. The page is
+query-param-driven (`?season=&view=&ageGroup=`) rather than path-segment-driven:
+a season `<select>` (auto-submitting via a small client component,
+`SeasonFilterSelect.tsx` — the one bit of client-side JS on this page, mirroring the
+existing `RegionFilterSelect.tsx` pattern from `/admin/clubs`), a "NPS Rankings" /
+"Power Rankings" view-selector tab row, and a 12u–18u age-group tab row (both tab rows
+are plain `<Link>`s carrying the other two params forward, not client state) drive
+which table renders below — `NpsRankingTable` or `PowerRankingTable`, two server
+components in the same file. The three separate Colley/Elo/Massey recompute buttons
+were also collapsed into one "Recompute ratings" button/server action that runs all
+three sequentially for the selected season. "NPS Rankings" is purely a display label
+on the existing points-based `totalPoints`/`rank` ranking, not a switch to the
+`RankingResult.npsRank`/`npsPoints` columns described in §1.4 (those remain
+unpopulated, waiting on Phase 4/5 calibration) — worth knowing if a future session
+sees "NPS Rankings" in the UI and goes looking for where `npsRank` is read from.
+
 Planned, not built: `/admin/teams/unlinked`, `/admin/teams/inactive`,
 `/admin/clubs/unlinked`, `/admin/clubs/inactive` (Phase 2 follow-up audits),
 `/admin/flags` (Phase 6), `/admin/ballots` (Phase 6).
@@ -656,9 +802,12 @@ historical data; confidence/warning banners; capture override-reason data.
 approach from `AES Scraping/Match Results/aes_match_results.py`, not
 `aes-tourney-director`'s live-sync `matchSync.ts`, since this is a one-shot
 historical pull rather than a continuously-polled live-scoring sync). Incremental Elo
-with chronological backfill ✅ done (see Status above). **Not started**: periodic
-Massey cross-check, CPI activation, Power Rankings switches from Colley to Elo
-labeling (both shown side-by-side today).
+with chronological backfill ✅ done (see Status above). Massey batch least-squares
+engine ✅ done, ridge-regularized, from the real per-set point scores already
+captured by the Match import (see Status above). **Not started**: a periodic/
+scheduled re-run of any of the three engines (today all are manual-trigger buttons —
+waits on Phase 6's background-job infra), CPI activation, Power Rankings switches its
+default labeling from Colley to Elo/Massey (all three shown side-by-side today).
 
 **Phase 6 — Polish.** Not started. Team Finish Error/Flags workflow, Ballots stub,
 ClubContacts, RankingWeightConfig UI, background-job infra for recompute/weekly jobs,

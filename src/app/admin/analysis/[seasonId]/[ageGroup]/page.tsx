@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { BUCKET_THRESHOLDS } from "@/lib/rating/fieldStrength";
+import { computeDivisionWeightsForPartition } from "@/lib/rating/computeMatchDivisionWeights";
 import { tableClass, thClass, tdClass } from "@/lib/ui";
 
 /**
@@ -11,6 +12,16 @@ import { tableClass, thClass, tdClass } from "@/lib/ui";
  * justification UI: staff can sanity-check one division's suggestion against every
  * other division's in the same age group, the way the legacy Analysis screen let them
  * eyeball Top5/10/25/.../250 counts across events.
+ *
+ * "Elo Weight" is a separate, live-computed column, not part of the persisted
+ * DivisionScoringSnapshot: computeDivisionWeightsForPartition() (see
+ * computeMatchDivisionWeights.ts) is the same Colley-only rank transform Elo
+ * recompute uses to weight a division's matches, exposed here so staff can see how a
+ * division will actually affect Elo before/without running a recompute. Deliberately
+ * distinct from Band/Pctl above it, which is sometimes Elo/DCI-based depending on the
+ * division's own match coverage -- the two numbers answer different questions
+ * ("what point curve fits this field" vs. "how much should a result here move Elo")
+ * and won't generally match.
  */
 export default async function AnalysisPage({
   params,
@@ -36,6 +47,8 @@ export default async function AnalysisPage({
     orderBy: [{ event: { startDate: "asc" } }, { name: "asc" }],
   });
 
+  const eloWeights = await computeDivisionWeightsForPartition(seasonId, ageGroup);
+
   return (
     <div>
       <div className="mb-2 text-sm text-slate-500">
@@ -60,6 +73,7 @@ export default async function AnalysisPage({
               <th className={thClass}>Elite %</th>
               <th className={thClass}>Pctl</th>
               <th className={thClass}>Band</th>
+              <th className={thClass}>Elo Weight</th>
               {BUCKET_THRESHOLDS.map((t) => (
                 <th key={t} className={thClass}>
                   Top {t}
@@ -107,6 +121,7 @@ export default async function AnalysisPage({
                       : "—"}
                   </td>
                   <td className={tdClass}>{snapshot?.scoreBand ?? "—"}</td>
+                  <td className={tdClass}>{eloWeights.get(division.id)?.toFixed(3) ?? "—"}</td>
                   {BUCKET_THRESHOLDS.map((t) => (
                     <td key={t} className={tdClass}>
                       {bucketCounts[String(t)] ?? "—"}
@@ -118,7 +133,7 @@ export default async function AnalysisPage({
             })}
             {divisions.length === 0 && (
               <tr>
-                <td className={tdClass} colSpan={10 + BUCKET_THRESHOLDS.length}>
+                <td className={tdClass} colSpan={11 + BUCKET_THRESHOLDS.length}>
                   No divisions found for this season/age group.
                 </td>
               </tr>

@@ -1,0 +1,89 @@
+import { prisma } from "@/lib/prisma";
+import { getPartitionMatches } from "./computeEloRatings";
+import { buildMasseyMatches, solveMassey } from "./massey";
+
+/**
+ * Recomputes Massey ratings for one (season, ageGroup) partition as of asOfDate, and
+ * persists a weekly TeamRatingHistory snapshot dated weekEndingDate, mirroring
+ * computeEloRatingsForPartition()'s pattern exactly (same getPartitionMatches, same
+ * delete-and-replace transaction) but with the batch least-squares Massey solve in
+ * place of Elo's sequential replay.
+ *
+ * Like Elo, Massey has no standings-inferred fallback: it only exists once real
+ * match-level point scores do, so a division with only finish ranks (no imported
+ * Match rows) contributes nothing here.
+ *
+ * solveMassey() returns a rating for every team in the match graph, including any
+ * team playing up from another age group (see getPartitionMatches's own comment) --
+ * filtered out via relevantTeamIds before ranking/persisting, same as
+ * computeEloRatingsForPartition.
+ */
+export async function computeMasseyRatingsForPartition(
+  seasonId: string,
+  ageGroup: number,
+  asOfDate: Date,
+  weekEndingDate: Date,
+) {
+  const { matches, relevantTeamIds } = await getPartitionMatches(seasonId, ageGroup, asOfDate);
+  const masseyMatches = buildMasseyMatches(
+    matches.map((m) => ({
+      teamAId: m.teamAId,
+      teamBId: m.teamBId,
+      setScores: Array.isArray(m.setScores) ? (m.setScores as unknown as { a: number; b: number }[]) : [],
+    })),
+  );
+  const ratings = solveMassey(masseyMatches).filter((r) => relevantTeamIds.has(r.teamId));
+
+  ratings.sort((a, b) => b.rating - a.rating);
+  let rank = 0;
+  let lastRating: number | null = null;
+  const ranked = ratings.map((r, i) => {
+    if (r.rating !== lastRating) {
+      rank = i + 1;
+      lastRating = r.rating;
+    }
+    return { ...r, rank };
+  });
+
+  await prisma.$transaction(async (tx) => {
+    await tx.teamRatingHistory.deleteMany({
+      where: { seasonId, ageGroup, weekEndingDate, ratingEngine: "MASSEY" },
+    });
+    for (const r of ranked) {
+      await tx.teamRatingHistory.create({
+        data: {
+          teamId: r.teamId,
+          seasonId,
+          ageGroup,
+          weekEndingDate,
+          ratingEngine: "MASSEY",
+          rating: r.rating,
+          rank: r.rank,
+          comparisons: r.comparisons,
+        },
+      });
+    }
+  });
+
+  return ranked;
+}
+
+/** Recomputes Massey ratings for every distinct ageGroup with a TeamSeason row this season. */
+export async function computeMasseyRatingsForSeason(
+  seasonId: string,
+  asOfDate: Date = new Date(),
+  weekEndingDate: Date = new Date(),
+) {
+  const teamSeasons = await prisma.teamSeason.findMany({
+    where: { seasonId },
+    select: { ageGroup: true },
+    distinct: ["ageGroup"],
+  });
+
+  const results = new Map<number, Awaited<ReturnType<typeof computeMasseyRatingsForPartition>>>();
+  for (const { ageGroup } of teamSeasons) {
+    const ranked = await computeMasseyRatingsForPartition(seasonId, ageGroup, asOfDate, weekEndingDate);
+    results.set(ageGroup, ranked);
+  }
+  return results;
+}
