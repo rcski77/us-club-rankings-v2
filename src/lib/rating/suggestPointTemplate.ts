@@ -35,6 +35,29 @@ export function scoreBandForPercentile(percentile: number): ScoreBand {
   return SCORE_BAND_CUTOFFS.find((c) => percentile >= c.min)!.band;
 }
 
+/**
+ * Placeholder blend weight -- not calibrated against real historical data (see
+ * docs/plan.md Open Question 5). Revisit during Phase 4 calibration.
+ */
+export const ELITE_PRESENCE_BLEND_WEIGHT = 0.5;
+
+/**
+ * Blends the raw FSS percentile with Elite Presence % (see fieldStrength.ts) into the
+ * effective score that drives scoreBandForPercentile()/suggestTemplate() -- this is
+ * what lets a large-but-truly-elite field (e.g. Triple Crown NIT) rate as strong even
+ * though its FSS alone, diluted by field depth, would not. Falls back to the raw FSS
+ * percentile when elitePresence is null (no elite teams in the population yet), since
+ * there's nothing to blend.
+ */
+export function blendPercentileWithElitePresence(
+  fssPercentile: number,
+  elitePresence: number | null,
+  weight: number = ELITE_PRESENCE_BLEND_WEIGHT,
+): number {
+  if (elitePresence === null) return fssPercentile;
+  return fssPercentile * (1 - weight) + elitePresence * weight;
+}
+
 export type TemplateOption = { id: string; maxPoints: number };
 
 /**

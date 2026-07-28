@@ -391,13 +391,29 @@ model DivisionScoringSnapshot {
   divisionId String
   division   Division @relation(fields: [divisionId], references: [id], onDelete: Cascade)
 
+  ratingEngineUsed String? // "ELO" | "COLLEY" -- which pipeline produced fss/elitePresence/
+  // percentile below (see computeDivisionScoringSuggestion.ts). ELO (the DCI blend,
+  // see dci.ts) is used once a division's teams have Elo ratings (imported Match
+  // data); COLLEY (the original FSS/elitePresence blend) is the fallback otherwise.
+  // Null on snapshots created before this field existed.
   teamCount         Int
   ratedTeamCount    Int
   percentTeamsRated Float
-  fss               Float? // null when no team in the field is rated yet (NO_HISTORY)
-  percentile        Float? // FSS's percentile within the full (season, ageGroup) rating
-  // population -- this is what makes the suggestion self-calibrating rather than a
-  // fixed FSS cutoff (see docs/plan.md §2). Null alongside fss.
+  fss               Float? // null when no team in the field is rated yet (NO_HISTORY).
+  // Colley path: mean Colley rating of the top half. Elo path: mean Elo of the top
+  // quartile (DCI's Strength of Field input) -- see ratingEngineUsed.
+  elitePresence Float? // Colley path: % of the population's nationally elite (rank <=
+  // 50) teams present in this division (fieldStrength.ts computeElitePresence),
+  // population-relative. Elo path: % of THIS division's own Elo-rated teams at or
+  // above ELO_ELITE_THRESHOLD (dci.ts computeIntrinsicElitePresence), intrinsic to the
+  // division -- see ratingEngineUsed for which. Null when no elite teams/ratings exist
+  // yet.
+  percentile Float? // FSS's percentile within the full (season, ageGroup) rating
+  // population, blended with elitePresence (see suggestPointTemplate.ts
+  // blendPercentileWithElitePresence for the Colley path, dci.ts computeDci for the
+  // Elo path) -- this is what makes the suggestion self-calibrating rather than a
+  // fixed FSS cutoff (see docs/plan.md §2), and what drives scoreBand/suggestedTemplate
+  // below. Null alongside fss.
   scoreBand   String? // plain-language band, e.g. "Elite field" -- cutoffs TBD, Phase 4
   matchVolume Int // one of the two raw scale-factor inputs (see fieldStrength.ts)
   bucketCounts Json // Record<threshold, count>, mirrors the legacy Analysis screen

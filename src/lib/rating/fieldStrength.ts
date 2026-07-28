@@ -25,6 +25,14 @@ export type ConfidenceWarning = "SMALL_FIELD" | "NO_HISTORY" | "LOW_PERCENT_RATE
 const SMALL_FIELD_TEAM_COUNT = 8;
 const LOW_PERCENT_RATED_THRESHOLD = 0.5;
 
+/**
+ * National-rank cutoff defining the "elite" pool for computeElitePresence() below.
+ * Placeholder, not calibrated (see docs/plan.md Open Question 5) -- picked to match
+ * one of the existing BUCKET_THRESHOLDS so bucketCounts[ELITE_RANK_THRESHOLD] can be
+ * reused as the numerator without a second query.
+ */
+export const ELITE_RANK_THRESHOLD: BucketThreshold = 50;
+
 export type RatedTeam = {
   teamId: string;
   /** The team's latest national (season, ageGroup) Colley rank -- not its rank within this division. */
@@ -82,4 +90,21 @@ export function computeFieldStrength(
   else if (percentTeamsRated < LOW_PERCENT_RATED_THRESHOLD) warnings.push("LOW_PERCENT_RATED");
 
   return { teamCount, ratedTeamCount, percentTeamsRated, fss, bucketCounts, matchVolume, warnings };
+}
+
+/**
+ * Elite Presence % -- what share of the (season, ageGroup) population's nationally
+ * elite teams (rank <= ELITE_RANK_THRESHOLD) showed up in this division. Complements
+ * FSS: a large field's depth can drag FSS's mean-of-top-half down even when nearly
+ * every elite team attended (e.g. Triple Crown NIT vs. a smaller USAV National Open
+ * division) -- this answers "how many of the best teams are here" directly, mirroring
+ * a metric like VolleyLens' "Elite Presence %". Null when no elite teams exist yet in
+ * the population (too early in the season for any TeamRatingHistory rank <= threshold).
+ */
+export function computeElitePresence(
+  eliteTeamsInDivision: number,
+  totalEliteTeamsInPopulation: number,
+): number | null {
+  if (totalEliteTeamsInPopulation === 0) return null;
+  return (eliteTeamsInDivision / totalEliteTeamsInPopulation) * 100;
 }

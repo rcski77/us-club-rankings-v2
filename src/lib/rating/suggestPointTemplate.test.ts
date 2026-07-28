@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  blendPercentileWithElitePresence,
   computeFssPercentile,
   scoreBandForPercentile,
   suggestTemplate,
@@ -31,6 +32,28 @@ describe("scoreBandForPercentile", () => {
 
   it("bands exactly at a cutoff into the higher band", () => {
     expect(scoreBandForPercentile(70)).toBe("Strong regional");
+  });
+});
+
+describe("blendPercentileWithElitePresence", () => {
+  it("falls back to the raw FSS percentile when elitePresence is null", () => {
+    expect(blendPercentileWithElitePresence(40, null)).toBe(40);
+  });
+
+  it("blends FSS percentile and elite presence at the given weight", () => {
+    // default weight 0.5: (40 + 98) / 2 = 69
+    expect(blendPercentileWithElitePresence(40, 98)).toBe(69);
+  });
+
+  it("lets a high elite presence lift a field-depth-diluted FSS percentile", () => {
+    // a large field's FSS percentile alone (40) undersells it once its elite
+    // presence (98%) is blended in -- this is the NIT case.
+    const blended = blendPercentileWithElitePresence(40, 98);
+    expect(blended).toBeGreaterThan(40);
+  });
+
+  it("supports a custom blend weight", () => {
+    expect(blendPercentileWithElitePresence(40, 100, 0.25)).toBe(55);
   });
 });
 

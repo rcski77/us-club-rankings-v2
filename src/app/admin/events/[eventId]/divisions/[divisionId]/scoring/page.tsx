@@ -86,10 +86,22 @@ export default async function DivisionScoringPage({
       {snapshot && (
         <>
           <section className="mb-8 grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
-            <div className="text-slate-500">Field Strength Score</div>
-            <div>{snapshot.fss !== null ? snapshot.fss.toFixed(3) : "—"}</div>
+            <div className="text-slate-500">Rating engine</div>
+            <div>{snapshot.ratingEngineUsed ?? "—"}</div>
 
-            <div className="text-slate-500">Percentile</div>
+            <div className="text-slate-500">Field Strength Score</div>
+            <div>
+              {snapshot.fss !== null
+                ? snapshot.ratingEngineUsed === "ELO"
+                  ? snapshot.fss.toFixed(0)
+                  : snapshot.fss.toFixed(3)
+                : "—"}
+            </div>
+
+            <div className="text-slate-500">Elite Presence</div>
+            <div>{snapshot.elitePresence !== null ? `${snapshot.elitePresence.toFixed(0)}%` : "—"}</div>
+
+            <div className="text-slate-500">Percentile (blended)</div>
             <div>{snapshot.percentile !== null ? `${snapshot.percentile.toFixed(0)}th` : "—"}</div>
 
             <div className="text-slate-500">Score band</div>
@@ -203,7 +215,9 @@ export default async function DivisionScoringPage({
                 <thead>
                   <tr>
                     <th className={thClass}>Run date</th>
+                    <th className={thClass}>Engine</th>
                     <th className={thClass}>FSS</th>
+                    <th className={thClass}>Elite %</th>
                     <th className={thClass}>Percentile</th>
                     <th className={thClass}>Band</th>
                     <th className={thClass}>Suggested template</th>
@@ -217,7 +231,17 @@ export default async function DivisionScoringPage({
                         {s.createdAt.toLocaleDateString()} {s.createdAt.toLocaleTimeString()}
                         {s.id === snapshot.id ? " (current)" : ""}
                       </td>
-                      <td className={tdClass}>{s.fss !== null ? s.fss.toFixed(3) : "—"}</td>
+                      <td className={tdClass}>{s.ratingEngineUsed ?? "—"}</td>
+                      <td className={tdClass}>
+                        {s.fss !== null
+                          ? s.ratingEngineUsed === "ELO"
+                            ? s.fss.toFixed(0)
+                            : s.fss.toFixed(3)
+                          : "—"}
+                      </td>
+                      <td className={tdClass}>
+                        {s.elitePresence !== null ? `${s.elitePresence.toFixed(0)}%` : "—"}
+                      </td>
                       <td className={tdClass}>
                         {s.percentile !== null ? `${s.percentile.toFixed(0)}th` : "—"}
                       </td>
