@@ -51,6 +51,7 @@ preference, non-negotiable.
 | 4 | Cross-season bootstrapping and calibration | Not started |
 | 5 | Tier 2 upgrade (Elo + Massey from real match data) | In progress (MATCH_RESULTS import ✅; Elo engine ✅; Massey not started) |
 | 6 | Polish — flags, ballots, weight config, background jobs, hosting | Not started |
+| 7 | Club-level ranking (new tier, alongside existing team ranking) | Not started — methodology scoped from legacy site, see §8 |
 
 **Where things actually stand right now:** a fully working admin app for hand-operated
 season management — create a season, clubs, teams (enrolled per-season via
@@ -706,15 +707,71 @@ event can be large (e.g. the 352-row USAV Nationals sample spans 6 tiers).
     handling) should be reviewed before writing Phase 5's Match Results fetcher.
 12. `miva-data` (a sibling repo in this workspace) contains MIVA match/team results —
     a possible 5th data source beyond the named four, not yet scoped into this plan.
-13. **Club ranking (future phase, not yet scoped/sequenced)**: a club-level ranking
-    is planned in addition to the existing team-level (best-3-of-season) ranking, with
-    its own methodology — explicitly *not* a copy of VolleyLens' Elo-blended club
-    score. **Needs to be scoped out**: the existing (legacy/v1) methodology, published
-    at https://www.usclubrankings.com/methodology.html, is the intended starting point
-    to carry forward here — not yet reviewed/translated into a design for this rebuild.
-    Not yet designed; will need its own phase entry once methodology is scoped.
-    Related need identified 2026-07-27: a way to designate multiple
-    `Club.externalCode`s (e.g. a club that changed/re-registered its AES code across
-    seasons, or fields under more than one code) as the *same* club for club-ranking
-    purposes — some kind of club-alias/grouping mechanism, needed once club rankings
-    are actually built.
+13. **Club ranking (Phase 7, not yet built)** — methodology scoped from the legacy
+    site; design questions the source page leaves unanswered are listed in §8. See §8
+    for the full writeup.
+
+---
+
+## 8. Club Ranking (Phase 7 — methodology scoped, not built)
+
+A club-level ranking, alongside the existing team-level (best-3-of-season points)
+ranking. Per explicit user direction (2026-07-27), this carries forward the
+**existing/legacy US Club Rankings methodology**
+(https://www.usclubrankings.com/methodology.html) rather than a from-scratch design —
+this section is that page's methodology as published, translated into this project's
+terms, plus the gaps it leaves that need a decision before implementation.
+
+**As published, the methodology is (with source ambiguities resolved by explicit user
+decision on 2026-07-27 — see each point):**
+
+1. **Eligibility**: a club qualifies for National Club Rankings only if it has "at
+   least 3 teams in different age groups ranked in the top 100 of the National
+   Rankings" — **top 100 is per age group** (13U/14U/.../18U each evaluated
+   separately against the existing team-level `RankingResult`, not top 100 overall
+   across all age groups combined — resolves the source page's ambiguity here).
+   **Under-qualified clubs are still ranked, but demoted below the fully-qualified
+   group**: a club with only 1 or 2 teams (instead of the required 3+) in different
+   age groups' top 100 can still appear in the club rankings and still gets a score
+   computed the normal way (§8.2-4), but is sorted after every club that does meet the
+   3-teams-in-top-100 bar, regardless of raw score — i.e. this is a two-tier sort
+   (qualified-by-count first, ordered by score; under-qualified second, ordered by
+   score within that group), not a hard exclusion.
+2. **Per-age-group raw score**: take the club's *highest-ranked team only* in each age
+   division (not all of the club's teams in that age group) — that team's rank maps
+   to points on a **strictly linear** descending scale, one point per rank, with no
+   floor: 1st=100, 2nd=99, 3rd=98, 4th=97, 5th=96, 6th=95, 7th=94, ... i.e.
+   `points = 101 - rank`. **Ties share the tied place's point value** — e.g. two teams
+   tied for 5th both score 96, matching the existing competition-style tie handling
+   already used for `TeamFinish`/`RankingResult` (§4).
+3. **Age-group weighting**: raw points × weight. **Decision: use the 2025 weighting
+   — all six age groups (13U through 18U) weighted equally at 20%** — not the 2024
+   scheme, and not built as a season-versioned/admin-editable config for now (the
+   site's own 2024→2025 change is historical context, not a requirement to support
+   arbitrary future weight sets from day one).
+4. **Final club score**: sum the weighted per-age-group scores, but **drop the club's
+   lowest of the six age-group scores** before summing — i.e. best-5-of-6, the
+   club-level analog of the existing team-level best-3-of-season rule (§4). This
+   resolves the source page's "14's to 18's" phrasing: rather than hardcoding an
+   exclusion of 13U, 13U is included in the pool of six and simply is (or isn't) the
+   one that gets dropped, based on its actual score that season.
+
+**Design implications for this codebase** (not yet built — sketch only):
+- Needs a new `ClubRankingResult`-style materialized table (mirrors the existing
+  `RankingResult`/`RankingResultContribution` pattern — recomputed on trigger, not
+  per page view, and should similarly record which 5 of 6 age-group scores counted
+  and which one was dropped, for the same "here's what didn't count" transparency
+  `RankingResultContribution` gives at the team level), scoped per `(season)`. Needs a
+  field capturing whether the club met the 3-teams-in-top-100 bar (e.g. `isQualified`),
+  since rank order is qualified-clubs-by-score first, under-qualified-clubs-by-score
+  second — not a single global score sort.
+- No new age-group-weight config needed for v1 — 20%-flat is a fixed constant per the
+  decision above, not a UI to build.
+- Still depends on the not-yet-built club-alias/grouping mechanism (§7 item 13): a
+  club that changed or holds multiple `Club.externalCode`s needs to be treated as one
+  club for this rollup, or its teams' top finishes will be split across "different"
+  clubs and undercount.
+- The "highest-ranked team only per age group" rule means this is cheap to compute
+  from data already in `RankingResult` — no new team-level computation needed, just a
+  club-level rollup/aggregation over it, plus the linear-with-ties point mapping and
+  the drop-lowest-of-6 step.
