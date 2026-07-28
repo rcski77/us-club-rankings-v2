@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { redirect } from "next/navigation";
 import { selectClass, primaryButtonClass, secondaryButtonClass, successBannerClass } from "@/lib/ui";
 import { computeColleyRatingsForSeason } from "@/lib/rating/computeColleyRatings";
+import { computeEloRatingsForSeason } from "@/lib/rating/computeEloRatings";
 
 async function goToRating(formData: FormData) {
   "use server";
@@ -11,12 +12,20 @@ async function goToRating(formData: FormData) {
   redirect(`/admin/power-rankings/${seasonId}/${ageGroup}`);
 }
 
-async function recompute(formData: FormData) {
+async function recomputeColley(formData: FormData) {
   "use server";
   const seasonId = String(formData.get("seasonId") ?? "");
   if (!seasonId) redirect("/admin/power-rankings");
   await computeColleyRatingsForSeason(seasonId);
-  redirect(`/admin/power-rankings?recomputed=1`);
+  redirect(`/admin/power-rankings?recomputed=colley`);
+}
+
+async function recomputeElo(formData: FormData) {
+  "use server";
+  const seasonId = String(formData.get("seasonId") ?? "");
+  if (!seasonId) redirect("/admin/power-rankings");
+  await computeEloRatingsForSeason(seasonId);
+  redirect(`/admin/power-rankings?recomputed=elo`);
 }
 
 const AGE_GROUPS = [12, 13, 14, 15, 16, 17, 18];
@@ -32,10 +41,15 @@ export default async function PowerRankingsIndexPage({
 
   return (
     <div>
-      <h1 className="mb-6 text-2xl font-semibold">Power Rankings (Colley)</h1>
+      <h1 className="mb-6 text-2xl font-semibold">Power Rankings</h1>
 
-      {recomputed === "1" && (
-        <p className={successBannerClass}>Ratings recomputed for every age group in this season.</p>
+      {recomputed === "colley" && (
+        <p className={successBannerClass}>Colley ratings recomputed for every age group in this season.</p>
+      )}
+      {recomputed === "elo" && (
+        <p className={successBannerClass}>
+          Elo ratings recomputed for every age group in this season, from imported Match results.
+        </p>
       )}
 
       {seasons.length === 0 ? (
@@ -68,7 +82,7 @@ export default async function PowerRankingsIndexPage({
             </button>
           </form>
 
-          <form action={recompute} className="flex items-end gap-3 border-t pt-4">
+          <form action={recomputeColley} className="flex items-end gap-3 border-t pt-4">
             <label className="flex flex-col gap-1 text-sm">
               Recompute season
               <select name="seasonId" className={selectClass} defaultValue={activeSeason?.id}>
@@ -80,11 +94,31 @@ export default async function PowerRankingsIndexPage({
               </select>
             </label>
             <button type="submit" className={secondaryButtonClass}>
-              Recompute ratings
+              Recompute Colley ratings
             </button>
             <p className="text-xs text-slate-500">
               Runs the Colley solve for every age group with enrolled teams, from all CONFIRMED
               finishes to date.
+            </p>
+          </form>
+
+          <form action={recomputeElo} className="flex items-end gap-3 border-t pt-4">
+            <label className="flex flex-col gap-1 text-sm">
+              Recompute season
+              <select name="seasonId" className={selectClass} defaultValue={activeSeason?.id}>
+                {seasons.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button type="submit" className={secondaryButtonClass}>
+              Recompute Elo ratings
+            </button>
+            <p className="text-xs text-slate-500">
+              Replays every imported Match result chronologically, for every age group with
+              enrolled teams. Divisions with no imported matches contribute nothing yet.
             </p>
           </form>
         </div>

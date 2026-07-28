@@ -13,6 +13,7 @@ import {
   smallSecondaryButtonClass,
   errorBannerClass,
 } from "@/lib/ui";
+import { getTeamEloHistory } from "@/lib/rating/computeEloRatings";
 
 async function updateTeam(teamId: string, formData: FormData) {
   "use server";
@@ -129,6 +130,14 @@ export default async function TeamDetailPage({
 
   const finishesForSeason = team.finishes.filter((f) => f.division.event.season.id === activeSeasonId);
   const matchesForSeason = matches.filter((m) => m.event.season.id === activeSeasonId);
+
+  // Sequential, not Promise.all -- see docs/dev-environment.md. [] when the team has
+  // no TeamSeason row for activeSeasonId (no natural age group to resolve from) or no
+  // rated matches yet. Keyed by matchId so the Match Results table below can look up
+  // "does this match have Elo data" per row rather than rendering two separate,
+  // largely-duplicate match lists.
+  const eloHistory = activeSeasonId ? await getTeamEloHistory(teamId, activeSeasonId) : [];
+  const eloByMatchId = new Map(eloHistory.map((h) => [h.matchId, h]));
 
   const updateTeamWithId = updateTeam.bind(null, teamId);
   const addTeamSeasonWithId = addTeamSeason.bind(null, teamId);
@@ -361,63 +370,114 @@ export default async function TeamDetailPage({
             (Match Results type).
           </p>
         ) : (
-          <table className={tableClass}>
-            <thead>
-              <tr>
-                <th className={thClass}>Date</th>
-                <th className={thClass}>Event</th>
-                <th className={thClass}>Division</th>
-                <th className={thClass}>Opponent</th>
-                <th className={thClass}>Sets</th>
-                <th className={thClass}>Result</th>
-                <th className={thClass}>Stage</th>
-              </tr>
-            </thead>
-            <tbody>
-              {matchesForSeason.map((m) => (
-                <tr key={m.id}>
-                  <td className={tdClass}>
-                    {m.matchDate ? m.matchDate.toISOString().slice(0, 10) : ""}
-                  </td>
-                  <td className={tdClass}>
-                    <Link href={`/admin/events/${m.eventId}`} className="text-slate-900 underline">
-                      {m.event.name}
-                    </Link>
-                  </td>
-                  <td className={tdClass}>{m.division?.name ?? ""}</td>
-                  <td className={tdClass}>
-                    {m.opponent ? (
-                      <Link href={`/admin/teams/${m.opponent.id}`} className="text-slate-900 underline">
-                        {m.opponent.name}
-                      </Link>
-                    ) : (
-                      <span className="text-slate-400">(unresolved)</span>
-                    )}
-                  </td>
-                  <td className={tdClass}>
-                    {m.thisTeamSets}-{m.opponentSets}
-                  </td>
-                  <td className={tdClass}>
-                    {m.winnerTeamId ? (
-                      <span className={m.wonByThisTeam ? "font-medium text-green-700" : "text-red-700"}>
-                        {m.wonByThisTeam ? "Win" : "Loss"}
+          <div className="flex flex-col gap-2">
+            {matchesForSeason.map((m) => {
+              const elo = eloByMatchId.get(m.id);
+              return (
+                <details key={m.id} className="rounded border border-slate-200">
+                  <summary className="flex cursor-pointer list-none flex-wrap items-center gap-4 px-3 py-2 text-sm">
+                    <span className="w-24 shrink-0 text-slate-500">
+                      {m.matchDate ? m.matchDate.toISOString().slice(0, 10) : ""}
+                    </span>
+                    <span className="text-slate-500">{m.event.name}</span>
+                    <span className="text-slate-500">{m.division?.name ?? ""}</span>
+                    <span className={m.opponent ? "font-medium text-slate-900" : "font-medium text-slate-400"}>
+                      {m.opponent?.name ?? "(unresolved)"}
+                    </span>
+                    <span className="text-slate-500">
+                      {m.thisTeamSets}-{m.opponentSets}
+                    </span>
+                    {m.winnerTeamId && (
+                      <span
+                        className={`rounded px-1.5 py-0.5 text-xs font-semibold text-white ${
+                          m.wonByThisTeam ? "bg-green-600" : "bg-red-600"
+                        }`}
+                      >
+                        {m.wonByThisTeam ? "W" : "L"}
                       </span>
-                    ) : (
-                      ""
                     )}
-                  </td>
-                  <td className={tdClass}>{m.stage ?? ""}</td>
-                </tr>
-              ))}
-              {matchesForSeason.length === 0 && (
-                <tr>
-                  <td className={tdClass} colSpan={7}>
-                    No match results for this season.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+                    {elo ? (
+                      <>
+                        <span className="ml-auto font-mono text-xs text-slate-500">
+                          {elo.ratingBefore.toFixed(0)} → {elo.ratingAfter.toFixed(0)}
+                        </span>
+                        <span
+                          className={`w-14 text-right font-mono text-xs font-semibold ${
+                            elo.delta >= 0 ? "text-green-700" : "text-red-700"
+                          }`}
+                        >
+                          {elo.delta >= 0 ? "+" : ""}
+                          {elo.delta.toFixed(0)}
+                        </span>
+                      </>
+                    ) : (
+                      <span className="ml-auto text-xs text-slate-400">No Elo data</span>
+                    )}
+                  </summary>
+                  <div className="border-t border-slate-200 bg-slate-50 px-3 py-3 text-sm">
+                    <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-xs">
+                      <div className="flex justify-between">
+                        <span className="text-slate-500">Opponent</span>
+                        <span>
+                          {m.opponent ? (
+                            <Link href={`/admin/teams/${m.opponent.id}`} className="underline">
+                              {m.opponent.name}
+                            </Link>
+                          ) : (
+                            "(unresolved)"
+                          )}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-slate-500">Stage</span>
+                        <span>{m.stage ?? "—"}</span>
+                      </div>
+                      {elo && (
+                        <>
+                          <div className="flex justify-between">
+                            <span className="text-slate-500">Rating</span>
+                            <span>
+                              {elo.ratingBefore.toFixed(0)} → {elo.ratingAfter.toFixed(0)}
+                            </span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-slate-500">Opponent rating</span>
+                            <span>{elo.opponentRatingBefore.toFixed(0)}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-slate-500">Win expectation</span>
+                            <span>{(elo.expected * 100).toFixed(0)}%</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-slate-500">Matchup volatility (K)</span>
+                            <span>{elo.k}</span>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                    {elo ? (
+                      <p className="mt-2 text-xs text-slate-600">
+                        <span className="font-medium">Why your Elo changed: </span>
+                        {elo.explanation}
+                      </p>
+                    ) : (
+                      <p className="mt-2 text-xs text-slate-400">
+                        This match isn&apos;t part of the current Elo rating graph yet — run
+                        &quot;Recompute Elo ratings&quot; from{" "}
+                        <Link href="/admin/power-rankings" className="underline">
+                          Power Rankings
+                        </Link>
+                        .
+                      </p>
+                    )}
+                  </div>
+                </details>
+              );
+            })}
+            {matchesForSeason.length === 0 && (
+              <p className="text-sm text-slate-500">No match results for this season.</p>
+            )}
+          </div>
         )}
       </section>
     </div>
