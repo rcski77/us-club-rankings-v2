@@ -464,8 +464,8 @@ export default async function TeamDetailPage({
                       <p className="mt-2 text-xs text-slate-400">
                         This match isn&apos;t part of the current Elo rating graph yet — run
                         &quot;Recompute Elo ratings&quot; from{" "}
-                        <Link href="/admin/power-rankings" className="underline">
-                          Power Rankings
+                        <Link href="/admin/team-rankings" className="underline">
+                          Team Rankings
                         </Link>
                         .
                       </p>

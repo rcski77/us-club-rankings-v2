@@ -351,6 +351,7 @@ model RankingResult {
 enum RatingEngine {
   COLLEY
   ELO
+  MASSEY
 }
 
 model TeamRatingHistory {

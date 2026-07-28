@@ -12,6 +12,11 @@ export type EloMatch = {
   matchDate: Date;
   setsA: number;
   setsB: number;
+  /** K-factor multiplier for the match's division strength (see divisionWeight.ts).
+   * Defaults to 1 (neutral) if omitted -- elo.ts stays domain-agnostic about *why*
+   * this number is what it is, the same way it doesn't know why setsA/setsB are what
+   * they are. */
+  divisionWeight?: number;
 };
 
 /** Same shape, plus the source Match's id -- needed to correlate a per-match rating
@@ -41,6 +46,7 @@ export type EloStep = {
   kA: number;
   kB: number;
   multiplier: number;
+  divisionWeight: number;
 };
 
 const DEFAULT_RATING = 1500;
@@ -81,7 +87,7 @@ function replay(matches: EloMatchWithId[]): EloStep[] {
   const steps: EloStep[] = [];
 
   for (const m of sorted) {
-    const { id, teamAId, teamBId, winnerTeamId, setsA, setsB, matchDate } = m;
+    const { id, teamAId, teamBId, winnerTeamId, setsA, setsB, matchDate, divisionWeight = 1 } = m;
     const ratingABefore = getRating(teamAId);
     const ratingBBefore = getRating(teamBId);
     const expectedA = expectedScore(ratingABefore, ratingBBefore);
@@ -93,8 +99,8 @@ function replay(matches: EloMatchWithId[]): EloStep[] {
     const kA = getCount(teamAId) < PROVISIONAL_MATCH_THRESHOLD ? PROVISIONAL_K : BASE_K;
     const kB = getCount(teamBId) < PROVISIONAL_MATCH_THRESHOLD ? PROVISIONAL_K : BASE_K;
 
-    const ratingAAfter = ratingABefore + kA * multiplier * (scoreA - expectedA);
-    const ratingBAfter = ratingBBefore + kB * multiplier * (1 - scoreA - (1 - expectedA));
+    const ratingAAfter = ratingABefore + kA * multiplier * divisionWeight * (scoreA - expectedA);
+    const ratingBAfter = ratingBBefore + kB * multiplier * divisionWeight * (1 - scoreA - (1 - expectedA));
 
     ratings.set(teamAId, ratingAAfter);
     ratings.set(teamBId, ratingBAfter);
@@ -117,6 +123,7 @@ function replay(matches: EloMatchWithId[]): EloStep[] {
       kA,
       kB,
       multiplier,
+      divisionWeight,
     });
   }
 
@@ -172,6 +179,9 @@ export function buildEloMatches(
     matchDate: Date | null;
     setsA: number;
     setsB: number;
+    /** Passed through as-is if present -- see computeMatchDivisionWeights.ts, which
+     * attaches this to the raw match row before it reaches here. */
+    divisionWeight?: number;
   }[],
 ): EloMatchWithId[] {
   const result: EloMatchWithId[] = [];
@@ -185,6 +195,7 @@ export function buildEloMatches(
       matchDate: m.matchDate,
       setsA: m.setsA,
       setsB: m.setsB,
+      divisionWeight: m.divisionWeight,
     });
   }
   return result;

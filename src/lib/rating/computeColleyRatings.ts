@@ -17,6 +17,23 @@ import { buildDivisionComparisons, buildMatchComparisons, solveColley } from "./
  * divisions won't have Match rows yet. This is a per-division, not per-team or
  * per-match, decision: a division with any completed Match rows uses match results
  * exclusively (not a mix of the two signals for the same division).
+ *
+ * The standings fallback additionally requires the division's scoringStatus to be
+ * CONFIRMED -- a TeamFinish's rank is still editable up until then (see
+ * addTeamFinish/removeTeamFinish/updateTeamFinishRank), so rank-inferred comparisons
+ * need to wait for it to settle. Real Match results have no such instability (a
+ * separate, non-editable import), so the match-based path is NOT gated on confirm --
+ * a division with real results gets rated as soon as they're imported, independent of
+ * the unrelated point-curve confirmation workflow.
+ *
+ * A division qualifies as "relevant" here as soon as any one team's finish belongs to
+ * this ageGroup, but its match results (buildMatchComparisons) are pulled in for the
+ * whole division -- including a team playing up from another age group -- because an
+ * opponent's true strength should reflect having faced that team. solveColley()
+ * therefore returns a rating for that playing-up team too; it's filtered out via
+ * relevantTeamIds before ranking/persisting, or it would end up with its own rating
+ * recorded under the wrong ageGroup (e.g. a 15u team appearing in the 17u power
+ * rankings).
  */
 export async function computeColleyRatings(
   seasonId: string,
@@ -26,10 +43,7 @@ export async function computeColleyRatings(
 ) {
   const finishes = await prisma.teamFinish.findMany({
     where: {
-      division: {
-        event: { seasonId, startDate: { lte: asOfDate } },
-        scoringStatus: "CONFIRMED",
-      },
+      division: { event: { seasonId, startDate: { lte: asOfDate } } },
     },
     include: { division: true },
   });
@@ -42,6 +56,7 @@ export async function computeColleyRatings(
       (f.division.ageGroup === ageGroup && !f.ignoreAge) ||
       (f.ignoreAge && naturalAgeGroup.get(f.teamId) === ageGroup),
   );
+  const relevantTeamIds = new Set(relevant.map((f) => f.teamId));
 
   const byDivision = new Map<string, typeof relevant>();
   for (const finish of relevant) {
@@ -66,11 +81,11 @@ export async function computeColleyRatings(
 
   const comparisons = Array.from(byDivision.entries()).flatMap(([divisionId, finishes]) => {
     const divisionMatches = matchesByDivision.get(divisionId);
-    return divisionMatches && divisionMatches.length > 0
-      ? buildMatchComparisons(divisionMatches)
-      : buildDivisionComparisons(finishes);
+    if (divisionMatches && divisionMatches.length > 0) return buildMatchComparisons(divisionMatches);
+    const isConfirmed = finishes[0]?.division.scoringStatus === "CONFIRMED";
+    return isConfirmed ? buildDivisionComparisons(finishes) : [];
   });
-  const ratings = solveColley(comparisons);
+  const ratings = solveColley(comparisons).filter((r) => relevantTeamIds.has(r.teamId));
 
   ratings.sort((a, b) => b.rating - a.rating);
   let rank = 0;

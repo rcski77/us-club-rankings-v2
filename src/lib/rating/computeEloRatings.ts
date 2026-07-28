@@ -5,6 +5,7 @@ import {
   computeEloRatings as solveElo,
   explainEloChange,
 } from "./elo";
+import { computeMatchDivisionWeights } from "./computeMatchDivisionWeights";
 
 /**
  * Gathers the same match set computeEloRatingsForPartition() rates from -- every
@@ -12,15 +13,34 @@ import {
  * TeamFinish in this (season, ageGroup) partition, up to asOfDate. Factored out so
  * getTeamEloHistory() can replay the identical graph a team's rating actually came
  * from, not a narrower "just this team's matches" slice (Elo's replay is
- * order/graph-dependent -- see elo.ts).
+ * order/graph-dependent -- see elo.ts). Exported so computeMasseyRatings.ts can reuse
+ * the same partition/ignoreAge resolution rather than re-deriving it a third time.
+ *
+ * Also returns `relevantTeamIds` -- the set of teams whose *own* natural age group is
+ * this partition's ageGroup. A division qualifies as relevant here as soon as any one
+ * team's finish belongs to this ageGroup, but every match in that division is
+ * returned (not just that team's), because an opponent's true strength should reflect
+ * having faced a tough team playing up from another age group. That means the match
+ * list alone is not enough to know which teams *belong* to this partition -- callers
+ * that persist or rank results (not just replay history) must filter down to
+ * `relevantTeamIds` first, or a playing-up team ends up with its own rating recorded
+ * under the wrong ageGroup (e.g. a 15u team appearing in the 17u power rankings).
+ *
+ * Deliberately does NOT require the division's scoringStatus to be CONFIRMED. That
+ * gate exists elsewhere (computeColleyRatings.ts) because a division's TeamFinish
+ * rank is still editable up until confirm (see addTeamFinish/removeTeamFinish/
+ * updateTeamFinishRank), so rank-inferred comparisons need to wait for it to settle.
+ * Real Match data has no such instability -- it's a separate, non-editable import
+ * (Phase 5's MATCH_RESULTS type), so Elo/Massey can rate a division's actual results
+ * as soon as they're imported, without waiting on the unrelated point-curve
+ * confirmation workflow. TeamFinish rows still exist pre-confirm (created at import
+ * commit time, before scoring is even suggested), which is all this query needs them
+ * for -- resolving each team's natural age group/ignoreAge, not their rank.
  */
-async function getPartitionMatches(seasonId: string, ageGroup: number, asOfDate: Date) {
+export async function getPartitionMatches(seasonId: string, ageGroup: number, asOfDate: Date) {
   const finishes = await prisma.teamFinish.findMany({
     where: {
-      division: {
-        event: { seasonId, startDate: { lte: asOfDate } },
-        scoringStatus: "CONFIRMED",
-      },
+      division: { event: { seasonId, startDate: { lte: asOfDate } } },
     },
     include: { division: true },
   });
@@ -33,11 +53,12 @@ async function getPartitionMatches(seasonId: string, ageGroup: number, asOfDate:
       (f.division.ageGroup === ageGroup && !f.ignoreAge) ||
       (f.ignoreAge && naturalAgeGroup.get(f.teamId) === ageGroup),
   );
+  const relevantTeamIds = new Set(relevant.map((f) => f.teamId));
 
   const divisionIds = Array.from(new Set(relevant.map((f) => f.divisionId)));
-  if (!divisionIds.length) return [];
+  if (!divisionIds.length) return { matches: [], relevantTeamIds };
 
-  return prisma.match.findMany({
+  const matches = await prisma.match.findMany({
     where: {
       divisionId: { in: divisionIds },
       winnerTeamId: { not: null },
@@ -50,6 +71,19 @@ async function getPartitionMatches(seasonId: string, ageGroup: number, asOfDate:
       teamB: { include: { club: true } },
     },
   });
+
+  return { matches, relevantTeamIds };
+}
+
+type PartitionMatch = Awaited<ReturnType<typeof getPartitionMatches>>["matches"][number];
+
+/** Attaches each match's divisionWeight (see computeMatchDivisionWeights.ts) so
+ * buildEloMatches/solveElo pick it up -- shared by computeEloRatingsForPartition and
+ * getTeamEloHistory so a team's history trace is always consistent with the rating it
+ * explains. */
+async function withDivisionWeights(matches: PartitionMatch[]) {
+  const weights = await computeMatchDivisionWeights(matches);
+  return matches.map((m) => ({ ...m, divisionWeight: m.divisionId ? weights.get(m.divisionId) : undefined }));
 }
 
 /**
@@ -65,6 +99,11 @@ async function getPartitionMatches(seasonId: string, ageGroup: number, asOfDate:
  * path-dependent (see elo.ts), so a full recompute always replays every eligible match
  * from scratch up to asOfDate rather than applying an incremental delta on top of a
  * prior snapshot.
+ *
+ * solveElo() returns a rating for every team in the match graph, which includes any
+ * team playing up from another age group (see getPartitionMatches's own comment) --
+ * those are filtered out via relevantTeamIds before ranking/persisting, so a team only
+ * ever gets a TeamRatingHistory row under its own natural ageGroup.
  */
 export async function computeEloRatingsForPartition(
   seasonId: string,
@@ -72,9 +111,9 @@ export async function computeEloRatingsForPartition(
   asOfDate: Date,
   weekEndingDate: Date,
 ) {
-  const matches = await getPartitionMatches(seasonId, ageGroup, asOfDate);
-  const eloMatches = buildEloMatches(matches);
-  const ratings = solveElo(eloMatches);
+  const { matches, relevantTeamIds } = await getPartitionMatches(seasonId, ageGroup, asOfDate);
+  const eloMatches = buildEloMatches(await withDivisionWeights(matches));
+  const ratings = solveElo(eloMatches).filter((r) => relevantTeamIds.has(r.teamId));
 
   ratings.sort((a, b) => b.rating - a.rating);
   let rank = 0;
@@ -170,10 +209,10 @@ export async function getTeamEloHistory(
   });
   if (!teamSeason) return [];
 
-  const matches = await getPartitionMatches(seasonId, teamSeason.ageGroup, asOfDate);
+  const { matches } = await getPartitionMatches(seasonId, teamSeason.ageGroup, asOfDate);
   const byId = new Map(matches.map((m) => [m.id, m]));
 
-  const steps = computeEloHistory(buildEloMatches(matches));
+  const steps = computeEloHistory(buildEloMatches(await withDivisionWeights(matches)));
   const teamSteps = steps.filter((s) => s.teamAId === teamId || s.teamBId === teamId);
 
   const entries: TeamEloHistoryEntry[] = teamSteps.map((s) => {

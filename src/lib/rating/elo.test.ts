@@ -191,6 +191,39 @@ describe("computeEloRatings", () => {
     expect(byId.get("c")).toBe(1);
   });
 
+  it("gives a bigger rating swing to a higher divisionWeight, all else equal", () => {
+    const base = {
+      teamAId: "a",
+      teamBId: "b",
+      winnerTeamId: "a",
+      matchDate: new Date("2026-01-01"),
+      setsA: 2,
+      setsB: 0,
+    };
+    const weighted = computeEloRatings([{ ...base, divisionWeight: 1.6 }]);
+    const neutral = computeEloRatings([{ ...base, divisionWeight: 1 }]);
+    const weightedGain = weighted.find((r) => r.teamId === "a")!.rating - 1500;
+    const neutralGain = neutral.find((r) => r.teamId === "a")!.rating - 1500;
+    expect(weightedGain).toBeCloseTo(neutralGain * 1.6, 10);
+  });
+
+  it("omitting divisionWeight behaves identically to divisionWeight: 1", () => {
+    const base = {
+      teamAId: "a",
+      teamBId: "b",
+      winnerTeamId: "a",
+      matchDate: new Date("2026-01-01"),
+      setsA: 2,
+      setsB: 0,
+    };
+    const omitted = computeEloRatings([base]);
+    const explicit = computeEloRatings([{ ...base, divisionWeight: 1 }]);
+    expect(omitted.find((r) => r.teamId === "a")!.rating).toBeCloseTo(
+      explicit.find((r) => r.teamId === "a")!.rating,
+      10,
+    );
+  });
+
   it("replays out of chronological input order the same as sorted order", () => {
     const inOrder = [
       {
