@@ -55,7 +55,9 @@ export default async function AnalysisPage({
               <th className={thClass}>Division</th>
               <th className={thClass}>Status</th>
               <th className={thClass}>Teams</th>
+              <th className={thClass}>Engine</th>
               <th className={thClass}>FSS</th>
+              <th className={thClass}>Elite %</th>
               <th className={thClass}>Pctl</th>
               <th className={thClass}>Band</th>
               {BUCKET_THRESHOLDS.map((t) => (
@@ -86,7 +88,19 @@ export default async function AnalysisPage({
                   <td className={tdClass}>
                     {snapshot ? `${snapshot.teamCount} / ${snapshot.ratedTeamCount}` : "—"}
                   </td>
-                  <td className={tdClass}>{snapshot?.fss !== null && snapshot?.fss !== undefined ? snapshot.fss.toFixed(3) : "—"}</td>
+                  <td className={tdClass}>{snapshot?.ratingEngineUsed ?? "—"}</td>
+                  <td className={tdClass}>
+                    {snapshot?.fss !== null && snapshot?.fss !== undefined
+                      ? snapshot.ratingEngineUsed === "ELO"
+                        ? snapshot.fss.toFixed(0)
+                        : snapshot.fss.toFixed(3)
+                      : "—"}
+                  </td>
+                  <td className={tdClass}>
+                    {snapshot?.elitePresence !== null && snapshot?.elitePresence !== undefined
+                      ? `${snapshot.elitePresence.toFixed(0)}%`
+                      : "—"}
+                  </td>
                   <td className={tdClass}>
                     {snapshot?.percentile !== null && snapshot?.percentile !== undefined
                       ? `${snapshot.percentile.toFixed(0)}th`
@@ -104,7 +118,7 @@ export default async function AnalysisPage({
             })}
             {divisions.length === 0 && (
               <tr>
-                <td className={tdClass} colSpan={8 + BUCKET_THRESHOLDS.length}>
+                <td className={tdClass} colSpan={10 + BUCKET_THRESHOLDS.length}>
                   No divisions found for this season/age group.
                 </td>
               </tr>

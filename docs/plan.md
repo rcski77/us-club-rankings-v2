@@ -241,6 +241,41 @@ its unbeaten run at the season-default 1500 with the full provisional K (+24 per
 while under 10 matches), gradually settles toward the base K once past game 10, and
 correctly shows a sharp -17 drop on its one real loss (to Dal Skyline 14 Royal-Erin at
 Triple Crown NIT) with an "upset"-appropriate explanation.
+**Phase 5, fourth slice — Elo-based DCI upgrade to the Phase 3 scoring suggestion —
+done.** New `src/lib/rating/dci.ts` (pure): a "Division Competitiveness Index," an
+Elo-based alternative to the Colley FSS/elitePresence blend, modeled on a competitor
+site's published Tournament Competitiveness Index methodology (Elite Presence 40% /
+Strength of Field 25% / Scale Factor 35%). `ELO_ELITE_THRESHOLD` (1450) and the two
+`SCALE_REFERENCE_*` constants are explicitly uncalibrated placeholders, but checked
+against this project's own real division data rather than guessed — e.g. 1450 (not a
+population-relative percentile cutoff, which would make even the strongest field in
+the country look weak, since Elite Presence is intrinsic to a division's own teams)
+puts both Triple Crown NIT and USAV Nationals 14 Open around 80% while a genuinely
+weaker regional field sits around 68%, a real gap rather than everything clustering
+near 100%. `computeDivisionEloStrength.ts` (Prisma orchestration, the Elo-path analog
+of `computeDivisionFieldStrength.ts`) plus new `computeElitePresence()` (in
+`fieldStrength.ts`) and `blendPercentileWithElitePresence()` (in
+`suggestPointTemplate.ts`) extend the *existing* Colley path with the same Elite
+Presence idea, so a large-but-genuinely-elite field (Triple Crown NIT) isn't undersold
+by FSS's mean-of-top-half alone, which field depth dilutes.
+`computeDivisionScoringSuggestion.ts` now picks the Elo/DCI path over the original
+Colley/FSS path once at least `ELO_COVERAGE_THRESHOLD` (50%) of a division's teams
+have Elo ratings (imported Match data) — mirrors `computeColleyRatings.ts`'s own
+per-division match-vs-standings fallback design, and for the same reason: a handful
+of incidentally-rated teams (3 of 64) shouldn't override the far more complete
+Colley/standings signal with an unrepresentative sample. Elo has no standings-inferred
+fallback of its own (see the Phase 5 second-slice entry above), so a division without
+enough Match data always falls back to Colley. New `DivisionScoringSnapshot` fields
+`ratingEngineUsed` (`"ELO" | "COLLEY"`, null on snapshots predating this field) and
+`elitePresence`. Both `/admin/analysis` and the division scoring-review screen
+(including its History table) show the new Engine/Elite % columns, with FSS displayed
+at the appropriate scale for whichever engine produced it (Colley's 0-1 float vs.
+Elo's ~1500 scale). Verified end-to-end in the browser against real data: Triple Crown
+NIT 14 Open (75 teams, 99% Elo-rated) now scores via the ELO/DCI path — FSS 1637,
+Elite Presence 77%, 83rd percentile, "Strong regional," suggested "215 max" — and its
+History table preserves the division's whole calibration trail, including the
+pre-1450-threshold run that had briefly shown only 15% Elite Presence before the
+threshold was corrected.
 **Not yet built**: Massey engine (Phase 5's remaining scope — see §2/§6), CPI
 activation, Power Rankings switching its default/primary labeling from Colley to Elo
 (both are shown side-by-side today, selectable, neither demoted yet),
@@ -567,6 +602,10 @@ side by side as columns in one merged table.
 Built (Phase 5, third slice): `/admin/teams/[teamId]`'s existing "Match Results"
 section gained inline Elo columns (rating before → after, delta) and an expandable
 "why" panel per match, instead of a separate duplicate section.
+
+Built (Phase 5, fourth slice): `/admin/analysis` and the division scoring-review
+screen gained Engine/Elite % columns, reflecting the new Elo/DCI path in
+`computeDivisionScoringSuggestion.ts`.
 
 Planned, not built: `/admin/teams/unlinked`, `/admin/teams/inactive`,
 `/admin/clubs/unlinked`, `/admin/clubs/inactive` (Phase 2 follow-up audits),

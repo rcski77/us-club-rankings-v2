@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { computeFieldStrength } from "./fieldStrength";
+import { computeElitePresence, computeFieldStrength } from "./fieldStrength";
 
 describe("computeFieldStrength", () => {
   it("returns a null FSS and NO_HISTORY warning when no teams are rated", () => {
@@ -73,5 +73,19 @@ describe("computeFieldStrength", () => {
   it("does not flag LOW_PERCENT_RATED when NO_HISTORY already applies", () => {
     const result = computeFieldStrength(10, []);
     expect(result.warnings).not.toContain("LOW_PERCENT_RATED");
+  });
+});
+
+describe("computeElitePresence", () => {
+  it("returns null when no elite teams exist in the population yet", () => {
+    expect(computeElitePresence(0, 0)).toBeNull();
+  });
+
+  it("computes the share of the population's elite teams present in the division", () => {
+    expect(computeElitePresence(49, 50)).toBe(98);
+  });
+
+  it("returns 0 when the division has none of the population's elite teams", () => {
+    expect(computeElitePresence(0, 50)).toBe(0);
   });
 });
