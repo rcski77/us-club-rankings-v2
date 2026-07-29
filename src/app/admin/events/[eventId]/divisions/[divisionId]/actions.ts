@@ -83,6 +83,19 @@ export async function removeDivisionBand(eventId: string, divisionId: string, ba
   redirect(divisionPath(eventId, divisionId));
 }
 
+export async function updateDivisionBandPoints(
+  eventId: string,
+  divisionId: string,
+  bandId: string,
+  formData: FormData,
+) {
+  const points = Number(formData.get("points"));
+  if (Number.isNaN(points)) redirect(`${divisionPath(eventId, divisionId)}?error=invalid`);
+
+  await prisma.divisionPointBand.update({ where: { id: bandId }, data: { points } });
+  redirect(divisionPath(eventId, divisionId));
+}
+
 export async function confirmDivisionScoring(eventId: string, divisionId: string) {
   const division = await prisma.division.findUniqueOrThrow({
     where: { id: divisionId },
