@@ -49,7 +49,7 @@ preference, non-negotiable.
 | 2 | CSV import pipeline (AES adapter first) | ✅ Done (AES adapter, TEAM_FINISHES only) |
 | 3 | Tier 1 rating engine (Colley) + algorithmic scoring suggestion | ✅ Done (Colley solve; FSS + suggestion + scoring-review screen; Analysis view + histogram; non-anchor template seeding; prior-run FSS-history comparison) |
 | 4 | Cross-season bootstrapping and calibration | Not started |
-| 5 | Tier 2 upgrade (Elo + Massey from real match data) | In progress (MATCH_RESULTS import ✅; Elo engine ✅; Massey engine ✅; CPI activation/Colley→Elo relabeling not started) |
+| 5 | Tier 2 upgrade (Elo + Massey from real match data) | In progress (MATCH_RESULTS import ✅; Elo engine ✅; Massey engine ✅, incl. division-strength weighting; CPI activation dropped; Colley→Elo default-labeling relabel not started) |
 | 6 | Polish — flags, ballots, weight config, background jobs, hosting | Not started |
 | 7 | Club-level ranking (new tier, alongside existing team ranking) | Not started — methodology scoped from legacy site, see §8 |
 
@@ -416,12 +416,23 @@ observation, so it stays independent of any individual match's weight. The Analy
 page's per-division weight column (`/admin/analysis`) is relabeled "Rating Weight"
 (was "Elo Weight") now that the same number drives both engines.
 
-**Not yet built**: CPI activation, Power Rankings switching its default/primary
-labeling from Colley to Elo (all three engines are shown side-by-side today,
-selectable, none demoted), a periodic/scheduled Massey cross-check re-run (today it's
-the same manual-trigger button as Colley/Elo — background-job infra is Phase 6),
-Sportwrench/TM2/VBSchedule match-level fetchers (AES only so far, matching
-TEAM_FINISHES's existing source coverage).
+**CPI activation — dropped (2026-07-29).** `npsRank`/`npsPoints`/`cpiRank`/`cpiPoints`
+on `RankingResult` (§1.4) were carried-forward legacy v1 column names, not a
+rediscovered legacy methodology — no v1 export or spec exists (Open Question 5). Per
+explicit user decision, not pursued: Combine Rankings' Avg Rank (see the entry above)
+already gives a Massey-inclusive blended number, so a separate Massey-only CPI column
+would be redundant rather than additive. `RankingResult` stays as built
+(`totalPoints`/`rank`/`weightedRank`/`algorithmVersion` only — `weightedRank` still
+just copies `rank`, no blending). Future rating-engine work should default to tuning
+the existing Colley/Elo/Massey algorithms (calibration constants, weighting) rather
+than adding new composite-score columns.
+
+**Not yet built**: Power Rankings switching its default/primary labeling from Colley
+to Elo (all three engines are shown side-by-side today, selectable, none demoted), a
+periodic/scheduled Massey cross-check re-run (today it's the same manual-trigger
+button as Colley/Elo — background-job infra is Phase 6), Sportwrench/TM2/VBSchedule
+match-level fetchers (AES only so far, matching TEAM_FINISHES's existing source
+coverage).
 
 **Non-anchor `PointTemplate` library — seeded.** `prisma/seedPointTemplates.ts` (new
 `db:seed-point-templates` script, idempotent — upserts by name, replaces bands
@@ -532,7 +543,10 @@ implementation is `Team` + `TeamSeason`.)*
   rank, npsRank/npsPoints (Colley today → Elo once Phase 5 ships), cpiRank/cpiPoints
   (null until Massey/Phase 5), ballotRank/ballotPoints, weightedRank,
   algorithmVersion. This reuses two legacy columns (NPS/CPI) that existed in v1 but
-  were never wired up. **Currently implemented: totalPoints/rank/weightedRank only**
+  were never wired up. **Deviation: `npsRank`/`npsPoints`/`cpiRank`/`cpiPoints` were
+  never added — see the "CPI activation — dropped" entry in Status above; "NPS
+  Rankings" in the UI is a display label on `totalPoints`/`rank`, not these columns.**
+  **Currently implemented: totalPoints/rank/weightedRank only**
   (weightedRank = rank, no blending yet — see `algorithmVersion: "phase1-points-only"`
   in `computeRanking.ts`).
 - RankingResultContribution — which finishes counted toward a team's top-3, powers the
@@ -852,8 +866,11 @@ with chronological backfill ✅ done (see Status above). Massey batch least-squa
 engine ✅ done, ridge-regularized, from the real per-set point scores already
 captured by the Match import (see Status above). **Not started**: a periodic/
 scheduled re-run of any of the three engines (today all are manual-trigger buttons —
-waits on Phase 6's background-job infra), CPI activation, Power Rankings switches its
-default labeling from Colley to Elo/Massey (all three shown side-by-side today).
+waits on Phase 6's background-job infra), Power Rankings switches its default labeling
+from Colley to Elo/Massey (all three shown side-by-side today). CPI activation was
+scoped and then explicitly dropped — see the "CPI activation — dropped" entry in
+Status above; future rating work here should be algorithm tuning/calibration, not new
+composite-score columns.
 
 **Phase 6 — Polish.** Not started. Team Finish Error/Flags workflow, Ballots stub,
 ClubContacts, RankingWeightConfig UI, background-job infra for recompute/weekly jobs,
