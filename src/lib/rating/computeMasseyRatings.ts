@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { getPartitionMatches } from "./computeEloRatings";
+import { getPartitionMatches, withDivisionWeights } from "./computeEloRatings";
 import { buildMasseyMatches, solveMassey } from "./massey";
 
 /**
@@ -13,6 +13,13 @@ import { buildMasseyMatches, solveMassey } from "./massey";
  * match-level point scores do, so a division with only finish ranks (no imported
  * Match rows) contributes nothing here.
  *
+ * Division-strength weighting (see divisionWeight.ts) applies here too, via the same
+ * withDivisionWeights() helper Elo uses -- one weight per division, computed once and
+ * reused by both engines, so Colley -> {Elo, Massey} weighting can never disagree
+ * between the two on what a given division's strength weight is. Massey scales its
+ * matrix contribution per match (see massey.ts's solveMassey) rather than a K-factor,
+ * since Massey has no K to scale.
+ *
  * solveMassey() returns a rating for every team in the match graph, including any
  * team playing up from another age group (see getPartitionMatches's own comment) --
  * filtered out via relevantTeamIds before ranking/persisting, same as
@@ -25,11 +32,13 @@ export async function computeMasseyRatingsForPartition(
   weekEndingDate: Date,
 ) {
   const { matches, relevantTeamIds } = await getPartitionMatches(seasonId, ageGroup, asOfDate);
+  const weighted = await withDivisionWeights(matches);
   const masseyMatches = buildMasseyMatches(
-    matches.map((m) => ({
+    weighted.map((m) => ({
       teamAId: m.teamAId,
       teamBId: m.teamBId,
       setScores: Array.isArray(m.setScores) ? (m.setScores as unknown as { a: number; b: number }[]) : [],
+      divisionWeight: m.divisionWeight,
     })),
   );
   const ratings = solveMassey(masseyMatches).filter((r) => relevantTeamIds.has(r.teamId));

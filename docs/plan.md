@@ -396,13 +396,31 @@ so the two numbers answer different questions and don't generally agree. Verifie
 the browser against real 14u data: Elo Weight populates even for DRAFT divisions with
 no scoring snapshot at all (Band/Pctl show "—", Elo Weight still shows a real number),
 confirming the two are genuinely independent computations, not just two views of the
-same underlying value.
+same underlying value. The Analysis page column has since been relabeled "Rating
+Weight" (see below) now that it applies to both engines.
 
-**Not yet built**: the Massey analog of the above, CPI activation, Power Rankings
-switching its default/primary labeling from Colley to Elo (all three engines are shown
-side-by-side today, selectable, none demoted), a periodic/scheduled Massey cross-check
-re-run (today it's the same manual-trigger button as Colley/Elo — background-job
-infra is Phase 6), Sportwrench/TM2/VBSchedule match-level fetchers (AES only so far, matching
+**Massey division-strength weighting.** The Massey analog of the above: same
+Colley-only `computeDivisionWeightsForPartition()` weight, same
+`computeMatchDivisionWeights.ts`/`withDivisionWeights()` plumbing (now exported from
+`computeEloRatings.ts` so `computeMasseyRatings.ts` reuses the identical per-division
+weight map rather than recomputing it a second, potentially-inconsistent way), but
+applied to Massey's batch least-squares solve instead of Elo's sequential K-factor.
+Massey has no K to scale, so `massey.ts`'s `solveMassey()` scales each match's
+contribution to the normal-equations matrix directly — `M[i][i] += w`, `M[j][j] += w`,
+`M[i][j] -= w`, `M[j][i] -= w`, `b[i] += w*d`, `b[j] -= w*d` — standard
+weighted-least-squares, since the Massey matrix already *is* the normal-equations
+matrix of a least-squares fit. `divisionWeight` defaults to 1 (neutral) if omitted, so
+every pre-existing `massey.test.ts` case still passes unmodified. Deliberately not
+scaling `ridgeLambda`: ridge is a per-team regularization term, not a per-match
+observation, so it stays independent of any individual match's weight. The Analysis
+page's per-division weight column (`/admin/analysis`) is relabeled "Rating Weight"
+(was "Elo Weight") now that the same number drives both engines.
+
+**Not yet built**: CPI activation, Power Rankings switching its default/primary
+labeling from Colley to Elo (all three engines are shown side-by-side today,
+selectable, none demoted), a periodic/scheduled Massey cross-check re-run (today it's
+the same manual-trigger button as Colley/Elo — background-job infra is Phase 6),
+Sportwrench/TM2/VBSchedule match-level fetchers (AES only so far, matching
 TEAM_FINISHES's existing source coverage).
 
 **Non-anchor `PointTemplate` library — seeded.** `prisma/seedPointTemplates.ts` (new
@@ -753,6 +771,34 @@ on the existing points-based `totalPoints`/`rank` ranking, not a switch to the
 `RankingResult.npsRank`/`npsPoints` columns described in §1.4 (those remain
 unpopulated, waiting on Phase 4/5 calibration) — worth knowing if a future session
 sees "NPS Rankings" in the UI and goes looking for where `npsRank` is read from.
+
+**"Combine Rankings" view (post-Phase-5, UI-only).** `/admin/team-rankings` gained a
+third view tab alongside NPS/Power: "Combine Rankings," a single blended ranking for
+staff who want one number rather than reading NPS and Power side by side. Two additive
+pieces:
+- **Power Rankings gained an "Avg Rank" column** — `averagePowerRank()` averages a
+  team's *rank* (not raw rating) across whichever of Colley/Elo/Massey actually rated
+  it, since the three engines' raw ratings live on incompatible scales (Colley ~0.7–1.3,
+  Elo ~1500–2000, Massey ~±30) and averaging them directly would just be dominated by
+  whichever engine produces the largest numbers — rank-averaging is the same technique
+  used to combine separate sports polls into one composite. A team not rated by an
+  engine isn't penalized with a worst-case fill-in; it's just excluded from that
+  average. Power Rankings' default (unsorted) row order changed from the old
+  Colley-then-Elo-only-then-Massey-only stacking to Avg Rank ascending, since the new
+  column is meant to be the table's headline number.
+- **New `CombineRankingTable`** blends NPS rank and Power's own Avg Rank 50/50 into a
+  "Combined Score" — both inputs are already ranks, so a straight mean is meaningful
+  the same way Avg Rank's own averaging is. A team missing one side of the blend (an
+  NPS finish history but no imported matches yet, or vice versa) falls back to 100% the
+  side it has rather than being penalized; a team with neither has no score and sorts
+  last. Reuses `getLatestPowerRatings()`/`buildPowerRows()` (factored out of the
+  existing `PowerRankingTable` for this purpose) rather than a second, independent copy
+  of the three-engine queries.
+
+This is presentation-only — no new persisted model, no change to `RankingResult` or
+`TeamRatingHistory` — both `averagePowerRank()` and `combinedScore()` are computed
+live from already-persisted per-engine ratings, the same pattern the Analysis page's
+"Rating Weight" column already uses for a different live-computed number (see above).
 
 Planned, not built: `/admin/teams/unlinked`, `/admin/teams/inactive`,
 `/admin/clubs/unlinked`, `/admin/clubs/inactive` (Phase 2 follow-up audits),

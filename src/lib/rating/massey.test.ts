@@ -46,6 +46,13 @@ describe("buildMasseyMatches", () => {
     const matches = buildMasseyMatches([{ teamAId: "a", teamBId: "b", setScores: [] }]);
     expect(matches).toHaveLength(0);
   });
+
+  it("passes divisionWeight through as-is", () => {
+    const matches = buildMasseyMatches([
+      { teamAId: "a", teamBId: "b", setScores: [{ a: 25, b: 20 }], divisionWeight: 1.4 },
+    ]);
+    expect(matches[0].divisionWeight).toBe(1.4);
+  });
 });
 
 describe("solveMassey", () => {
@@ -96,5 +103,46 @@ describe("solveMassey", () => {
     // Symmetric around a small magnitude rather than diverging to +/-Infinity.
     expect(Math.abs(byId.get("a")!)).toBeLessThan(100);
     expect(byId.get("a")! + byId.get("b")!).toBeCloseTo(0, 10);
+  });
+
+  it("omitting divisionWeight behaves identically to divisionWeight: 1", () => {
+    const base = { teamAId: "a", teamBId: "b", pointDiff: 8 };
+    const omitted = solveMassey([base]);
+    const explicit = solveMassey([{ ...base, divisionWeight: 1 }]);
+    expect(omitted.find((r) => r.teamId === "a")!.rating).toBeCloseTo(
+      explicit.find((r) => r.teamId === "a")!.rating,
+      10,
+    );
+  });
+
+  it("gives a bigger rating swing to a higher divisionWeight, all else equal", () => {
+    // Same connected 3-team graph as the ranking test above, but "a" vs "b"'s match is
+    // scaled by a higher divisionWeight -- that match's own differential should end up
+    // asserting more influence on the solve.
+    const neutral = solveMassey([
+      { teamAId: "a", teamBId: "b", pointDiff: 20 },
+      { teamAId: "b", teamBId: "c", pointDiff: 5 },
+    ]);
+    const weighted = solveMassey([
+      { teamAId: "a", teamBId: "b", pointDiff: 20, divisionWeight: 3 },
+      { teamAId: "b", teamBId: "c", pointDiff: 5 },
+    ]);
+    const neutralGap = neutral.find((r) => r.teamId === "a")!.rating - neutral.find((r) => r.teamId === "b")!.rating;
+    const weightedGap =
+      weighted.find((r) => r.teamId === "a")!.rating - weighted.find((r) => r.teamId === "b")!.rating;
+    expect(weightedGap).toBeGreaterThan(neutralGap);
+  });
+
+  it("still gives equal ratings for a symmetric cycle when every match shares the same divisionWeight", () => {
+    // Uniformly scaling every match by the same weight shouldn't break the
+    // symmetric-cycle property verified above with weight 1.
+    const ratings = solveMassey([
+      { teamAId: "a", teamBId: "b", pointDiff: 10, divisionWeight: 1.5 },
+      { teamAId: "b", teamBId: "c", pointDiff: 10, divisionWeight: 1.5 },
+      { teamAId: "c", teamBId: "a", pointDiff: 10, divisionWeight: 1.5 },
+    ]);
+    const values = ratings.map((r) => r.rating);
+    expect(values[0]).toBeCloseTo(values[1], 10);
+    expect(values[1]).toBeCloseTo(values[2], 10);
   });
 });
