@@ -6,6 +6,7 @@ import {
   applyTemplate,
   addDivisionBand,
   removeDivisionBand,
+  updateDivisionBandPoints,
   confirmDivisionScoring,
   unlockDivisionScoring,
   addTeamFinish,
@@ -172,7 +173,30 @@ export default async function DivisionDetailPage({
               <tr key={b.id}>
                 <td className={tdClass}>{b.fromRank}</td>
                 <td className={tdClass}>{b.toRank === 0 ? "+" : b.toRank}</td>
-                <td className={tdClass}>{b.points}</td>
+                <td className={tdClass}>
+                  {isConfirmed ? (
+                    b.points
+                  ) : (
+                    <form
+                      action={async (formData: FormData) => {
+                        "use server";
+                        await updateDivisionBandPoints(eventId, divisionId, b.id, formData);
+                      }}
+                      className="flex items-center gap-1"
+                    >
+                      <input
+                        name="points"
+                        type="number"
+                        min={0}
+                        defaultValue={b.points}
+                        className={`${inputClass} w-20`}
+                      />
+                      <button type="submit" className={smallSecondaryButtonClass}>
+                        Save
+                      </button>
+                    </form>
+                  )}
+                </td>
                 {!isConfirmed && (
                   <td className={tdClass}>
                     <form
