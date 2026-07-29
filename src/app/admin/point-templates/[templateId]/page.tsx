@@ -45,6 +45,15 @@ async function removeBand(templateId: string, bandId: string) {
   redirect(`/admin/point-templates/${templateId}`);
 }
 
+async function toggleAnchor(templateId: string, isAnchorTemplate: boolean) {
+  "use server";
+  await prisma.pointTemplate.update({
+    where: { id: templateId },
+    data: { isAnchorTemplate: !isAnchorTemplate },
+  });
+  redirect(`/admin/point-templates/${templateId}`);
+}
+
 export default async function PointTemplateDetailPage({
   params,
   searchParams,
@@ -71,10 +80,22 @@ export default async function PointTemplateDetailPage({
         </Link>
       </div>
       <h1 className="mb-1 text-2xl font-semibold">{template.name}</h1>
-      <p className="mb-6 text-sm text-slate-500">
+      <p className="mb-2 text-sm text-slate-500">
         Max points: {template.maxPoints}
         {template.isAnchorTemplate && " · Anchor tier"}
       </p>
+
+      <form
+        action={async () => {
+          "use server";
+          await toggleAnchor(templateId, template.isAnchorTemplate);
+        }}
+        className="mb-6"
+      >
+        <button type="submit" className={smallSecondaryButtonClass}>
+          {template.isAnchorTemplate ? "Remove anchor tier" : "Mark as anchor tier"}
+        </button>
+      </form>
 
       {error === "invalid" && (
         <p className={errorBannerClass}>From rank and points are required (to rank 0 = open-ended).</p>

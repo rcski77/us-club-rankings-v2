@@ -1,9 +1,38 @@
 import { prisma } from "@/lib/prisma";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import { BUCKET_THRESHOLDS } from "@/lib/rating/fieldStrength";
 import { computeDivisionWeightsForPartition } from "@/lib/rating/computeMatchDivisionWeights";
-import { tableClass, thClass, tdClass } from "@/lib/ui";
+import { computeDivisionScoringSuggestion } from "@/lib/rating/computeDivisionScoringSuggestion";
+import {
+  tableClass,
+  thClass,
+  tdClass,
+  primaryButtonClass,
+  stripedTbodyClass,
+  scoringStatusBadgeClass,
+  scoreBandBadgeClass,
+} from "@/lib/ui";
+
+async function runAnalysisForAll(seasonId: string, ageGroup: number) {
+  "use server";
+
+  const divisions = await prisma.division.findMany({
+    where: { ageGroup, event: { seasonId } },
+    select: { id: true, scoringStatus: true },
+  });
+
+  for (const division of divisions) {
+    // CONFIRMED divisions get their stats refreshed (as new match data lands) without
+    // reopening finish/band editing -- see computeDivisionScoringSuggestion's
+    // preserveStatus doc comment.
+    await computeDivisionScoringSuggestion(division.id, {
+      preserveStatus: division.scoringStatus === "CONFIRMED",
+    });
+  }
+
+  redirect(`/admin/analysis/${seasonId}/${ageGroup}`);
+}
 
 /**
  * The Analysis view (docs/plan.md §2/§5) -- one row per Division in this
@@ -23,13 +52,29 @@ import { tableClass, thClass, tdClass } from "@/lib/ui";
  * ("what point curve fits this field" vs. "how much should a result here move Elo")
  * and won't generally match.
  */
+type SortKey = "fss" | "elitePresence" | "percentile" | "eloWeight" | "maxPoints" | `bucket:${number}`;
+
+function sortLink(seasonId: string, ageGroup: number, key: SortKey, activeSort?: string, activeDir?: string) {
+  // First click on a column defaults to highest-first (desc); a second click toggles to asc.
+  const nextDir = activeSort === key && activeDir === "desc" ? "asc" : "desc";
+  return `/admin/analysis/${seasonId}/${ageGroup}?sort=${encodeURIComponent(key)}&dir=${nextDir}`;
+}
+
+function sortIndicator(key: SortKey, activeSort?: string, activeDir?: string) {
+  if (activeSort !== key) return null;
+  return activeDir === "desc" ? " ▼" : " ▲";
+}
+
 export default async function AnalysisPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ seasonId: string; ageGroup: string }>;
+  searchParams: Promise<{ sort?: string; dir?: string }>;
 }) {
   const { seasonId, ageGroup: ageGroupParam } = await params;
   const ageGroup = Number(ageGroupParam);
+  const { sort, dir } = await searchParams;
 
   const season = await prisma.season.findUnique({ where: { id: seasonId } });
   if (!season || !ageGroup) notFound();
@@ -38,6 +83,7 @@ export default async function AnalysisPage({
     where: { ageGroup, event: { seasonId } },
     include: {
       event: true,
+      pointBands: true,
       scoringSnapshots: {
         orderBy: { createdAt: "desc" },
         take: 1,
@@ -49,6 +95,50 @@ export default async function AnalysisPage({
 
   const eloWeights = await computeDivisionWeightsForPartition(seasonId, ageGroup);
 
+  // Once confirmed, a division's actual max points come from its own frozen
+  // DivisionPointBand copy (prisma/CLAUDE.md's frozen-copy pattern), not the source
+  // PointTemplate -- that can be edited later without touching what was already
+  // awarded. Before confirming, there's nothing awarded yet, so fall back to showing
+  // the suggested template's ceiling as a preview.
+  function maxPointsForDivision(division: (typeof divisions)[number]): number | null {
+    if (division.pointBands.length > 0) {
+      return Math.max(...division.pointBands.map((b) => b.points));
+    }
+    return division.scoringSnapshots[0]?.suggestedTemplate?.maxPoints ?? null;
+  }
+
+  // Sortable metrics live on the snapshot/eloWeights, not the Division row itself, so
+  // sorting happens here in memory rather than via a Prisma orderBy -- the default
+  // findMany above already fetched everything sortLink's columns need.
+  function sortValue(division: (typeof divisions)[number], key: SortKey): number | null {
+    const snapshot = division.scoringSnapshots[0];
+    if (key === "fss") return snapshot?.fss ?? null;
+    if (key === "elitePresence") return snapshot?.elitePresence ?? null;
+    if (key === "percentile") return snapshot?.percentile ?? null;
+    if (key === "eloWeight") return eloWeights.get(division.id) ?? null;
+    if (key === "maxPoints") return maxPointsForDivision(division);
+    const bucketCounts = (snapshot?.bucketCounts as Record<string, number> | undefined) ?? {};
+    const threshold = key.slice("bucket:".length);
+    return bucketCounts[threshold] ?? null;
+  }
+
+  const sortedDivisions = [...divisions];
+  if (sort) {
+    const sortKey = sort as SortKey;
+    const sign = dir === "desc" ? -1 : 1;
+    sortedDivisions.sort((a, b) => {
+      const av = sortValue(a, sortKey);
+      const bv = sortValue(b, sortKey);
+      // Nulls (no snapshot yet) always sort last, regardless of direction.
+      if (av === null && bv === null) return 0;
+      if (av === null) return 1;
+      if (bv === null) return -1;
+      return (av - bv) * sign;
+    });
+  }
+
+  const runAnalysisForAllWithParams = runAnalysisForAll.bind(null, seasonId, ageGroup);
+
   return (
     <div>
       <div className="mb-2 text-sm text-slate-500">
@@ -56,9 +146,16 @@ export default async function AnalysisPage({
           Analysis
         </Link>
       </div>
-      <h1 className="mb-6 text-2xl font-semibold">
-        {season.label} · {ageGroup}u Analysis
-      </h1>
+      <div className="mb-6 flex items-center justify-between">
+        <h1 className="text-2xl font-semibold">
+          {season.label} · {ageGroup}u Analysis
+        </h1>
+        <form action={runAnalysisForAllWithParams}>
+          <button type="submit" className={primaryButtonClass}>
+            Run analysis for all divisions
+          </button>
+        </form>
+      </div>
 
       <div className="overflow-x-auto">
         <table className={tableClass}>
@@ -69,21 +166,50 @@ export default async function AnalysisPage({
               <th className={thClass}>Status</th>
               <th className={thClass}>Teams</th>
               <th className={thClass}>Engine</th>
-              <th className={thClass}>FSS</th>
-              <th className={thClass}>Elite %</th>
-              <th className={thClass}>Pctl</th>
+              <th className={thClass}>
+                <Link href={sortLink(seasonId, ageGroup, "fss", sort, dir)} className="hover:underline">
+                  FSS{sortIndicator("fss", sort, dir)}
+                </Link>
+              </th>
+              <th className={thClass}>
+                <Link
+                  href={sortLink(seasonId, ageGroup, "elitePresence", sort, dir)}
+                  className="hover:underline"
+                >
+                  Elite %{sortIndicator("elitePresence", sort, dir)}
+                </Link>
+              </th>
+              <th className={thClass}>
+                <Link href={sortLink(seasonId, ageGroup, "percentile", sort, dir)} className="hover:underline">
+                  Pctl{sortIndicator("percentile", sort, dir)}
+                </Link>
+              </th>
               <th className={thClass}>Band</th>
-              <th className={thClass}>Elo Weight</th>
+              <th className={thClass}>
+                <Link href={sortLink(seasonId, ageGroup, "eloWeight", sort, dir)} className="hover:underline">
+                  Elo Weight{sortIndicator("eloWeight", sort, dir)}
+                </Link>
+              </th>
               {BUCKET_THRESHOLDS.map((t) => (
                 <th key={t} className={thClass}>
-                  Top {t}
+                  <Link
+                    href={sortLink(seasonId, ageGroup, `bucket:${t}`, sort, dir)}
+                    className="hover:underline"
+                  >
+                    Top {t}
+                    {sortIndicator(`bucket:${t}`, sort, dir)}
+                  </Link>
                 </th>
               ))}
-              <th className={thClass}>Suggested template</th>
+              <th className={thClass}>
+                <Link href={sortLink(seasonId, ageGroup, "maxPoints", sort, dir)} className="hover:underline">
+                  Max Points{sortIndicator("maxPoints", sort, dir)}
+                </Link>
+              </th>
             </tr>
           </thead>
-          <tbody>
-            {divisions.map((division) => {
+          <tbody className={stripedTbodyClass}>
+            {sortedDivisions.map((division) => {
               const snapshot = division.scoringSnapshots[0];
               const bucketCounts =
                 (snapshot?.bucketCounts as Record<string, number> | undefined) ?? {};
@@ -98,7 +224,11 @@ export default async function AnalysisPage({
                       {division.name}
                     </Link>
                   </td>
-                  <td className={tdClass}>{division.scoringStatus}</td>
+                  <td className={tdClass}>
+                    <span className={scoringStatusBadgeClass(division.scoringStatus)}>
+                      {division.scoringStatus}
+                    </span>
+                  </td>
                   <td className={tdClass}>
                     {snapshot ? `${snapshot.teamCount} / ${snapshot.ratedTeamCount}` : "—"}
                   </td>
@@ -120,14 +250,34 @@ export default async function AnalysisPage({
                       ? `${snapshot.percentile.toFixed(0)}th`
                       : "—"}
                   </td>
-                  <td className={tdClass}>{snapshot?.scoreBand ?? "—"}</td>
+                  <td className={tdClass}>
+                    {snapshot?.scoreBand ? (
+                      <span className={scoreBandBadgeClass(snapshot.scoreBand)}>{snapshot.scoreBand}</span>
+                    ) : (
+                      "—"
+                    )}
+                  </td>
                   <td className={tdClass}>{eloWeights.get(division.id)?.toFixed(3) ?? "—"}</td>
                   {BUCKET_THRESHOLDS.map((t) => (
                     <td key={t} className={tdClass}>
                       {bucketCounts[String(t)] ?? "—"}
                     </td>
                   ))}
-                  <td className={tdClass}>{snapshot?.suggestedTemplate?.name ?? "—"}</td>
+                  <td className={tdClass}>
+                    {(() => {
+                      const maxPoints = maxPointsForDivision(division);
+                      if (maxPoints === null) return "—";
+                      // Green when it's the division's actual awarded max (from its
+                      // frozen DivisionPointBand copy); amber when it's still just the
+                      // suggested template's ceiling, not yet confirmed/awarded.
+                      const isAwarded = division.pointBands.length > 0;
+                      return (
+                        <span className={scoringStatusBadgeClass(isAwarded ? "CONFIRMED" : "SUGGESTED")}>
+                          {maxPoints}
+                        </span>
+                      );
+                    })()}
+                  </td>
                 </tr>
               );
             })}

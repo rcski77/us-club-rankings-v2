@@ -20,9 +20,12 @@ import {
  * Runs the strength-signal -> percentile -> suggested-template pipeline for a division
  * and persists it as a new DivisionScoringSnapshot (audit trail -- see
  * prisma/CLAUDE.md's "state machine on the entity, audit trail in a separate table"
- * pattern). Sets Division.scoringStatus to SUGGESTED. Does not touch
- * DivisionPointBand or TeamFinish.points -- that only happens on accept (see
- * actions.ts).
+ * pattern). Sets Division.scoringStatus to SUGGESTED, unless `preserveStatus` is set
+ * (used by the bulk "run analysis" action on an already-CONFIRMED division, so staff
+ * can refresh a division's FSS/percentile/band as new match data lands post-confirm
+ * without silently reopening its finish/band editing -- see admin/analysis's
+ * runAnalysisForAll). Does not touch DivisionPointBand or TeamFinish.points -- that
+ * only happens on accept (see actions.ts).
  *
  * Per division, prefers the Elo-based DCI blend (see dci.ts) over the original
  * Colley-based FSS/elitePresence blend once at least ELO_COVERAGE_THRESHOLD of the
@@ -35,7 +38,10 @@ import {
  * signal it's meant to improve on. Elo has no standings-inferred fallback of its own
  * (see elo.ts), so a division without enough Match data always falls back to Colley.
  */
-export async function computeDivisionScoringSuggestion(divisionId: string) {
+export async function computeDivisionScoringSuggestion(
+  divisionId: string,
+  options: { preserveStatus?: boolean } = {},
+) {
   const division = await prisma.division.findUniqueOrThrow({
     where: { id: divisionId },
     include: { event: true },
@@ -120,7 +126,9 @@ export async function computeDivisionScoringSuggestion(divisionId: string) {
         suggestedTemplateId,
       },
     });
-    await tx.division.update({ where: { id: divisionId }, data: { scoringStatus: "SUGGESTED" } });
+    if (!options.preserveStatus) {
+      await tx.division.update({ where: { id: divisionId }, data: { scoringStatus: "SUGGESTED" } });
+    }
     return created;
   });
 
