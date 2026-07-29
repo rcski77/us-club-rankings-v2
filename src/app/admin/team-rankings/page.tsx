@@ -18,6 +18,7 @@ const AGE_GROUPS = [12, 13, 14, 15, 16, 17, 18];
 const VIEWS = [
   { value: "nps", label: "NPS Rankings" },
   { value: "power", label: "Power Rankings" },
+  { value: "combine", label: "Combine Rankings" },
 ] as const;
 type View = (typeof VIEWS)[number]["value"];
 type SortDir = "asc" | "desc";
@@ -101,7 +102,7 @@ export default async function TeamRankingsIndexPage({
   const activeSeason = seasons.find((s) => s.isActive) ?? seasons[0];
   const season = seasons.find((s) => s.id === seasonParam) ?? activeSeason;
 
-  const view: View = viewParam === "power" ? "power" : "nps";
+  const view: View = viewParam === "power" ? "power" : viewParam === "combine" ? "combine" : "nps";
   const ageGroup = AGE_GROUPS.includes(Number(ageGroupParam)) ? Number(ageGroupParam) : 14;
   const dir: SortDir = dirParam === "desc" ? "desc" : "asc";
 
@@ -191,8 +192,16 @@ export default async function TeamRankingsIndexPage({
               dir={dir}
               baseParams={new URLSearchParams({ season: season.id, view, ageGroup: String(ageGroup) })}
             />
-          ) : (
+          ) : view === "power" ? (
             <PowerRankingTable
+              seasonId={season.id}
+              ageGroup={ageGroup}
+              sort={sort}
+              dir={dir}
+              baseParams={new URLSearchParams({ season: season.id, view, ageGroup: String(ageGroup) })}
+            />
+          ) : (
+            <CombineRankingTable
               seasonId={season.id}
               ageGroup={ageGroup}
               sort={sort}
@@ -329,22 +338,15 @@ async function NpsRankingTable({
   );
 }
 
-async function PowerRankingTable({
-  seasonId,
-  ageGroup,
-  sort,
-  dir,
-  baseParams,
-}: {
-  seasonId: string;
-  ageGroup: number;
-  sort?: string;
-  dir: SortDir;
-  baseParams: URLSearchParams;
-}) {
-  // Each engine is recomputed on its own trigger, so its own latest weekEndingDate is
-  // found independently rather than assuming all three runs share a date. Sequential
-  // awaits throughout (not Promise.all) -- see docs/dev-environment.md.
+/**
+ * Fetches each engine's latest snapshot for one (season, ageGroup) -- shared by
+ * PowerRankingTable and CombineRankingTable so both read the identical rating data
+ * rather than two independently-drifting copies of the same three queries. Each engine
+ * is recomputed on its own trigger, so its own latest weekEndingDate is found
+ * independently rather than assuming all three runs share a date. Sequential awaits
+ * throughout (not Promise.all) -- see docs/dev-environment.md.
+ */
+async function getLatestPowerRatings(seasonId: string, ageGroup: number) {
   const latestColley = await prisma.teamRatingHistory.findFirst({
     where: { seasonId, ageGroup, ratingEngine: "COLLEY" },
     orderBy: { weekEndingDate: "desc" },
@@ -381,30 +383,32 @@ async function PowerRankingTable({
       })
     : [];
 
+  return { latestColley, latestElo, latestMassey, colleyRatings, eloRatings, masseyRatings };
+}
+
+type PowerRatingsData = Awaited<ReturnType<typeof getLatestPowerRatings>>;
+type PowerRow = {
+  team: PowerRatingsData["colleyRatings"][number]["team"];
+  colley: PowerRatingsData["colleyRatings"][number] | undefined;
+  elo: PowerRatingsData["eloRatings"][number] | undefined;
+  massey: PowerRatingsData["masseyRatings"][number] | undefined;
+};
+
+/** Builds one row per team rated by any engine (order doesn't matter -- both callers
+ * sort explicitly): Colley-rated teams first, then any Elo-only team (a division with
+ * imported matches but not yet a full standings import), then any Massey-only team
+ * (not already covered by either of the above). */
+function buildPowerRows(data: PowerRatingsData): PowerRow[] {
+  const { colleyRatings, eloRatings, masseyRatings } = data;
   const eloByTeam = new Map(eloRatings.map((r) => [r.teamId, r]));
   const masseyByTeam = new Map(masseyRatings.map((r) => [r.teamId, r]));
 
-  // Default (unsorted) row order: every team rated by any engine. Colley-rated teams
-  // come first, in Colley rank order (today's larger/more-established rating source),
-  // then any Elo-only team (a division with imported matches but not yet a full
-  // standings import) in Elo rank order, then any Massey-only team (not already
-  // covered by either of the above) in Massey rank order. Clicking a column header
-  // overrides this with a straight sort by that column instead (see sortRows).
   const colleyTeamIds = new Set(colleyRatings.map((r) => r.teamId));
-  const eloOnly = eloRatings.filter((r) => !colleyTeamIds.has(r.teamId)).sort((a, b) => a.rank - b.rank);
+  const eloOnly = eloRatings.filter((r) => !colleyTeamIds.has(r.teamId));
   const coveredTeamIds = new Set([...colleyTeamIds, ...eloOnly.map((r) => r.teamId)]);
-  const masseyOnly = masseyRatings
-    .filter((r) => !coveredTeamIds.has(r.teamId))
-    .sort((a, b) => a.rank - b.rank);
+  const masseyOnly = masseyRatings.filter((r) => !coveredTeamIds.has(r.teamId));
 
-  type Row = {
-    team: (typeof colleyRatings)[number]["team"];
-    colley: (typeof colleyRatings)[number] | undefined;
-    elo: (typeof eloRatings)[number] | undefined;
-    massey: (typeof masseyRatings)[number] | undefined;
-  };
-
-  const defaultRows: Row[] = [
+  return [
     ...colleyRatings.map((c) => ({
       team: c.team,
       colley: c,
@@ -414,10 +418,48 @@ async function PowerRankingTable({
     ...eloOnly.map((e) => ({ team: e.team, colley: undefined, elo: e, massey: masseyByTeam.get(e.teamId) })),
     ...masseyOnly.map((m) => ({ team: m.team, colley: undefined, elo: undefined, massey: m })),
   ];
+}
 
-  const accessors: Record<string, (r: Row) => string | number | undefined> = {
+/**
+ * The three engines' ratings live on incompatible scales (Colley ~0.7-1.3, Elo
+ * ~1500-2000, Massey ~-30 to +30), so averaging raw ratings would just be dominated
+ * by whichever engine happens to produce the largest numbers. Averaging each
+ * engine's *rank* instead is scale-free -- the same technique used to combine
+ * separate sports polls into one composite. Averages over only the engines that have
+ * actually rated this team (a team missing from an engine doesn't get penalized with
+ * some worst-case fill-in rank); a team rated by zero engines has no avgRank and sorts
+ * last, same convention as every other column here (see sortRows). Exported to module
+ * scope (not a PowerRankingTable-local closure) so CombineRankingTable's own 50/50
+ * blend can reuse the identical number Power Rankings shows, rather than a second,
+ * potentially-inconsistent copy of this math.
+ */
+function averagePowerRank(r: PowerRow): number | undefined {
+  const ranks = [r.colley?.rank, r.elo?.rank, r.massey?.rank].filter((v): v is number => v !== undefined);
+  if (ranks.length === 0) return undefined;
+  return ranks.reduce((sum, v) => sum + v, 0) / ranks.length;
+}
+
+async function PowerRankingTable({
+  seasonId,
+  ageGroup,
+  sort,
+  dir,
+  baseParams,
+}: {
+  seasonId: string;
+  ageGroup: number;
+  sort?: string;
+  dir: SortDir;
+  baseParams: URLSearchParams;
+}) {
+  const data = await getLatestPowerRatings(seasonId, ageGroup);
+  const { latestColley, latestElo, latestMassey } = data;
+  const defaultRows = buildPowerRows(data);
+
+  const accessors: Record<string, (r: PowerRow) => string | number | undefined> = {
     team: (r) => r.team.name,
     club: (r) => r.team.club?.name ?? "",
+    avgRank: averagePowerRank,
     colleyRank: (r) => r.colley?.rank,
     colleyRating: (r) => r.colley?.rating,
     comparisons: (r) => r.colley?.comparisons,
@@ -428,7 +470,13 @@ async function PowerRankingTable({
     masseyRating: (r) => r.massey?.rating,
     games: (r) => r.massey?.comparisons,
   };
-  const rows = sort && accessors[sort] ? sortRows(defaultRows, accessors[sort], dir) : defaultRows;
+  // Default (no explicit column clicked yet) to Avg Rank ascending -- the whole point
+  // of the aggregate column is to be the table's headline ranking, not just one more
+  // sortable field buried among the per-engine ones.
+  const rows =
+    sort && accessors[sort]
+      ? sortRows(defaultRows, accessors[sort], dir)
+      : sortRows(defaultRows, averagePowerRank, "asc");
 
   return (
     <>
@@ -443,6 +491,13 @@ async function PowerRankingTable({
           <tr>
             <SortableHeader sortKey="team" label="Team" activeSort={sort} dir={dir} baseParams={baseParams} />
             <SortableHeader sortKey="club" label="Club" activeSort={sort} dir={dir} baseParams={baseParams} />
+            <SortableHeader
+              sortKey="avgRank"
+              label="Avg Rank"
+              activeSort={sort}
+              dir={dir}
+              baseParams={baseParams}
+            />
             <SortableHeader
               sortKey="colleyRank"
               label="Colley Rank"
@@ -517,6 +572,12 @@ async function PowerRankingTable({
                 </Link>
               </td>
               <td className={tdClass}>{team.club?.name ?? ""}</td>
+              <td className={tdClass}>
+                {(() => {
+                  const avg = averagePowerRank({ team, colley, elo, massey });
+                  return avg !== undefined ? avg.toFixed(1) : "—";
+                })()}
+              </td>
               <td className={tdClass}>{colley?.rank ?? "—"}</td>
               <td className={tdClass}>{colley ? colley.rating.toFixed(4) : "—"}</td>
               <td className={tdClass}>{colley?.comparisons ?? "—"}</td>
@@ -530,7 +591,7 @@ async function PowerRankingTable({
           ))}
           {rows.length === 0 && (
             <tr>
-              <td className={tdClass} colSpan={11}>
+              <td className={tdClass} colSpan={12}>
                 No ratings yet — click &quot;Recompute ratings&quot; above.
               </td>
             </tr>
@@ -538,5 +599,134 @@ async function PowerRankingTable({
         </tbody>
       </table>
     </>
+  );
+}
+
+async function CombineRankingTable({
+  seasonId,
+  ageGroup,
+  sort,
+  dir,
+  baseParams,
+}: {
+  seasonId: string;
+  ageGroup: number;
+  sort?: string;
+  dir: SortDir;
+  baseParams: URLSearchParams;
+}) {
+  // Sequential awaits (not Promise.all) -- see docs/dev-environment.md.
+  const npsResults = await prisma.rankingResult.findMany({
+    where: { seasonId, ageGroup },
+    include: { team: { include: { club: true } } },
+  });
+  const powerData = await getLatestPowerRatings(seasonId, ageGroup);
+  const powerRows = buildPowerRows(powerData);
+
+  const npsRankByTeam = new Map(npsResults.map((r) => [r.teamId, r.rank]));
+  const powerAvgRankByTeam = new Map(powerRows.map((r) => [r.team.id, averagePowerRank(r)]));
+
+  // Union of every team appearing in either ranking -- a team with an NPS finish
+  // history but no imported matches yet (or vice versa) still gets a row, just with
+  // one side of the blend missing (see combinedScore below).
+  const teamById = new Map<string, (typeof npsResults)[number]["team"]>();
+  for (const r of npsResults) teamById.set(r.teamId, r.team);
+  for (const r of powerRows) teamById.set(r.team.id, r.team);
+
+  type Row = { team: (typeof npsResults)[number]["team"]; npsRank: number | undefined; powerAvgRank: number | undefined };
+  const defaultRows: Row[] = Array.from(teamById.entries()).map(([teamId, team]) => ({
+    team,
+    npsRank: npsRankByTeam.get(teamId),
+    powerAvgRank: powerAvgRankByTeam.get(teamId),
+  }));
+
+  /**
+   * 50% NPS rank + 50% Power Rankings' own Avg Rank (itself the average of Colley/
+   * Elo/Massey rank -- see averagePowerRank above), by request: staff wanted one
+   * number blending the finish-based NPS ranking with the match-based power-rating
+   * consensus, evenly weighted. Both inputs are already ranks (not raw ratings), so
+   * they're on the same ordinal scale and a straight mean is meaningful, unlike
+   * averaging Colley/Elo/Massey's raw ratings directly (see averagePowerRank's own
+   * comment). A team missing one side of the blend (an NPS finish history but no
+   * imported matches yet, or vice versa) falls back to 100% the side it has rather
+   * than being penalized with a worst-case fill-in for the missing half; a team with
+   * neither has no combined score and sorts last (see sortRows).
+   */
+  function combinedScore(r: Row): number | undefined {
+    const parts = [r.npsRank, r.powerAvgRank].filter((v): v is number => v !== undefined);
+    if (parts.length === 0) return undefined;
+    return parts.reduce((sum, v) => sum + v, 0) / parts.length;
+  }
+
+  const accessors: Record<string, (r: Row) => string | number | undefined> = {
+    team: (r) => r.team.name,
+    club: (r) => r.team.club?.name ?? "",
+    combinedScore,
+    npsRank: (r) => r.npsRank,
+    powerAvgRank: (r) => r.powerAvgRank,
+  };
+  // Default to Combined Score ascending -- this tab's whole purpose is that one blended
+  // number, so it should lead the table unsorted, same convention as Power Rankings'
+  // own Avg Rank default.
+  const rows =
+    sort && accessors[sort] ? sortRows(defaultRows, accessors[sort], dir) : sortRows(defaultRows, combinedScore, "asc");
+
+  return (
+    <table className={tableClass}>
+      <thead>
+        <tr>
+          <SortableHeader sortKey="team" label="Team" activeSort={sort} dir={dir} baseParams={baseParams} />
+          <SortableHeader sortKey="club" label="Club" activeSort={sort} dir={dir} baseParams={baseParams} />
+          <SortableHeader
+            sortKey="combinedScore"
+            label="Combined Score"
+            activeSort={sort}
+            dir={dir}
+            baseParams={baseParams}
+          />
+          <SortableHeader
+            sortKey="npsRank"
+            label="NPS Rank"
+            activeSort={sort}
+            dir={dir}
+            baseParams={baseParams}
+          />
+          <SortableHeader
+            sortKey="powerAvgRank"
+            label="Power Avg Rank"
+            activeSort={sort}
+            dir={dir}
+            baseParams={baseParams}
+          />
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((r) => (
+          <tr key={r.team.id}>
+            <td className={tdClass}>
+              <Link href={`/admin/teams/${r.team.id}`} className="text-slate-900 underline">
+                {r.team.name}
+              </Link>
+            </td>
+            <td className={tdClass}>{r.team.club?.name ?? ""}</td>
+            <td className={tdClass}>
+              {(() => {
+                const score = combinedScore(r);
+                return score !== undefined ? score.toFixed(1) : "—";
+              })()}
+            </td>
+            <td className={tdClass}>{r.npsRank ?? "—"}</td>
+            <td className={tdClass}>{r.powerAvgRank !== undefined ? r.powerAvgRank.toFixed(1) : "—"}</td>
+          </tr>
+        ))}
+        {rows.length === 0 && (
+          <tr>
+            <td className={tdClass} colSpan={5}>
+              No ranked teams yet for this season/age group.
+            </td>
+          </tr>
+        )}
+      </tbody>
+    </table>
   );
 }

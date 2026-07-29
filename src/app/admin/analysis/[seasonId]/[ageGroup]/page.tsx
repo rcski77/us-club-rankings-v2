@@ -42,15 +42,16 @@ async function runAnalysisForAll(seasonId: string, ageGroup: number) {
  * other division's in the same age group, the way the legacy Analysis screen let them
  * eyeball Top5/10/25/.../250 counts across events.
  *
- * "Elo Weight" is a separate, live-computed column, not part of the persisted
+ * "Rating Weight" is a separate, live-computed column, not part of the persisted
  * DivisionScoringSnapshot: computeDivisionWeightsForPartition() (see
- * computeMatchDivisionWeights.ts) is the same Colley-only rank transform Elo
- * recompute uses to weight a division's matches, exposed here so staff can see how a
- * division will actually affect Elo before/without running a recompute. Deliberately
- * distinct from Band/Pctl above it, which is sometimes Elo/DCI-based depending on the
- * division's own match coverage -- the two numbers answer different questions
- * ("what point curve fits this field" vs. "how much should a result here move Elo")
- * and won't generally match.
+ * computeMatchDivisionWeights.ts) is the same Colley-only rank transform both Elo and
+ * Massey recompute use to weight a division's matches (Elo as a K-factor multiplier,
+ * Massey by scaling that match's matrix contribution -- see massey.ts's solveMassey),
+ * exposed here so staff can see how a division will actually affect either engine
+ * before/without running a recompute. Deliberately distinct from Band/Pctl above it,
+ * which is sometimes Elo/DCI-based depending on the division's own match coverage --
+ * the two numbers answer different questions ("what point curve fits this field" vs.
+ * "how much should a result here move Elo/Massey") and won't generally match.
  */
 type SortKey = "fss" | "elitePresence" | "percentile" | "eloWeight" | "maxPoints" | `bucket:${number}`;
 
@@ -187,7 +188,7 @@ export default async function AnalysisPage({
               <th className={thClass}>Band</th>
               <th className={thClass}>
                 <Link href={sortLink(seasonId, ageGroup, "eloWeight", sort, dir)} className="hover:underline">
-                  Elo Weight{sortIndicator("eloWeight", sort, dir)}
+                  Rating Weight{sortIndicator("eloWeight", sort, dir)}
                 </Link>
               </th>
               {BUCKET_THRESHOLDS.map((t) => (

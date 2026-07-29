@@ -80,8 +80,9 @@ type PartitionMatch = Awaited<ReturnType<typeof getPartitionMatches>>["matches"]
 /** Attaches each match's divisionWeight (see computeMatchDivisionWeights.ts) so
  * buildEloMatches/solveElo pick it up -- shared by computeEloRatingsForPartition and
  * getTeamEloHistory so a team's history trace is always consistent with the rating it
- * explains. */
-async function withDivisionWeights(matches: PartitionMatch[]) {
+ * explains. Exported so computeMasseyRatings.ts can reuse the identical weights rather
+ * than recomputing them a second, potentially-inconsistent way. */
+export async function withDivisionWeights(matches: PartitionMatch[]) {
   const weights = await computeMatchDivisionWeights(matches);
   return matches.map((m) => ({ ...m, divisionWeight: m.divisionId ? weights.get(m.divisionId) : undefined }));
 }
