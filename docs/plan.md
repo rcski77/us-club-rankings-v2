@@ -427,9 +427,23 @@ just copies `rank`, no blending). Future rating-engine work should default to tu
 the existing Colley/Elo/Massey algorithms (calibration constants, weighting) rather
 than adding new composite-score columns.
 
-**Not yet built**: Power Rankings switching its default/primary labeling from Colley
-to Elo (all three engines are shown side-by-side today, selectable, none demoted), a
-periodic/scheduled Massey cross-check re-run (today it's the same manual-trigger
+**Power Rankings default/primary labeling — resolved as the blended Avg Rank
+(2026-07-29).** Per explicit user decision, Power Rankings' "primary" view is the
+Avg Rank blend added for Combine Rankings (Colley/Elo/Massey rank-averaged), not a
+promotion of any single engine to "default" the way the original plan assumed. Power
+Rankings gained a leading ordinal **Rank** column (`team-rankings/page.tsx`'s
+`PowerRankingTable`) — an actual rank position by Avg Rank order, computed once via
+`sortRows(defaultRows, averagePowerRank, "asc")` into a `teamId -> position` map and
+displayed as a real "1, 2, 3..." column (mirroring NPS Rankings' own persisted `rank`
+column) rather than just a raw averaged number staff had to interpret themselves. The
+position stays fixed to Avg Rank order even when the table is sorted by a different
+column (clicking "Colley Rank" re-sorts the row order but each row still shows its
+Avg-Rank-based Rank number), same convention as NPS's `rank` column. Colley/Elo/Massey
+remain visible as their own columns for staff who want the underlying detail — this
+isn't a removal of the per-engine views, just a headline number placed in front of
+them.
+
+**Not yet built**: a periodic/scheduled Massey cross-check re-run (today it's the same manual-trigger
 button as Colley/Elo — background-job infra is Phase 6), Sportwrench/TM2/VBSchedule
 match-level fetchers (AES only so far, matching TEAM_FINISHES's existing source
 coverage).
@@ -864,10 +878,11 @@ approach from `AES Scraping/Match Results/aes_match_results.py`, not
 historical pull rather than a continuously-polled live-scoring sync). Incremental Elo
 with chronological backfill ✅ done (see Status above). Massey batch least-squares
 engine ✅ done, ridge-regularized, from the real per-set point scores already
-captured by the Match import (see Status above). **Not started**: a periodic/
-scheduled re-run of any of the three engines (today all are manual-trigger buttons —
-waits on Phase 6's background-job infra), Power Rankings switches its default labeling
-from Colley to Elo/Massey (all three shown side-by-side today). CPI activation was
+captured by the Match import (see Status above). Power Rankings' default/primary view
+resolved as the blended Avg Rank column, not a promotion of a single engine — see the
+"Power Rankings default/primary labeling — resolved" entry in Status above. **Not
+started**: a periodic/scheduled re-run of any of the three engines (today all are
+manual-trigger buttons — waits on Phase 6's background-job infra). CPI activation was
 scoped and then explicitly dropped — see the "CPI activation — dropped" entry in
 Status above; future rating work here should be algorithm tuning/calibration, not new
 composite-score columns.

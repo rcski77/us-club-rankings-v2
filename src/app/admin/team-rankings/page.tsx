@@ -456,7 +456,18 @@ async function PowerRankingTable({
   const { latestColley, latestElo, latestMassey } = data;
   const defaultRows = buildPowerRows(data);
 
+  // Ordinal "Rank" column, positioned first like NPS Rankings' own persisted `rank` --
+  // Avg Rank is the headline number now (see averagePowerRank's comment), so it earns
+  // an actual rank position rather than staying a raw averaged value staff have to
+  // interpret themselves. Computed once by Avg Rank order regardless of which column
+  // the table is currently sorted/displayed by, same as NPS's rank column staying
+  // fixed while other columns are sortable.
+  const rankByTeamId = new Map(
+    sortRows(defaultRows, averagePowerRank, "asc").map((r, i) => [r.team.id, i + 1]),
+  );
+
   const accessors: Record<string, (r: PowerRow) => string | number | undefined> = {
+    rank: (r) => rankByTeamId.get(r.team.id),
     team: (r) => r.team.name,
     club: (r) => r.team.club?.name ?? "",
     avgRank: averagePowerRank,
@@ -489,6 +500,7 @@ async function PowerRankingTable({
       <table className={tableClass}>
         <thead>
           <tr>
+            <SortableHeader sortKey="rank" label="Rank" activeSort={sort} dir={dir} baseParams={baseParams} />
             <SortableHeader sortKey="team" label="Team" activeSort={sort} dir={dir} baseParams={baseParams} />
             <SortableHeader sortKey="club" label="Club" activeSort={sort} dir={dir} baseParams={baseParams} />
             <SortableHeader
@@ -566,6 +578,7 @@ async function PowerRankingTable({
         <tbody>
           {rows.map(({ team, colley, elo, massey }) => (
             <tr key={team.id}>
+              <td className={tdClass}>{rankByTeamId.get(team.id) ?? "—"}</td>
               <td className={tdClass}>
                 <Link href={`/admin/teams/${team.id}`} className="text-slate-900 underline">
                   {team.name}
@@ -591,7 +604,7 @@ async function PowerRankingTable({
           ))}
           {rows.length === 0 && (
             <tr>
-              <td className={tdClass} colSpan={12}>
+              <td className={tdClass} colSpan={13}>
                 No ratings yet — click &quot;Recompute ratings&quot; above.
               </td>
             </tr>
