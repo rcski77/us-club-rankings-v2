@@ -63,9 +63,9 @@ describe("parseAgeGroupLabel", () => {
     expect(isDivisionLabelParseError(result)).toBe(false);
     if (!isDivisionLabelParseError(result)) {
       expect(result.ageGroup).toBe(13);
-      // "Elite" isn't a recognized tier keyword -- still defaults to OPEN and flags it.
-      expect(result.tierLabel).toBe("OPEN");
-      expect(result.tierWasDefaulted).toBe(true);
+      // AAU's Elite tier folds onto USAV's USA tier -- see docs/domain-notes.md.
+      expect(result.tierLabel).toBe("USA");
+      expect(result.tierWasDefaulted).toBe(false);
     }
   });
 
@@ -84,6 +84,24 @@ describe("parseAgeGroupLabel", () => {
     expect(isDivisionLabelParseError(result)).toBe(false);
     if (!isDivisionLabelParseError(result)) {
       expect(result.ageGroup).toBe(18);
+    }
+  });
+
+  it("recognizes AAU tier keyword aliases with no dedicated enum value", () => {
+    const cases: Array<[string, string]> = [
+      ["Elite", "USA"],
+      ["Select", "CLUB"],
+      ["Ascend", "CLUB"],
+      ["Aspire", "FREEDOM"],
+      ["Spirit", "FREEDOM"],
+    ];
+    for (const [keyword, expectedTier] of cases) {
+      const result = parseAgeGroupLabel(`16 ${keyword}`);
+      expect(isDivisionLabelParseError(result)).toBe(false);
+      if (!isDivisionLabelParseError(result)) {
+        expect(result.tierLabel).toBe(expectedTier);
+        expect(result.tierWasDefaulted).toBe(false);
+      }
     }
   });
 

@@ -71,16 +71,18 @@ export default async function DivisionDetailPage({
   const addBandWithIds = addDivisionBand.bind(null, eventId, divisionId);
   const addFinishWithIds = addTeamFinish.bind(null, eventId, divisionId);
 
+  // Best-to-worst division strength, USAV and AAU tiers merged into one order
+  // (see docs/domain-notes.md) since both share this one dropdown/enum.
   const TIER_LABELS = [
     "OPEN",
-    "AMERICAN",
-    "PATRIOT",
-    "LIBERTY",
-    "USA",
-    "FREEDOM",
     "PREMIER",
+    "USA",
+    "LIBERTY",
+    "AMERICAN",
     "CLUB",
+    "FREEDOM",
     "CLASSIC",
+    "PATRIOT",
   ] as const;
 
   return (

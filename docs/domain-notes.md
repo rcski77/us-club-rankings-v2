@@ -39,6 +39,41 @@ groups and sometimes multiple squads within one age group (legacy naming convent
   band `fromRank: 26, toRank: 0, points: 180` covers rank 26 through however many teams
   finished. This matches the legacy admin UI's convention.
 
+## Division tier hierarchy (`DivisionTierLabel`)
+
+`DivisionTierLabel` is one shared enum/dropdown across both USAV and AAU events (see
+the AAU merge note on the enum itself in `prisma/schema.prisma`), so the tier picker
+throughout the admin UI (`events/[eventId]/page.tsx`,
+`events/[eventId]/divisions/[divisionId]/page.tsx`) lists values **best-to-worst
+division strength**, merging both governing bodies' hierarchies into one order (per
+user direction, 2026-07-30):
+
+```
+OPEN > PREMIER > USA > LIBERTY > AMERICAN > CLUB > FREEDOM > CLASSIC > PATRIOT
+```
+
+USAV's own best-to-worst order is Open > National (→ `PREMIER`, see the enum's own
+merge note) > USA > Liberty > American > Freedom > Patriot — Open requires an earned
+bid at a national qualifier, Patriot is the only national division not requiring a
+pre-earned bid. AAU's tiers don't map one-to-one onto USAV's (AAU has its own
+Elite/Select-Ascend/Aspire-Spirit tiers with no dedicated enum value), so they're
+folded onto the nearest USAV-equivalent enum value (per explicit user direction,
+2026-07-30):
+
+| AAU tier       | Maps to enum |
+|----------------|--------------|
+| Open           | `OPEN`       |
+| Premier        | `PREMIER`    |
+| Elite          | `USA`        |
+| Select/Ascend  | `CLUB`       |
+| Club           | `CLUB`       |
+| Aspire/Spirit  | `FREEDOM`    |
+| Classic        | `CLASSIC`    |
+
+This is a merged-ordering judgment call, not a confirmed cross-body equivalence
+table — revisit if AAU/USAV cross-comparison ever needs to be precise rather than
+just "reasonable dropdown order."
+
 ## AES data format (confirmed from a real sample)
 
 The current CSV pipeline (a scraper the user maintains, output reviewed directly) gives
