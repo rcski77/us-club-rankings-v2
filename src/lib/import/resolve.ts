@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
-import type { DivisionTierLabel } from "@/generated/prisma/enums";
-import { decodeAesTeamCode, isAesTeamCodeParseError } from "./aesTeamCode";
+import type { DivisionTierLabel, DivisionGender } from "@/generated/prisma/enums";
+import { decodeAesTeamCode, isAesTeamCodeParseError, divisionGenderFromTeamCodeGender } from "./aesTeamCode";
 import { isDivisionLabelParseError, parseAgeGroupLabel } from "./divisionLabel";
 import { parseAesTeamNameField } from "./teamNameField";
 import { computeLineageKey } from "./lineageKey";
@@ -17,7 +17,13 @@ type RowInput = {
   overrideClubName: string | null;
 };
 
-type DivisionRef = { id: string; ageGroup: number; tierLabel: DivisionTierLabel; tierLevel: string | null };
+type DivisionRef = {
+  id: string;
+  ageGroup: number;
+  gender: DivisionGender;
+  tierLabel: DivisionTierLabel;
+  tierLevel: string | null;
+};
 type RegionRef = { id: string; code: string };
 type TeamSeasonRef = { teamId: string; externalTeamCode: string | null; ageGroup: number };
 type TeamRef = { id: string; lineageKey: string | null };
@@ -42,8 +48,8 @@ type ResolveContext = {
   claimedKeys: Set<string>;
 };
 
-function divisionKeyOf(ageGroup: number, tierLabel: string, tierLevel: string | null): string {
-  return `${ageGroup}|${tierLabel}|${tierLevel ?? ""}`;
+function divisionKeyOf(ageGroup: number, gender: string, tierLabel: string, tierLevel: string | null): string {
+  return `${ageGroup}|${gender}|${tierLabel}|${tierLevel ?? ""}`;
 }
 
 // Shared with commit.ts, which writes a REGION_MISMATCH AuditFlag for any row
@@ -77,7 +83,9 @@ export async function resolveImportBatch(batchId: string): Promise<void> {
   });
 
   const divisionByKey = new Map<string, DivisionRef>();
-  for (const d of divisions) divisionByKey.set(divisionKeyOf(d.ageGroup, d.tierLabel, d.tierLevel), d);
+  for (const d of divisions) {
+    divisionByKey.set(divisionKeyOf(d.ageGroup, d.gender, d.tierLabel, d.tierLevel), d);
+  }
 
   const regionByCode = new Map<string, RegionRef>();
   for (const r of regions) regionByCode.set(r.code.toLowerCase(), r);
@@ -169,6 +177,25 @@ function resolveRow(row: RowInput, ctx: ResolveContext) {
     );
   }
 
+  // Gender: the team's own code is authoritative (structured data), not the label's
+  // optional "B"/"G" prefix -- the label is only a cross-check. An unrecognized code
+  // char (not seen in practice so far) defaults to GIRLS, matching every division
+  // imported before this field existed, flagged so an admin can verify rather than
+  // silently guessing.
+  const rowGender = divisionGenderFromTeamCodeGender(decoded.gender);
+  if (!rowGender) {
+    escalate(
+      "WARNING",
+      `Unrecognized gender code "${decoded.gender}" in team code "${row.teamCodeRaw}" — defaulted to Girls, please verify.`,
+    );
+  } else if (label.genderFromLabel && label.genderFromLabel !== rowGender) {
+    escalate(
+      "WARNING",
+      `Gender in division label ("${label.genderFromLabel}") doesn't match team code gender ("${rowGender}").`,
+    );
+  }
+  const effectiveGender: DivisionGender = rowGender ?? "GIRLS";
+
   const nameField = parseAesTeamNameField(row.teamNameRaw);
 
   const rank = Number(row.rankRaw);
@@ -201,7 +228,7 @@ function resolveRow(row: RowInput, ctx: ResolveContext) {
     matchedDivisionId = row.overrideDivisionId;
     effectiveDivisionKey = `id:${row.overrideDivisionId}`;
   } else {
-    const key = divisionKeyOf(label.ageGroup, label.tierLabel, label.tierLevel);
+    const key = divisionKeyOf(label.ageGroup, effectiveGender, label.tierLabel, label.tierLevel);
     const existing = ctx.divisionByKey.get(key);
     if (existing) {
       divisionMatchType = "EXISTING";
@@ -343,6 +370,7 @@ function resolveRow(row: RowInput, ctx: ResolveContext) {
     parsedTierLevel: label.tierLevel,
     tierWasDefaulted: label.tierWasDefaulted,
     parsedGender: decoded.gender,
+    parsedDivisionGender: effectiveGender,
     parsedClubExternalCode: decoded.clubExternalCode,
     parsedTeamNumber: decoded.teamNumber,
     parsedRegionCodeFromCode: decoded.regionCode,

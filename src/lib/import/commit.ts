@@ -65,6 +65,7 @@ export async function commitImportBatch(batchId: string): Promise<CommitResult> 
       r.parsedAgeGroup == null ||
       r.parsedTeamAgeGroup == null ||
       r.parsedTierLabel == null ||
+      r.parsedDivisionGender == null ||
       r.parsedClubExternalCode == null ||
       r.parsedTeamNumber == null ||
       r.parsedRegionCodeFromCode == null,
@@ -119,6 +120,7 @@ export async function commitImportBatch(batchId: string): Promise<CommitResult> 
       for (const group of newDivisionGroups.values()) {
         const first = group[0];
         const ageGroup = first.parsedAgeGroup!;
+        const gender = first.parsedDivisionGender!;
         const tierLabel = first.parsedTierLabel!;
         const tierLevel = first.parsedTierLevel;
         const name = first.ageGroupLabelRaw.trim();
@@ -134,6 +136,7 @@ export async function commitImportBatch(batchId: string): Promise<CommitResult> 
             name,
             slug,
             ageGroup,
+            gender,
             tierLabel,
             tierLevel,
             scoringStatus: "DRAFT",

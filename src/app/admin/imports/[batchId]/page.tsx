@@ -8,6 +8,8 @@ import {
   uploadImportFile,
   fetchAesStandings,
   fetchAndCommitAesMatches,
+  fetchSportwrenchStandings,
+  fetchAndCommitSportwrenchMatches,
   resolveBatch,
   overrideRowDivision,
   overrideRowClub,
@@ -109,6 +111,7 @@ export default async function ImportBatchPage({
 
   const uploadWithId = uploadImportFile.bind(null, batchId);
   const fetchAesStandingsWithId = fetchAesStandings.bind(null, batchId);
+  const fetchSportwrenchStandingsWithId = fetchSportwrenchStandings.bind(null, batchId);
   const resolveWithId = resolveBatch.bind(null, batchId);
   const commitWithId = commitBatch.bind(null, batchId);
   const deleteWithId = deleteBatch.bind(null, batchId);
@@ -163,14 +166,15 @@ export default async function ImportBatchPage({
       )}
       {error === "no-schedule-url" && (
         <p className={errorBannerClass}>
-          This event has no AES schedule URL set — add one on the event&apos;s page first.
+          This event has no schedule URL set for a supported platform — add one on the event&apos;s page
+          first.
         </p>
       )}
       {error === "bad-schedule-url" && (
-        <p className={errorBannerClass}>Could not find an AES event id in this event&apos;s schedule URL.</p>
+        <p className={errorBannerClass}>Could not find an event id in this event&apos;s schedule URL.</p>
       )}
       {error === "fetch-failed" && (
-        <p className={errorBannerClass}>Fetching standings from AES failed: {reason ?? "unknown error"}.</p>
+        <p className={errorBannerClass}>Fetching standings failed: {reason ?? "unknown error"}.</p>
       )}
       {error === "commit-blocked" && (
         <p className={errorBannerClass}>Could not commit: {reason ?? "see row statuses below."}</p>
@@ -236,6 +240,13 @@ export default async function ImportBatchPage({
                 <input type="hidden" name="filter" value={filter ?? ""} />
                 <SubmitButton className={secondaryButtonClass} pendingText="Fetching…">
                   Fetch standings from AES
+                </SubmitButton>
+              </form>
+            ) : batch.event.scheduleSource === "SPORTWRENCH" ? (
+              <form action={fetchSportwrenchStandingsWithId}>
+                <input type="hidden" name="filter" value={filter ?? ""} />
+                <SubmitButton className={secondaryButtonClass} pendingText="Fetching…">
+                  Fetch standings from Sportwrench
                 </SubmitButton>
               </form>
             ) : (
@@ -563,7 +574,8 @@ async function MatchResultsBatchView({
       })
     : [];
 
-  const fetchAndCommitWithId = fetchAndCommitAesMatches.bind(null, batch.id);
+  const fetchAndCommitAesWithId = fetchAndCommitAesMatches.bind(null, batch.id);
+  const fetchAndCommitSportwrenchWithId = fetchAndCommitSportwrenchMatches.bind(null, batch.id);
   const deleteWithId = deleteBatch.bind(null, batch.id);
 
   return (
@@ -612,21 +624,22 @@ async function MatchResultsBatchView({
       )}
       {error === "no-schedule-url" && (
         <p className={errorBannerClass}>
-          This event has no AES schedule URL set — add one on the event&apos;s page first.
+          This event has no schedule URL set for a supported platform — add one on the event&apos;s page
+          first.
         </p>
       )}
       {error === "bad-schedule-url" && (
-        <p className={errorBannerClass}>Could not find an AES event id in this event&apos;s schedule URL.</p>
+        <p className={errorBannerClass}>Could not find an event id in this event&apos;s schedule URL.</p>
       )}
       {error === "fetch-failed" && (
-        <p className={errorBannerClass}>Fetching match results from AES failed: {reason ?? "unknown error"}.</p>
+        <p className={errorBannerClass}>Fetching match results failed: {reason ?? "unknown error"}.</p>
       )}
       {success === "committed" && <p className={successBannerClass}>Match results imported.</p>}
 
       <section className="mb-8">
         {batch.event.scheduleSource === "AES" && batch.event.scheduleUrl ? (
           <>
-            <form action={fetchAndCommitWithId}>
+            <form action={fetchAndCommitAesWithId}>
               <SubmitButton className={primaryButtonClass} pendingText="Fetching & importing…">
                 {isCommitted ? "Re-fetch match results from AES" : "Fetch match results from AES"}
               </SubmitButton>
@@ -641,10 +654,28 @@ async function MatchResultsBatchView({
             </p>
             <p className="mt-2 truncate text-xs text-slate-400">{batch.event.scheduleUrl}</p>
           </>
+        ) : batch.event.scheduleSource === "SPORTWRENCH" && batch.event.scheduleUrl ? (
+          <>
+            <form action={fetchAndCommitSportwrenchWithId}>
+              <SubmitButton className={primaryButtonClass} pendingText="Fetching & importing…">
+                {isCommitted ? "Re-fetch match results from Sportwrench" : "Fetch match results from Sportwrench"}
+              </SubmitButton>
+            </form>
+            <p className="mt-2 text-xs text-slate-500">
+              Pulls every completed match for this event from Sportwrench and imports
+              it immediately (re-running is safe — matches are matched and updated by
+              Sportwrench&apos;s own match id, not duplicated). Teams/divisions must
+              already exist from a Team Finishes import of this same event; unmatched
+              matches are skipped, not created as new records — re-running after
+              importing more Team Finishes for this event can pick up
+              previously-skipped ones.
+            </p>
+            <p className="mt-2 truncate text-xs text-slate-400">{batch.event.scheduleUrl}</p>
+          </>
         ) : (
           <p className="text-sm text-slate-500">
-            This event has no AES schedule URL set, or its platform isn&apos;t AES —
-            add one on the event&apos;s page first.
+            This event has no schedule URL set for a supported platform — add one on
+            the event&apos;s page first.
           </p>
         )}
       </section>

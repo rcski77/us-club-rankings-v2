@@ -1,8 +1,9 @@
 import { prisma } from "@/lib/prisma";
 import { fetchAesMatchResults } from "./aesMatches";
-import { resolveAesMatches } from "./resolveMatches";
+import { fetchSportwrenchMatchResults } from "./sportwrenchMatches";
+import { resolveAesMatches, type ResolvedMatch, type SkippedMatch } from "./resolveMatches";
 
-export type ImportAesMatchesResult =
+export type ImportMatchResultsResult =
   | {
       ok: true;
       matchesFetched: number;
@@ -13,32 +14,13 @@ export type ImportAesMatchesResult =
     }
   | { ok: false; reason: string };
 
-/**
- * Fetches an AES event's completed matches and upserts them as Match rows, keyed by
- * (eventId, externalMatchId) so a re-run is idempotent. Unlike the TEAM_FINISHES
- * import, this has no separate resolve/preview/commit staging step -- match rows are
- * deterministic (team codes and division labels are already known-good data, not
- * free text needing admin judgment), so fetch+resolve+commit run as one action. See
- * docs/plan.md Phase 5.
- */
-export async function importAesMatchResults(
-  batchId: string,
-  aesEventId: string,
-): Promise<ImportAesMatchesResult> {
-  const batch = await prisma.importBatch.findUniqueOrThrow({
-    where: { id: batchId },
-    include: { event: true },
-  });
-
-  let fetchResult;
-  try {
-    fetchResult = await fetchAesMatchResults(aesEventId);
-  } catch (err) {
-    return { ok: false, reason: err instanceof Error ? err.message : String(err) };
-  }
-
-  const teamSeasons = await prisma.teamSeason.findMany({ where: { seasonId: batch.event.seasonId } });
-  const finishes = await prisma.teamFinish.findMany({ where: { division: { eventId: batch.eventId } } });
+// Shared by every source's import*MatchResults() below -- resolving which teams/
+// divisions a fetched match's team codes map onto only depends on the event's own
+// already-committed TeamSeason/TeamFinish data, never on which platform the match
+// itself came from.
+async function buildMatchResolutionContext(seasonId: string, eventId: string) {
+  const teamSeasons = await prisma.teamSeason.findMany({ where: { seasonId } });
+  const finishes = await prisma.teamFinish.findMany({ where: { division: { eventId } } });
 
   const teamSeasonByExternalCode = new Map<string, { teamId: string }>();
   for (const ts of teamSeasons) {
@@ -49,9 +31,18 @@ export async function importAesMatchResults(
   const divisionIdByTeamId = new Map<string, string>();
   for (const f of finishes) divisionIdByTeamId.set(f.teamId, f.divisionId);
 
-  const { resolved, skipped } = resolveAesMatches(fetchResult.matches, teamSeasonByExternalCode, divisionIdByTeamId);
-  const matchesFetchedCount = fetchResult.matches.length;
+  return { teamSeasonByExternalCode, divisionIdByTeamId };
+}
 
+// Upserts a resolved+skipped match set and finalizes the batch -- the part that's
+// identical regardless of which platform the matches were fetched from.
+async function commitResolvedMatches(
+  batchId: string,
+  eventId: string,
+  resolved: ResolvedMatch[],
+  skipped: SkippedMatch[],
+  matchesFetchedCount: number,
+): Promise<ImportMatchResultsResult> {
   let created = 0;
   let updated = 0;
 
@@ -63,10 +54,10 @@ export async function importAesMatchResults(
     async (tx) => {
       for (const m of resolved) {
         const existing = await tx.match.findUnique({
-          where: { eventId_externalMatchId: { eventId: batch.eventId, externalMatchId: m.externalMatchId } },
+          where: { eventId_externalMatchId: { eventId, externalMatchId: m.externalMatchId } },
         });
         await tx.match.upsert({
-          where: { eventId_externalMatchId: { eventId: batch.eventId, externalMatchId: m.externalMatchId } },
+          where: { eventId_externalMatchId: { eventId, externalMatchId: m.externalMatchId } },
           update: {
             divisionId: m.divisionId,
             teamAId: m.teamAId,
@@ -80,7 +71,7 @@ export async function importAesMatchResults(
             importBatchId: batchId,
           },
           create: {
-            eventId: batch.eventId,
+            eventId,
             externalMatchId: m.externalMatchId,
             divisionId: m.divisionId,
             teamAId: m.teamAId,
@@ -127,4 +118,68 @@ export async function importAesMatchResults(
     skipped: skipped.length,
     skippedReasons: skipped.map((s) => s.reason),
   };
+}
+
+/**
+ * Fetches an AES event's completed matches and upserts them as Match rows, keyed by
+ * (eventId, externalMatchId) so a re-run is idempotent. Unlike the TEAM_FINISHES
+ * import, this has no separate resolve/preview/commit staging step -- match rows are
+ * deterministic (team codes and division labels are already known-good data, not
+ * free text needing admin judgment), so fetch+resolve+commit run as one action. See
+ * docs/plan.md Phase 5.
+ */
+export async function importAesMatchResults(
+  batchId: string,
+  aesEventId: string,
+): Promise<ImportMatchResultsResult> {
+  const batch = await prisma.importBatch.findUniqueOrThrow({
+    where: { id: batchId },
+    include: { event: true },
+  });
+
+  let fetchResult;
+  try {
+    fetchResult = await fetchAesMatchResults(aesEventId);
+  } catch (err) {
+    return { ok: false, reason: err instanceof Error ? err.message : String(err) };
+  }
+
+  const { teamSeasonByExternalCode, divisionIdByTeamId } = await buildMatchResolutionContext(
+    batch.event.seasonId,
+    batch.eventId,
+  );
+  const { resolved, skipped } = resolveAesMatches(fetchResult.matches, teamSeasonByExternalCode, divisionIdByTeamId);
+
+  return commitResolvedMatches(batchId, batch.eventId, resolved, skipped, fetchResult.matches.length);
+}
+
+/**
+ * Sportwrench analog of importAesMatchResults -- same fetch-then-resolve-then-commit
+ * shape, reusing resolveAesMatches() (source-agnostic despite the name, see
+ * sportwrenchMatches.ts) and commitResolvedMatches() so the two sources can never
+ * drift apart on how a resolved match actually gets written.
+ */
+export async function importSportwrenchMatchResults(
+  batchId: string,
+  sportwrenchEventId: string,
+): Promise<ImportMatchResultsResult> {
+  const batch = await prisma.importBatch.findUniqueOrThrow({
+    where: { id: batchId },
+    include: { event: true },
+  });
+
+  let fetchResult;
+  try {
+    fetchResult = await fetchSportwrenchMatchResults(sportwrenchEventId);
+  } catch (err) {
+    return { ok: false, reason: err instanceof Error ? err.message : String(err) };
+  }
+
+  const { teamSeasonByExternalCode, divisionIdByTeamId } = await buildMatchResolutionContext(
+    batch.event.seasonId,
+    batch.eventId,
+  );
+  const { resolved, skipped } = resolveAesMatches(fetchResult.matches, teamSeasonByExternalCode, divisionIdByTeamId);
+
+  return commitResolvedMatches(batchId, batch.eventId, resolved, skipped, fetchResult.matches.length);
 }

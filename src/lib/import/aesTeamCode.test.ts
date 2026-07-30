@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { decodeAesTeamCode, isAesTeamCodeParseError } from "./aesTeamCode";
+import { decodeAesTeamCode, isAesTeamCodeParseError, divisionGenderFromTeamCodeGender } from "./aesTeamCode";
 
 describe("decodeAesTeamCode", () => {
   it("decodes a well-formed code", () => {
@@ -82,5 +82,18 @@ describe("decodeAesTeamCode", () => {
       teamNumber: "a",
       regionCode: "ce",
     });
+  });
+});
+
+describe("divisionGenderFromTeamCodeGender", () => {
+  it("maps g/b case-insensitively", () => {
+    expect(divisionGenderFromTeamCodeGender("g")).toBe("GIRLS");
+    expect(divisionGenderFromTeamCodeGender("G")).toBe("GIRLS");
+    expect(divisionGenderFromTeamCodeGender("b")).toBe("BOYS");
+    expect(divisionGenderFromTeamCodeGender("B")).toBe("BOYS");
+  });
+
+  it("returns null for an unrecognized char rather than guessing", () => {
+    expect(divisionGenderFromTeamCodeGender("x")).toBeNull();
   });
 });

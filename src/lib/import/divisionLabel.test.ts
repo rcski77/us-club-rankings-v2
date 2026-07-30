@@ -7,6 +7,7 @@ describe("parseAgeGroupLabel", () => {
     expect(isDivisionLabelParseError(result)).toBe(false);
     expect(result).toEqual({
       ageGroup: 14,
+      genderFromLabel: null,
       tierLabel: "AMERICAN",
       tierLevel: null,
       tierWasDefaulted: false,
@@ -47,10 +48,33 @@ describe("parseAgeGroupLabel", () => {
     expect(isDivisionLabelParseError(result)).toBe(false);
     expect(result).toEqual({
       ageGroup: 12,
+      genderFromLabel: null,
       tierLabel: "OPEN",
       tierLevel: null,
       tierWasDefaulted: true,
     });
+  });
+
+  it("strips a leading B/G gender prefix and reports it separately (real Sportwrench coed-event case)", () => {
+    const boys = parseAgeGroupLabel("B18 Open");
+    const girls = parseAgeGroupLabel("G18 Open");
+    expect(isDivisionLabelParseError(boys)).toBe(false);
+    expect(isDivisionLabelParseError(girls)).toBe(false);
+    if (!isDivisionLabelParseError(boys) && !isDivisionLabelParseError(girls)) {
+      expect(boys).toEqual({ ageGroup: 18, genderFromLabel: "BOYS", tierLabel: "OPEN", tierLevel: null, tierWasDefaulted: false });
+      expect(girls).toEqual({ ageGroup: 18, genderFromLabel: "GIRLS", tierLabel: "OPEN", tierLevel: null, tierWasDefaulted: false });
+    }
+  });
+
+  it("does not treat an ordinary tier keyword starting with b/g as a gender prefix", () => {
+    // Guards against the gender-prefix regex misfiring on a label with no prefix at
+    // all -- it only matches when a bare B/G is immediately followed by a digit.
+    const result = parseAgeGroupLabel("14 Open");
+    expect(isDivisionLabelParseError(result)).toBe(false);
+    if (!isDivisionLabelParseError(result)) {
+      expect(result.genderFromLabel).toBeNull();
+      expect(result.ageGroup).toBe(14);
+    }
   });
 
   it("errors when there is no leading age number", () => {

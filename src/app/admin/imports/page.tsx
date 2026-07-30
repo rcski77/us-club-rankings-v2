@@ -23,10 +23,15 @@ async function startImportBatch(formData: FormData) {
   const importType = importTypeRaw === "MATCH_RESULTS" ? "MATCH_RESULTS" : "TEAM_FINISHES";
   if (!eventId) redirect("/admin/imports?error=invalid");
 
+  const event = await prisma.event.findUnique({ where: { id: eventId } });
+  // Batch source follows the event's own configured platform (set on the event's
+  // page) rather than always being AES -- otherwise a Sportwrench event's batches
+  // would display and behave (via the Fetch button's scheduleSource check) as
+  // Sportwrench while the batch's own `source` column still claimed AES.
   const batch = await prisma.importBatch.create({
     data: {
       eventId,
-      source: "AES",
+      source: event?.scheduleSource ?? "AES",
       importType,
       status: "DRAFT",
       createdById: session?.user?.id ?? null,
@@ -152,9 +157,11 @@ export default async function ImportsPage({
 
       <h2 className="mb-2 text-lg font-medium">Start import</h2>
       <p className="mb-2 text-xs text-slate-500">
-        Source: AES only. Match Results requires the event&apos;s Team Finishes to
-        already be imported (it resolves teams/divisions from that data, not from
-        scratch).
+        Source is taken from the event&apos;s own schedule platform (set on the
+        event&apos;s page) — AES and Sportwrench have working Fetch buttons, other
+        platforms don&apos;t yet. Match Results requires the event&apos;s Team
+        Finishes to already be imported (it resolves teams/divisions from that data,
+        not from scratch).
       </p>
       <form action={startImportBatch} className="flex flex-wrap items-end gap-3">
         <label className="flex flex-col gap-1 text-sm">

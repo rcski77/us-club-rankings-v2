@@ -1,4 +1,4 @@
-import { DivisionTierLabel } from "@/generated/prisma/enums";
+import { DivisionTierLabel, DivisionGender } from "@/generated/prisma/enums";
 
 // AES's ageGroupLabel column usually carries both the age group and the division
 // tier (e.g. "14 American", "14 Open"). The exception is anchor events (Triple
@@ -22,6 +22,10 @@ import { DivisionTierLabel } from "@/generated/prisma/enums";
 
 export type ParsedDivisionLabel = {
   ageGroup: number;
+  genderFromLabel: DivisionGender | null; // from an optional leading "B"/"G" prefix
+  // -- null when the label carries no such prefix (the norm for this platform's
+  // girls-only history; a row's authoritative gender comes from its team code, see
+  // resolve.ts -- this is only a cross-check signal).
   tierLabel: DivisionTierLabel;
   tierLevel: string | null;
   tierWasDefaulted: boolean;
@@ -61,16 +65,28 @@ const TIER_KEYWORDS = Object.keys(TIER_KEYWORD_MAP);
 
 const TIER_LEVEL_PATTERN = /\b(I{1,3})\b/i;
 
+// A Sportwrench event with both boys and girls divisions prefixes each label with a
+// bare gender letter right before the age number (e.g. "B18 Open", "G18 Open") --
+// confirmed against a real coed event. AES's girls-only events never carry this
+// prefix. Stripped before age parsing so it doesn't defeat the leading-digit match.
+const GENDER_PREFIX_PATTERN = /^([bg])(?=\d)/i;
+const GENDER_PREFIX_MAP: Record<string, DivisionGender> = { b: "BOYS", g: "GIRLS" };
+
 export function parseAgeGroupLabel(label: string): ParsedDivisionLabel | DivisionLabelParseError {
   const trimmed = label.trim();
+
+  const genderPrefixMatch = trimmed.match(GENDER_PREFIX_PATTERN);
+  const genderFromLabel = genderPrefixMatch ? GENDER_PREFIX_MAP[genderPrefixMatch[1].toLowerCase()] : null;
+  const afterGenderPrefix = genderPrefixMatch ? trimmed.slice(genderPrefixMatch[0].length) : trimmed;
+
   // Combined-range labels ("12/13 Club") carry two leading numbers, not one -- the
   // nominal ageGroup is the older/max of the two (see file header comment).
-  const ageMatch = trimmed.match(/^(\d{1,2})(?:\s*\/\s*(\d{1,2}))?/);
+  const ageMatch = afterGenderPrefix.match(/^(\d{1,2})(?:\s*\/\s*(\d{1,2}))?/);
   if (!ageMatch) {
     return { raw: label, reason: `No leading age number found in "${label}".` };
   }
   const ageGroup = ageMatch[2] ? Math.max(Number(ageMatch[1]), Number(ageMatch[2])) : Number(ageMatch[1]);
-  const remainder = trimmed.slice(ageMatch[0].length);
+  const remainder = afterGenderPrefix.slice(ageMatch[0].length);
 
   const keywordMatch = TIER_KEYWORDS.find((keyword) =>
     new RegExp(`\\b${keyword}\\b`, "i").test(remainder),
@@ -80,6 +96,7 @@ export function parseAgeGroupLabel(label: string): ParsedDivisionLabel | Divisio
 
   return {
     ageGroup,
+    genderFromLabel,
     tierLabel: keywordMatch ? TIER_KEYWORD_MAP[keywordMatch] : "OPEN",
     tierLevel: levelMatch ? levelMatch[1].toUpperCase() : null,
     tierWasDefaulted: !keywordMatch,

@@ -53,3 +53,15 @@ export function isAesTeamCodeParseError(
 ): result is AesTeamCodeParseError {
   return "reason" in result;
 }
+
+// The team's own code is the authoritative source for a row's gender (structured
+// data, same reasoning as preferring the code's clubExternalCode/regionCode over any
+// free-text alternative) -- an unrecognized char returns null rather than guessing,
+// so resolve.ts can fall back to the division default and flag it instead of
+// silently misclassifying.
+export function divisionGenderFromTeamCodeGender(gender: string): "GIRLS" | "BOYS" | null {
+  const g = gender.toLowerCase();
+  if (g === "g") return "GIRLS";
+  if (g === "b") return "BOYS";
+  return null;
+}

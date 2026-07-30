@@ -87,10 +87,13 @@ async function startEventImport(eventId: string, formData: FormData) {
   const importTypeRaw = String(formData.get("importType") ?? "TEAM_FINISHES");
   const importType = importTypeRaw === "MATCH_RESULTS" ? "MATCH_RESULTS" : "TEAM_FINISHES";
 
+  const event = await prisma.event.findUnique({ where: { id: eventId } });
+  // Batch source follows the event's own configured platform -- see the identical
+  // comment on startImportBatch in admin/imports/page.tsx.
   const batch = await prisma.importBatch.create({
     data: {
       eventId,
-      source: "AES",
+      source: event?.scheduleSource ?? "AES",
       importType,
       status: "DRAFT",
       createdById: session?.user?.id ?? null,

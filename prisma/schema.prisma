@@ -181,8 +181,8 @@ model Event {
   // templates always.
   scheduleUrl    String? // results/schedule page URL for this event on whichever
   // platform it runs on, e.g. "https://results.advancedeventsystems.com/event/PTAwMDAwMzg4Mzk90".
-  scheduleSource ImportSource? // which platform scheduleUrl points at. Only AES has a
-  // working fetch implementation so far -- Sportwrench/TM2/VBSchedule can still be
+  scheduleSource ImportSource? // which platform scheduleUrl points at. AES and
+  // Sportwrench have working fetch implementations; TM2/VBSchedule can still be
   // recorded here for future adapters, they just don't have a "Fetch" button yet.
   divisions     Division[]
   importBatches ImportBatch[]
@@ -214,6 +214,12 @@ enum DivisionScoringStatus {
   CONFIRMED
 }
 
+enum DivisionGender {
+  GIRLS
+  BOYS
+  COED
+}
+
 model Division {
   id                String                @id @default(cuid())
   eventId           String
@@ -221,6 +227,13 @@ model Division {
   name              String // e.g. "17 Open"
   slug              String
   ageGroup          Int
+  gender            DivisionGender        @default(GIRLS) // this platform was
+  // girls-only until a real Sportwrench event surfaced boy divisions (label prefix
+  // "B18"/"G18") -- default GIRLS matches every division imported before this field
+  // existed, all confirmed girls-only in practice (see docs/domain-notes.md). Scoped
+  // to the import layer only: ranking/rating engines still partition by
+  // (season, ageGroup) alone, not gender -- see docs/plan.md's Sportwrench-import
+  // section for why that's an explicitly deferred follow-up, not an oversight.
   tierLabel         DivisionTierLabel
   tierLevel         String? // e.g. "I" / "II" -- separate roman-numeral axis
   scoringStatus     DivisionScoringStatus @default(DRAFT)
@@ -574,7 +587,12 @@ model ImportRow {
   parsedTierLabel           DivisionTierLabel?
   parsedTierLevel           String?
   tierWasDefaulted          Boolean            @default(false)
-  parsedGender              String? // audit-only -- not modeled anywhere downstream
+  parsedGender              String? // raw gender char straight from the team code
+  // (e.g. "g"/"b") -- audit-only, kept separate from the resolved enum below.
+  parsedDivisionGender      DivisionGender? // resolved GIRLS/BOYS value actually used
+  // for division matching/creation -- from the team code authoritatively, cross-
+  // checked (not overridden) against the division label's optional "B"/"G" prefix.
+  // See resolve.ts.
   parsedClubExternalCode    String?
   parsedTeamNumber          String? // alphanumeric -- see TeamSeason.teamNumber
   parsedRegionCodeFromCode  String?
