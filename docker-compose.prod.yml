@@ -5,24 +5,33 @@
 #      (--env-file is required in addition to env_file: below -- env_file only
 #      injects vars into the container, it doesn't feed the ${POSTGRES_PASSWORD}
 #      interpolation used in this file)
-#   4. One-time schema setup — the `app` image doesn't ship the Prisma CLI
-#      (production standalone build only), so run it from a machine with this
-#      repo checked out and `DATABASE_URL` pointed at the host's published
-#      5432 port, same as local dev:
-#        DATABASE_URL=postgres://postgres:<POSTGRES_PASSWORD>@<host>:5432/us_club_rankings npm run db:push
-#      then, if this is a fresh install:
-#        npm run db:seed && npm run db:seed-regions
+#   4. One-time schema setup. Postgres isn't published to the host (see note
+#      on the `postgres` service below), so run this from a throwaway
+#      container attached to the compose network instead of from the host or
+#      another machine — from the repo root on the homelab host:
+#        docker run --rm --network us-club-rankings-v2_default \
+#          -v "$PWD":/app -w /app node:24-alpine \
+#          sh -c "npm ci && npx prisma db push --url postgres://postgres:<POSTGRES_PASSWORD>@postgres:5432/us_club_rankings --accept-data-loss"
+#      then, if this is a fresh install, seed the same way:
+#        docker run --rm --network us-club-rankings-v2_default \
+#          -v "$PWD":/app -w /app -e DATABASE_URL=postgres://postgres:<POSTGRES_PASSWORD>@postgres:5432/us_club_rankings \
+#          node:24-alpine sh -c "npm ci && npx tsx prisma/seed.ts && npx tsx prisma/seedRegions.ts"
 #
 #      Alternative — copy over your existing local dev data instead of starting
 #      fresh (skips db:push/seed above; the restore brings the schema with it):
 #        # on your dev machine:
 #        docker exec -t us-club-rankings-v2-db pg_dump -U postgres -d us_club_rankings_dev -F c -f /tmp/dump.pgdump
 #        docker cp us-club-rankings-v2-db:/tmp/dump.pgdump ./dump.pgdump
-#        scp dump.pgdump user@homelab-host:/path/to/repo/
+#        scp dump.pgdump user@homelab-host:~/
 #        # on the homelab host, once this stack is up:
-#        docker cp dump.pgdump us-club-rankings-v2-db-prod:/tmp/dump.pgdump
+#        docker cp ~/dump.pgdump us-club-rankings-v2-db-prod:/tmp/dump.pgdump
 #        docker exec -t us-club-rankings-v2-db-prod pg_restore -U postgres -d us_club_rankings /tmp/dump.pgdump
+#        docker exec us-club-rankings-v2-db-prod rm /tmp/dump.pgdump
 #        docker compose -f docker-compose.prod.yml restart app
+#
+#      Need external DB access later (e.g. a GUI client)? Add a `ports:` entry
+#      on the `postgres` service below using a non-default host port, e.g.
+#      `"15432:5432"`, to avoid colliding with any other Postgres on the host.
 
 services:
   app:
@@ -49,8 +58,6 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: us_club_rankings
-    ports:
-      - "5432:5432"
     volumes:
       - us-club-rankings-v2-db-prod-data:/var/lib/postgresql/data
     healthcheck:
