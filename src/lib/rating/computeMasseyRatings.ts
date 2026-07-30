@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { getPartitionMatches, withDivisionWeights } from "./computeEloRatings";
 import { buildMasseyMatches, solveMassey } from "./massey";
+import { normalizeWeekEndingDate } from "./weekEndingDate";
 
 /**
  * Recomputes Massey ratings for one (season, ageGroup) partition as of asOfDate, and
@@ -29,8 +30,12 @@ export async function computeMasseyRatingsForPartition(
   seasonId: string,
   ageGroup: number,
   asOfDate: Date,
-  weekEndingDate: Date,
+  weekEndingDateRaw: Date,
 ) {
+  // See weekEndingDate.ts -- collapses same-day recomputes onto one timestamp so
+  // delete-and-replace below actually replaces instead of piling up.
+  const weekEndingDate = normalizeWeekEndingDate(weekEndingDateRaw);
+
   const { matches, relevantTeamIds } = await getPartitionMatches(seasonId, ageGroup, asOfDate);
   const weighted = await withDivisionWeights(matches);
   const masseyMatches = buildMasseyMatches(

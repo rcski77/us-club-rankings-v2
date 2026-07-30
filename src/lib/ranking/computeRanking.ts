@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { isBoysTeamCode } from "@/lib/teamGender";
 
 const BEST_N = 3;
 const ALGORITHM_VERSION = "phase1-points-only";
@@ -27,6 +28,13 @@ export async function computeRanking(seasonId: string, ageGroup: number) {
   // but should still count toward the age group it's actually enrolled at this season.
   const teamSeasons = await prisma.teamSeason.findMany({ where: { seasonId } });
   const naturalAgeGroup = new Map(teamSeasons.map((ts) => [ts.teamId, ts.ageGroup]));
+  // Girls rankings only for now -- boys support is planned but not built (see
+  // teamGender.ts). Filtering out boys' finishes here also has the effect of
+  // "ignoring" any division that's boys-only (no girls TeamFinish rows to survive
+  // the filter), without needing a separate division-level check.
+  const boysTeamIds = new Set(
+    teamSeasons.filter((ts) => isBoysTeamCode(ts.externalTeamCode)).map((ts) => ts.teamId),
+  );
 
   // A finish counts toward this ageGroup's ranking if either:
   //  - the division itself is this age group (the normal case), or
@@ -34,8 +42,9 @@ export async function computeRanking(seasonId: string, ageGroup: number) {
   //    this season) is this one (played up/down but should still count for their own).
   const relevant = finishes.filter(
     (f) =>
-      (f.division.ageGroup === ageGroup && !f.ignoreAge) ||
-      (f.ignoreAge && naturalAgeGroup.get(f.teamId) === ageGroup),
+      !boysTeamIds.has(f.teamId) &&
+      ((f.division.ageGroup === ageGroup && !f.ignoreAge) ||
+        (f.ignoreAge && naturalAgeGroup.get(f.teamId) === ageGroup)),
   );
 
   const byTeam = new Map<string, typeof relevant>();

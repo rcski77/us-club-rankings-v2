@@ -800,10 +800,10 @@ on the existing points-based `totalPoints`/`rank` ranking, not a switch to the
 unpopulated, waiting on Phase 4/5 calibration) — worth knowing if a future session
 sees "NPS Rankings" in the UI and goes looking for where `npsRank` is read from.
 
-**"Combine Rankings" view (post-Phase-5, UI-only).** `/admin/team-rankings` gained a
-third view tab alongside NPS/Power: "Combine Rankings," a single blended ranking for
-staff who want one number rather than reading NPS and Power side by side. Two additive
-pieces:
+**"Combined Rankings" view (post-Phase-5, UI-only; renamed from "Combine Rankings"
+2026-07-29).** `/admin/team-rankings` gained a third view tab alongside NPS/Power:
+"Combined Rankings," a single blended ranking for staff who want one number rather
+than reading NPS and Power side by side. Two additive pieces:
 - **Power Rankings gained an "Avg Rank" column** — `averagePowerRank()` averages a
   team's *rank* (not raw rating) across whichever of Colley/Elo/Massey actually rated
   it, since the three engines' raw ratings live on incompatible scales (Colley ~0.7–1.3,
@@ -821,12 +821,88 @@ pieces:
   side it has rather than being penalized; a team with neither has no score and sorts
   last. Reuses `getLatestPowerRatings()`/`buildPowerRows()` (factored out of the
   existing `PowerRankingTable` for this purpose) rather than a second, independent copy
-  of the three-engine queries.
+  of the three-engine queries. (Function/component name kept as `CombineRankingTable`
+  in code even after the user-facing tab label was renamed to "Combined Rankings" —
+  purely a display-string change, not a rename pass through the codebase.)
 
 This is presentation-only — no new persisted model, no change to `RankingResult` or
 `TeamRatingHistory` — both `averagePowerRank()` and `combinedScore()` are computed
 live from already-persisted per-engine ratings, the same pattern the Analysis page's
 "Rating Weight" column already uses for a different live-computed number (see above).
+
+**Ordinal Rank columns on Power and Combined Rankings (2026-07-29).** Both tables only
+showed a raw computed number (Avg Rank / Combined Score) that staff had to interpret
+themselves, unlike NPS Rankings' own persisted `rank` column. Both gained a leading
+**Rank** column — position by that table's own headline metric (Avg Rank / Combined
+Score ascending), computed once into a `teamId -> position` map so the number stays
+fixed regardless of which column the table is currently sorted/displayed by (clicking
+"Colley Rank" re-sorts row order but each row still shows its Avg-Rank-based position).
+This is also how the plan's earlier "Power Rankings default/primary labeling" item
+(see above) was resolved in practice: the blended Avg Rank became the de facto primary
+ranking by getting a real rank position, not by demoting Colley/Elo/Massey's own
+columns.
+
+**Match Results grouped by event, team detail page (2026-07-29).**
+`/admin/teams/[teamId]`'s Match Results section was a single flat, chronological list
+of `<details>` rows; per user request (modeled on a competitor site's tournament-level
+summary card), matches are now grouped by event, collapsible per event (auto-expanded
+when a season has only one event). Each event group header shows the event
+name/date-range/division(s), **Wins**/**Losses** badges, a total **Elo Δ** for that
+event (omitted if none of its matches have Elo data yet), and match count. Inside a
+group, matches are listed chronologically (day-1-morning to day-2-afternoon, not
+newest-first) with a new **Set Scores** column — the actual per-set point scores
+(`Match.setScores`, already imported but previously only shown as a set *count*),
+reoriented from AES's stored `{a, b}` = teamA/teamB into "this team vs. opponent" via a
+new `thisTeamIsA` flag alongside the existing `opponent`/`wonByThisTeam` normalization.
+Each match row is still individually expandable for the existing "why your Elo
+changed" panel. A season-level **Total / Wins / Losses** summary line (matching a
+second UI reference from the same competitor site) was added directly under the
+"Match Results" heading, above the per-event list.
+
+**Girls-only ranking filter, all engines (2026-07-29).** Per explicit user direction,
+boys teams are excluded from every ranking/rating computation — boys ranking support
+is planned (`docs/domain-notes.md`/legacy scope) but not built, and until it is, boys
+results shouldn't leak into the girls-focused output. New `src/lib/teamGender.ts`'s
+`isBoysTeamCode()` checks a `TeamSeason.externalTeamCode`'s leading character (AES's
+gender-prefix convention — "g"/"b", see `aesTeamCode.ts`); a missing/unparseable code
+is treated as NOT boys (only positive evidence excludes — see the file's own comment).
+Wired into the three finish-gathering filters that already existed for age-group/
+ignoreAge resolution: `computeRanking.ts` (points-based NPS ranking),
+`computeColleyRatings.ts`, and `computeEloRatings.ts`'s `getPartitionMatches()`
+(shared by both Elo and Massey) — boys finishes are excluded *before* divisions/
+comparisons/matches are even built, not just filtered from the final output, so a
+boys-only division contributes nothing at all (the practical meaning of "ignore boys
+divisions," since a mixed division just loses its boys teams under this same filter,
+per the user's own definition of "boys division" = boys-only). Confirmed this is safe
+math, not just filtering: Colley/Massey's matrices only have nonzero cross-team
+entries for teams that actually played each other, and Elo only updates the two teams
+in a given match, so an all-boys subgraph can't perturb girls' ratings numerically even
+before exclusion — the fix is about correct output, not a hidden math dependency.
+Verified against real dev-DB data: 104 boys `TeamSeason` rows existed pre-fix, 17 of
+which had leaked into `RankingResult` and 2,776 stray rows into `TeamRatingHistory`
+(cross-referenced by team ID after recompute, not name — some boys/girls teams
+coincidentally share a display name, e.g. two different "CVC 14-1" teams). After
+recompute, zero boys teams remain in NPS/Power/Combined Rankings.
+
+**`TeamRatingHistory` weekEndingDate dedup fix (2026-07-29).** Found while verifying
+the gender filter above: `computeColleyRatings`/`computeEloRatingsForPartition`/
+`computeMasseyRatingsForPartition`'s delete-and-replace snapshot pattern
+(`deleteMany` matching the exact `weekEndingDate` before inserting fresh rows) never
+actually replaced anything in practice, because the `*ForSeason` entry points default
+`weekEndingDate` to `new Date()` — millisecond-precise, so two recompute runs on the
+same calendar day never produce an equal timestamp. Every "Recompute ratings" click
+was silently just adding another permanent, never-cleaned snapshot on top of every
+prior run from that day, rather than replacing the day's snapshot as the existing doc
+comments already claimed. Reads were unaffected (every query takes the latest
+`weekEndingDate`), but the table grew unbounded — confirmed 206,923 real rows in the
+dev DB, almost all dead duplicates. Fix: new `src/lib/rating/weekEndingDate.ts`'s
+`normalizeWeekEndingDate()` truncates to UTC midnight, applied inside all three
+partition functions (not just at the `*ForSeason` default) so it's correct regardless
+of caller. Verified two back-to-back same-day Colley recomputes now produce a 0-row
+delta on the second run (previously +5,367). One-time cleanup of the existing backlog
+(kept only the latest `weekEndingDate` per `(seasonId, ageGroup, ratingEngine)`, since
+that's the only slice any read path ever queries) brought the dev DB from 206,923 down
+to 16,101 rows, with Power Rankings verified to render identically before/after.
 
 Planned, not built: `/admin/teams/unlinked`, `/admin/teams/inactive`,
 `/admin/clubs/unlinked`, `/admin/clubs/inactive` (Phase 2 follow-up audits),

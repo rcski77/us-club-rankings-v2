@@ -6,6 +6,8 @@ import {
   explainEloChange,
 } from "./elo";
 import { computeMatchDivisionWeights } from "./computeMatchDivisionWeights";
+import { isBoysTeamCode } from "@/lib/teamGender";
+import { normalizeWeekEndingDate } from "./weekEndingDate";
 
 /**
  * Gathers the same match set computeEloRatingsForPartition() rates from -- every
@@ -47,11 +49,22 @@ export async function getPartitionMatches(seasonId: string, ageGroup: number, as
 
   const teamSeasons = await prisma.teamSeason.findMany({ where: { seasonId } });
   const naturalAgeGroup = new Map(teamSeasons.map((ts) => [ts.teamId, ts.ageGroup]));
+  // Girls rankings only for now -- see teamGender.ts. Shared by Elo and Massey (both
+  // call this helper), so filtering here covers both engines and getTeamEloHistory in
+  // one place. Filtered out before divisionIds is built, so a boys-only division pulls
+  // in no matches at all here (the "ignore the division" effect), not just a discarded
+  // final rating -- though it wouldn't affect girls' ratings numerically either way,
+  // since Elo/Massey only update the two teams in a given match and boys teams never
+  // play girls teams.
+  const boysTeamIds = new Set(
+    teamSeasons.filter((ts) => isBoysTeamCode(ts.externalTeamCode)).map((ts) => ts.teamId),
+  );
 
   const relevant = finishes.filter(
     (f) =>
-      (f.division.ageGroup === ageGroup && !f.ignoreAge) ||
-      (f.ignoreAge && naturalAgeGroup.get(f.teamId) === ageGroup),
+      !boysTeamIds.has(f.teamId) &&
+      ((f.division.ageGroup === ageGroup && !f.ignoreAge) ||
+        (f.ignoreAge && naturalAgeGroup.get(f.teamId) === ageGroup)),
   );
   const relevantTeamIds = new Set(relevant.map((f) => f.teamId));
 
@@ -110,8 +123,12 @@ export async function computeEloRatingsForPartition(
   seasonId: string,
   ageGroup: number,
   asOfDate: Date,
-  weekEndingDate: Date,
+  weekEndingDateRaw: Date,
 ) {
+  // See weekEndingDate.ts -- collapses same-day recomputes onto one timestamp so
+  // delete-and-replace below actually replaces instead of piling up.
+  const weekEndingDate = normalizeWeekEndingDate(weekEndingDateRaw);
+
   const { matches, relevantTeamIds } = await getPartitionMatches(seasonId, ageGroup, asOfDate);
   const eloMatches = buildEloMatches(await withDivisionWeights(matches));
   const ratings = solveElo(eloMatches).filter((r) => relevantTeamIds.has(r.teamId));

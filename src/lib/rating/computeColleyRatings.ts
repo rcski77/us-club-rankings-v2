@@ -1,5 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { buildDivisionComparisons, buildMatchComparisons, solveColley } from "./colley";
+import { isBoysTeamCode } from "@/lib/teamGender";
+import { normalizeWeekEndingDate } from "./weekEndingDate";
 
 /**
  * Recomputes Colley ratings for one (season, ageGroup) partition as of asOfDate, and
@@ -39,8 +41,12 @@ export async function computeColleyRatings(
   seasonId: string,
   ageGroup: number,
   asOfDate: Date,
-  weekEndingDate: Date,
+  weekEndingDateRaw: Date,
 ) {
+  // See weekEndingDate.ts -- collapses same-day recomputes onto one timestamp so
+  // delete-and-replace below actually replaces instead of piling up.
+  const weekEndingDate = normalizeWeekEndingDate(weekEndingDateRaw);
+
   const finishes = await prisma.teamFinish.findMany({
     where: {
       division: { event: { seasonId, startDate: { lte: asOfDate } } },
@@ -50,11 +56,19 @@ export async function computeColleyRatings(
 
   const teamSeasons = await prisma.teamSeason.findMany({ where: { seasonId } });
   const naturalAgeGroup = new Map(teamSeasons.map((ts) => [ts.teamId, ts.ageGroup]));
+  // Girls rankings only for now -- see teamGender.ts. Filtered out before byDivision/
+  // matches are even built, so a boys-only division contributes no comparisons at all
+  // (not just a discarded final rating), the same "ignore the division" effect a
+  // separate division-level check would give.
+  const boysTeamIds = new Set(
+    teamSeasons.filter((ts) => isBoysTeamCode(ts.externalTeamCode)).map((ts) => ts.teamId),
+  );
 
   const relevant = finishes.filter(
     (f) =>
-      (f.division.ageGroup === ageGroup && !f.ignoreAge) ||
-      (f.ignoreAge && naturalAgeGroup.get(f.teamId) === ageGroup),
+      !boysTeamIds.has(f.teamId) &&
+      ((f.division.ageGroup === ageGroup && !f.ignoreAge) ||
+        (f.ignoreAge && naturalAgeGroup.get(f.teamId) === ageGroup)),
   );
   const relevantTeamIds = new Set(relevant.map((f) => f.teamId));
 
