@@ -1,7 +1,9 @@
 import { prisma } from "@/lib/prisma";
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { tableClass, thClass, tdClass, scoringStatusBadgeClass } from "@/lib/ui";
+import { scoringStatusBadgeClass } from "@/lib/ui";
+import { brand } from "@/lib/brand";
+import { tableWrapClass, thClass, tdClass, numThClass, numTdClass, tbodyClass, RankBadge } from "@/lib/publicUi";
 
 export default async function PublicDivisionDetailPage({
   params,
@@ -10,10 +12,9 @@ export default async function PublicDivisionDetailPage({
 }) {
   const { eventId, divisionId } = await params;
 
-  // Sequential, not Promise.all -- see docs/dev-environment.md.
   const division = await prisma.division.findUnique({
     where: { id: divisionId },
-    include: { event: true, pointBands: { orderBy: { fromRank: "asc" } } },
+    include: { event: true },
   });
   if (!division || division.eventId !== eventId) notFound();
 
@@ -42,66 +43,47 @@ export default async function PublicDivisionDetailPage({
         <span className={scoringStatusBadgeClass(division.scoringStatus)}>{division.scoringStatus}</span>
       </p>
 
-      <section className="mb-8">
-        <h2 className="mb-2 text-lg font-medium">Point curve</h2>
-        <table className={`${tableClass} mb-4`}>
-          <thead>
-            <tr>
-              <th className={thClass}>From</th>
-              <th className={thClass}>To</th>
-              <th className={thClass}>Points</th>
-            </tr>
-          </thead>
-          <tbody>
-            {division.pointBands.map((b) => (
-              <tr key={b.id}>
-                <td className={tdClass}>{b.fromRank}</td>
-                <td className={tdClass}>{b.toRank === 0 ? "+" : b.toRank}</td>
-                <td className={tdClass}>{b.points}</td>
-              </tr>
-            ))}
-            {division.pointBands.length === 0 && (
-              <tr>
-                <td className={tdClass} colSpan={3}>
-                  No bands yet.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </section>
-
       <section>
         <h2 className="mb-2 text-lg font-medium">Team finishes</h2>
-        <table className={tableClass}>
-          <thead>
-            <tr>
-              <th className={thClass}>Rank</th>
-              <th className={thClass}>Team</th>
-              <th className={thClass}>Age</th>
-              <th className={thClass}>Ignore age</th>
-              <th className={thClass}>Points</th>
-            </tr>
-          </thead>
-          <tbody>
-            {finishes.map((f) => (
-              <tr key={f.id}>
-                <td className={tdClass}>{f.rank}</td>
-                <td className={tdClass}>{f.team.name}</td>
-                <td className={tdClass}>{f.team.seasons[0]?.ageGroup}u</td>
-                <td className={tdClass}>{f.ignoreAge ? "Yes" : ""}</td>
-                <td className={tdClass}>{f.points ?? ""}</td>
+        <div className={tableWrapClass}>
+          <table className="w-full border-collapse text-sm">
+            <thead>
+              <tr style={{ backgroundColor: brand.purple }}>
+                <th className={numThClass}>Rank</th>
+                <th className={thClass}>Team</th>
+                <th className={numThClass}>Age</th>
+                <th className={numThClass}>Ignore Age</th>
+                <th className={numThClass}>Points</th>
               </tr>
-            ))}
-            {finishes.length === 0 && (
-              <tr>
-                <td className={tdClass} colSpan={5}>
-                  No team finishes entered yet.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
+            </thead>
+            <tbody className={tbodyClass}>
+              {finishes.map((f) => (
+                <tr key={f.id} className="relative cursor-pointer">
+                  <td className={numTdClass}>
+                    <RankBadge rank={f.rank} />
+                  </td>
+                  <td className={`${tdClass} font-medium text-slate-900`}>
+                    <Link href={`/rankings/teams/${f.team.id}`} className="after:absolute after:inset-0 hover:underline">
+                      {f.team.name}
+                    </Link>
+                  </td>
+                  <td className={numTdClass}>{f.team.seasons[0]?.ageGroup}u</td>
+                  <td className={numTdClass}>{f.ignoreAge ? "Yes" : ""}</td>
+                  <td className={`${numTdClass} font-semibold`} style={{ color: brand.purple }}>
+                    {f.points ?? ""}
+                  </td>
+                </tr>
+              ))}
+              {finishes.length === 0 && (
+                <tr>
+                  <td className={tdClass} colSpan={5}>
+                    No team finishes entered yet.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </section>
     </div>
   );

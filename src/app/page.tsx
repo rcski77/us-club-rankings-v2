@@ -2,8 +2,20 @@ import Link from "next/link";
 import { PublicHeader } from "@/components/PublicHeader";
 import { LogoStacked } from "@/components/Logo";
 import { brand } from "@/lib/brand";
+import { prisma } from "@/lib/prisma";
 
-export default function Home() {
+async function getStats() {
+  // Sequential, not Promise.all -- see docs/dev-environment.md.
+  const eventCount = await prisma.event.count();
+  const clubCount = await prisma.club.count();
+  const teamCount = await prisma.team.count();
+  const matchCount = await prisma.match.count();
+  return { eventCount, clubCount, teamCount, matchCount };
+}
+
+export default async function Home() {
+  const stats = await getStats();
+
   return (
     <div className="flex min-h-screen flex-col bg-slate-50">
       <PublicHeader />
@@ -12,20 +24,42 @@ export default function Home() {
         <p className="mt-6 mb-8 max-w-md text-slate-500">
           Team finishes, divisions, and rankings for youth volleyball club events.
         </p>
-        <div className="flex gap-3">
+        <div className="flex flex-wrap justify-center gap-3">
           <Link
             href="/rankings/events"
             className="rounded-lg px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:opacity-90"
             style={{ backgroundColor: brand.purple }}
           >
-            View Rankings
+            Events
           </Link>
           <Link
-            href="/admin"
+            href="/rankings/clubs"
             className="rounded-lg border border-slate-300 px-5 py-2.5 text-sm font-semibold text-slate-700 transition-colors hover:border-slate-400 hover:bg-slate-100"
           >
-            Staff Login
+            Clubs
           </Link>
+          <Link
+            href="/rankings/team-rankings"
+            className="rounded-lg border border-slate-300 px-5 py-2.5 text-sm font-semibold text-slate-700 transition-colors hover:border-slate-400 hover:bg-slate-100"
+          >
+            Team Rankings
+          </Link>
+        </div>
+
+        <div className="mt-10 flex flex-wrap justify-center gap-8 text-center">
+          {[
+            { label: "Events", value: stats.eventCount },
+            { label: "Clubs", value: stats.clubCount },
+            { label: "Teams", value: stats.teamCount },
+            { label: "Matches", value: stats.matchCount },
+          ].map((stat) => (
+            <div key={stat.label}>
+              <div className="text-2xl font-semibold" style={{ color: brand.purple }}>
+                {stat.value.toLocaleString()}
+              </div>
+              <div className="text-xs uppercase tracking-wide text-slate-500">{stat.label}</div>
+            </div>
+          ))}
         </div>
       </main>
     </div>

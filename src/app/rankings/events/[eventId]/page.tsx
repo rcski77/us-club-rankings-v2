@@ -1,7 +1,8 @@
 import { prisma } from "@/lib/prisma";
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { tableClass, thClass, tdClass, scoringStatusBadgeClass } from "@/lib/ui";
+import { brand } from "@/lib/brand";
+import { tableWrapClass, thClass, tdClass, numThClass, numTdClass, tbodyClass } from "@/lib/publicUi";
 
 export default async function PublicEventDetailPage({
   params,
@@ -19,6 +20,7 @@ export default async function PublicEventDetailPage({
         include: {
           _count: { select: { finishes: true } },
           pointBands: { orderBy: { fromRank: "asc" }, take: 1 },
+          scoringSnapshots: { orderBy: { createdAt: "desc" }, take: 1 },
         },
       },
     },
@@ -39,49 +41,57 @@ export default async function PublicEventDetailPage({
         {event.isAnchor && " · Anchor event"}
       </p>
 
-      <table className={tableClass}>
-        <thead>
-          <tr>
-            <th className={thClass}>Division</th>
-            <th className={thClass}>Age</th>
-            <th className={thClass}>Tier</th>
-            <th className={thClass}>Status</th>
-            <th className={thClass}>Max points</th>
-            <th className={thClass}>Finishes</th>
-          </tr>
-        </thead>
-        <tbody>
-          {event.divisions.map((d) => (
-            <tr key={d.id}>
-              <td className={tdClass}>
-                <Link
-                  href={`/rankings/events/${event.id}/divisions/${d.id}`}
-                  className="text-slate-900 underline"
-                >
-                  {d.name}
-                </Link>
-              </td>
-              <td className={tdClass}>{d.ageGroup}u</td>
-              <td className={tdClass}>
-                {d.tierLabel}
-                {d.tierLevel ? ` ${d.tierLevel}` : ""}
-              </td>
-              <td className={tdClass}>
-                <span className={scoringStatusBadgeClass(d.scoringStatus)}>{d.scoringStatus}</span>
-              </td>
-              <td className={tdClass}>{d.pointBands[0]?.points ?? "—"}</td>
-              <td className={tdClass}>{d._count.finishes}</td>
+      <div className={tableWrapClass}>
+        <table className="w-full border-collapse text-sm">
+          <thead>
+            <tr style={{ backgroundColor: brand.purple }}>
+              <th className={thClass}>Division</th>
+              <th className={numThClass}>Age</th>
+              <th className={thClass}>Tier</th>
+              <th className={numThClass}>FSS</th>
+              <th className={numThClass}>Max Points</th>
+              <th className={numThClass}>Finishes</th>
             </tr>
-          ))}
-          {event.divisions.length === 0 && (
-            <tr>
-              <td className={tdClass} colSpan={6}>
-                No divisions yet.
-              </td>
-            </tr>
-          )}
-        </tbody>
-      </table>
+          </thead>
+          <tbody className={tbodyClass}>
+            {event.divisions.map((d) => (
+              <tr key={d.id} className="relative cursor-pointer">
+                <td className={`${tdClass} font-medium text-slate-900`}>
+                  <Link
+                    href={`/rankings/events/${event.id}/divisions/${d.id}`}
+                    className="after:absolute after:inset-0 hover:underline"
+                  >
+                    {d.name}
+                  </Link>
+                </td>
+                <td className={numTdClass}>{d.ageGroup}u</td>
+                <td className={`${tdClass} text-slate-500`}>
+                  {d.tierLabel}
+                  {d.tierLevel ? ` ${d.tierLevel}` : ""}
+                </td>
+                <td className={numTdClass}>
+                  {(() => {
+                    const snapshot = d.scoringSnapshots[0];
+                    if (!snapshot || snapshot.fss === null) return "—";
+                    return snapshot.ratingEngineUsed === "ELO" ? snapshot.fss.toFixed(0) : snapshot.fss.toFixed(3);
+                  })()}
+                </td>
+                <td className={`${numTdClass} font-semibold`} style={{ color: brand.purple }}>
+                  {d.pointBands[0]?.points ?? "—"}
+                </td>
+                <td className={numTdClass}>{d._count.finishes}</td>
+              </tr>
+            ))}
+            {event.divisions.length === 0 && (
+              <tr>
+                <td className={tdClass} colSpan={6}>
+                  No divisions yet.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

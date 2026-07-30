@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import Link from "next/link";
-import { tableClass, thClass, tdClass } from "@/lib/ui";
+import { brand } from "@/lib/brand";
+import { tableWrapClass, thClass, tdClass, numThClass, numTdClass, tbodyClass, RankBadge } from "@/lib/publicUi";
 import {
   ordinalSuffix,
   sortRows,
@@ -70,32 +71,34 @@ export default async function PublicTeamRankingsPage({
             </form>
           </div>
 
-          <div className="mb-4 flex gap-1 border-b">
+          <div className="mb-4 flex flex-wrap gap-2">
             {VIEWS.map((v) => (
               <Link
                 key={v.value}
                 href={tabHref({ view: v.value })}
                 className={
                   v.value === view
-                    ? "border-b-2 border-slate-900 px-3 py-2 text-sm font-medium text-slate-900"
-                    : "border-b-2 border-transparent px-3 py-2 text-sm text-slate-500 hover:text-slate-900"
+                    ? "rounded-full px-4 py-1.5 text-sm font-semibold text-white shadow-sm"
+                    : "rounded-full border border-slate-200 px-4 py-1.5 text-sm text-slate-600 transition-colors hover:border-slate-300 hover:bg-slate-50"
                 }
+                style={v.value === view ? { backgroundColor: brand.purple } : undefined}
               >
                 {v.label}
               </Link>
             ))}
           </div>
 
-          <div className="mb-6 flex gap-1 border-b">
+          <div className="mb-6 flex flex-wrap gap-1.5">
             {AGE_GROUPS.map((a) => (
               <Link
                 key={a}
                 href={tabHref({ ageGroup: a })}
                 className={
                   a === ageGroup
-                    ? "border-b-2 border-slate-900 px-3 py-2 text-sm font-medium text-slate-900"
-                    : "border-b-2 border-transparent px-3 py-2 text-sm text-slate-500 hover:text-slate-900"
+                    ? "rounded-full px-3 py-1 text-xs font-semibold text-white"
+                    : "rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-500 transition-colors hover:border-slate-300 hover:bg-slate-50"
                 }
+                style={a === ageGroup ? { backgroundColor: brand.teal } : undefined}
               >
                 {a}u
               </Link>
@@ -143,12 +146,14 @@ function SortableHeader({
   activeSort,
   dir,
   baseParams,
+  narrow = false,
 }: {
   sortKey: string;
   label: string;
   activeSort?: string;
   dir: SortDir;
   baseParams: URLSearchParams;
+  narrow?: boolean;
 }) {
   const isActive = activeSort === sortKey;
   const nextDir: SortDir = isActive && dir === "asc" ? "desc" : "asc";
@@ -156,8 +161,8 @@ function SortableHeader({
   params.set("sort", sortKey);
   params.set("dir", nextDir);
   return (
-    <th className={thClass}>
-      <Link href={`/rankings/team-rankings?${params}`} className="hover:underline" scroll={false}>
+    <th className={narrow ? numThClass : thClass}>
+      <Link href={`/rankings/team-rankings?${params}`} className="hover:text-white" scroll={false}>
         {label}
         {isActive && (dir === "asc" ? " ▲" : " ▼")}
       </Link>
@@ -199,56 +204,67 @@ async function NpsRankingTable({
   const rows = sort && accessors[sort] ? sortRows(results, accessors[sort], dir) : results;
 
   return (
-    <table className={tableClass}>
-      <thead>
-        <tr>
-          <SortableHeader sortKey="rank" label="Rank" activeSort={sort} dir={dir} baseParams={baseParams} />
-          <SortableHeader sortKey="team" label="Team" activeSort={sort} dir={dir} baseParams={baseParams} />
-          <SortableHeader sortKey="club" label="Club" activeSort={sort} dir={dir} baseParams={baseParams} />
-          <SortableHeader
-            sortKey="totalPoints"
-            label="Total Points"
-            activeSort={sort}
-            dir={dir}
-            baseParams={baseParams}
-          />
-          <th className={thClass}></th>
-        </tr>
-      </thead>
-      <tbody>
-        {rows.map((r) => (
-          <tr key={r.id}>
-            <td className={tdClass}>{r.rank}</td>
-            <td className={tdClass}>{r.team.name}</td>
-            <td className={tdClass}>{r.team.club?.name ?? ""}</td>
-            <td className={tdClass}>{r.totalPoints}</td>
-            <td className={tdClass}>
-              <details>
-                <summary className="cursor-pointer text-slate-500">
-                  {r.contributions.length} finish{r.contributions.length === 1 ? "" : "es"}
-                </summary>
-                <ul className="mt-2 flex flex-col gap-1 text-xs text-slate-600">
-                  {r.contributions.map((c) => (
-                    <li key={c.id} className={c.countedInTop3 ? "" : "line-through opacity-50"}>
-                      {c.teamFinish.division.event.name} ({c.teamFinish.division.name}): {c.points} pts (
-                      {c.teamFinish.rank}
-                      {ordinalSuffix(c.teamFinish.rank)})
-                    </li>
-                  ))}
-                </ul>
-              </details>
-            </td>
+    <div className={tableWrapClass}>
+      <table className="w-full border-collapse text-sm">
+        <thead>
+          <tr style={{ backgroundColor: brand.purple }}>
+            <SortableHeader sortKey="rank" label="Rank" activeSort={sort} dir={dir} baseParams={baseParams} narrow />
+            <SortableHeader sortKey="team" label="Team" activeSort={sort} dir={dir} baseParams={baseParams} />
+            <SortableHeader sortKey="club" label="Club" activeSort={sort} dir={dir} baseParams={baseParams} />
+            <SortableHeader
+              sortKey="totalPoints"
+              label="Total Points"
+              activeSort={sort}
+              dir={dir}
+              baseParams={baseParams}
+              narrow
+            />
+            <th className={thClass}></th>
           </tr>
-        ))}
-        {rows.length === 0 && (
-          <tr>
-            <td className={tdClass} colSpan={5}>
-              No ranked teams yet for this season/age group.
-            </td>
-          </tr>
-        )}
-      </tbody>
-    </table>
+        </thead>
+        <tbody className={tbodyClass}>
+          {rows.map((r) => (
+            <tr key={r.id} className="relative cursor-pointer">
+              <td className={numTdClass}>
+                <RankBadge rank={r.rank} />
+              </td>
+              <td className={`${tdClass} font-medium text-slate-900`}>
+                <Link href={`/rankings/teams/${r.team.id}`} className="after:absolute after:inset-0 hover:underline">
+                  {r.team.name}
+                </Link>
+              </td>
+              <td className={`${tdClass} text-slate-500`}>{r.team.club?.name ?? ""}</td>
+              <td className={`${numTdClass} font-semibold`} style={{ color: brand.purple }}>
+                {r.totalPoints}
+              </td>
+              <td className={tdClass}>
+                <details className="relative z-10">
+                  <summary className="cursor-pointer text-slate-500">
+                    {r.contributions.length} finish{r.contributions.length === 1 ? "" : "es"}
+                  </summary>
+                  <ul className="mt-2 flex flex-col gap-1 text-xs text-slate-600">
+                    {r.contributions.map((c) => (
+                      <li key={c.id} className={c.countedInTop3 ? "" : "line-through opacity-50"}>
+                        {c.teamFinish.division.event.name} ({c.teamFinish.division.name}): {c.points} pts (
+                        {c.teamFinish.rank}
+                        {ordinalSuffix(c.teamFinish.rank)})
+                      </li>
+                    ))}
+                  </ul>
+                </details>
+              </td>
+            </tr>
+          ))}
+          {rows.length === 0 && (
+            <tr>
+              <td className={tdClass} colSpan={5}>
+                No ranked teams yet for this season/age group.
+              </td>
+            </tr>
+          )}
+        </tbody>
+      </table>
+    </div>
   );
 }
 
@@ -279,14 +295,10 @@ async function PowerRankingTable({
     club: (r) => r.team.club?.name ?? "",
     avgRank: averagePowerRank,
     colleyRank: (r) => r.colley?.rank,
-    colleyRating: (r) => r.colley?.rating,
-    comparisons: (r) => r.colley?.comparisons,
     eloRank: (r) => r.elo?.rank,
     eloRating: (r) => r.elo?.rating,
-    matches: (r) => r.elo?.comparisons,
     masseyRank: (r) => r.massey?.rank,
-    masseyRating: (r) => r.massey?.rating,
-    games: (r) => r.massey?.comparisons,
+    matchesPlayed: (r) => r.colley?.comparisons ?? r.elo?.comparisons ?? r.massey?.comparisons,
   };
   const rows =
     sort && accessors[sort]
@@ -295,122 +307,108 @@ async function PowerRankingTable({
 
   return (
     <>
-      <div className="mb-4 flex items-center gap-4 text-sm text-slate-500">
+      <div className="mb-4 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500">
         {latestColley && <span>Colley as of {latestColley.weekEndingDate.toLocaleDateString()}</span>}
         {latestElo && <span>Elo as of {latestElo.weekEndingDate.toLocaleDateString()}</span>}
         {latestMassey && <span>Massey as of {latestMassey.weekEndingDate.toLocaleDateString()}</span>}
       </div>
 
-      <table className={tableClass}>
-        <thead>
-          <tr>
-            <SortableHeader sortKey="rank" label="Rank" activeSort={sort} dir={dir} baseParams={baseParams} />
-            <SortableHeader sortKey="team" label="Team" activeSort={sort} dir={dir} baseParams={baseParams} />
-            <SortableHeader sortKey="club" label="Club" activeSort={sort} dir={dir} baseParams={baseParams} />
-            <SortableHeader
-              sortKey="avgRank"
-              label="Avg Rank"
-              activeSort={sort}
-              dir={dir}
-              baseParams={baseParams}
-            />
-            <SortableHeader
-              sortKey="colleyRank"
-              label="Colley Rank"
-              activeSort={sort}
-              dir={dir}
-              baseParams={baseParams}
-            />
-            <SortableHeader
-              sortKey="colleyRating"
-              label="Colley Rating"
-              activeSort={sort}
-              dir={dir}
-              baseParams={baseParams}
-            />
-            <SortableHeader
-              sortKey="comparisons"
-              label="Comparisons"
-              activeSort={sort}
-              dir={dir}
-              baseParams={baseParams}
-            />
-            <SortableHeader
-              sortKey="eloRank"
-              label="Elo Rank"
-              activeSort={sort}
-              dir={dir}
-              baseParams={baseParams}
-            />
-            <SortableHeader
-              sortKey="eloRating"
-              label="Elo Rating"
-              activeSort={sort}
-              dir={dir}
-              baseParams={baseParams}
-            />
-            <SortableHeader
-              sortKey="matches"
-              label="Matches"
-              activeSort={sort}
-              dir={dir}
-              baseParams={baseParams}
-            />
-            <SortableHeader
-              sortKey="masseyRank"
-              label="Massey Rank"
-              activeSort={sort}
-              dir={dir}
-              baseParams={baseParams}
-            />
-            <SortableHeader
-              sortKey="masseyRating"
-              label="Massey Rating"
-              activeSort={sort}
-              dir={dir}
-              baseParams={baseParams}
-            />
-            <SortableHeader
-              sortKey="games"
-              label="Games"
-              activeSort={sort}
-              dir={dir}
-              baseParams={baseParams}
-            />
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map(({ team, colley, elo, massey }) => (
-            <tr key={team.id}>
-              <td className={tdClass}>{rankByTeamId.get(team.id) ?? "—"}</td>
-              <td className={tdClass}>{team.name}</td>
-              <td className={tdClass}>{team.club?.name ?? ""}</td>
-              <td className={tdClass}>
-                {(() => {
-                  const avg = averagePowerRank({ team, colley, elo, massey });
-                  return avg !== undefined ? avg.toFixed(1) : "—";
-                })()}
-              </td>
-              <td className={tdClass}>{colley?.rank ?? "—"}</td>
-              <td className={tdClass}>{colley ? colley.rating.toFixed(4) : "—"}</td>
-              <td className={tdClass}>{colley?.comparisons ?? "—"}</td>
-              <td className={tdClass}>{elo?.rank ?? "—"}</td>
-              <td className={tdClass}>{elo ? elo.rating.toFixed(4) : "—"}</td>
-              <td className={tdClass}>{elo?.comparisons ?? "—"}</td>
-              <td className={tdClass}>{massey?.rank ?? "—"}</td>
-              <td className={tdClass}>{massey ? massey.rating.toFixed(2) : "—"}</td>
-              <td className={tdClass}>{massey?.comparisons ?? "—"}</td>
+      <div className={tableWrapClass}>
+        <table className="w-full border-collapse text-sm">
+          <thead>
+            <tr style={{ backgroundColor: brand.purple }}>
+              <SortableHeader sortKey="rank" label="Rank" activeSort={sort} dir={dir} baseParams={baseParams} narrow />
+              <SortableHeader sortKey="team" label="Team" activeSort={sort} dir={dir} baseParams={baseParams} />
+              <SortableHeader sortKey="club" label="Club" activeSort={sort} dir={dir} baseParams={baseParams} />
+              <SortableHeader
+                sortKey="avgRank"
+                label="Avg Rank"
+                activeSort={sort}
+                dir={dir}
+                baseParams={baseParams}
+                narrow
+              />
+              <SortableHeader
+                sortKey="eloRating"
+                label="Elo Rating"
+                activeSort={sort}
+                dir={dir}
+                baseParams={baseParams}
+                narrow
+              />
+              <SortableHeader
+                sortKey="eloRank"
+                label="Elo"
+                activeSort={sort}
+                dir={dir}
+                baseParams={baseParams}
+                narrow
+              />
+              <SortableHeader
+                sortKey="colleyRank"
+                label="Colley"
+                activeSort={sort}
+                dir={dir}
+                baseParams={baseParams}
+                narrow
+              />
+              <SortableHeader
+                sortKey="masseyRank"
+                label="Massey"
+                activeSort={sort}
+                dir={dir}
+                baseParams={baseParams}
+                narrow
+              />
+              <SortableHeader
+                sortKey="matchesPlayed"
+                label="Matches Played"
+                activeSort={sort}
+                dir={dir}
+                baseParams={baseParams}
+                narrow
+              />
             </tr>
-          ))}
-          {rows.length === 0 && (
-            <tr>
-              <td className={tdClass} colSpan={13}>
-                No ratings yet for this season/age group.
-              </td>
-            </tr>
-          )}
-        </tbody>
-      </table>
+          </thead>
+          <tbody className={tbodyClass}>
+            {rows.map(({ team, colley, elo, massey }) => (
+              <tr key={team.id} className="relative cursor-pointer">
+                <td className={numTdClass}>
+                  <RankBadge rank={rankByTeamId.get(team.id)} />
+                </td>
+                <td className={`${tdClass} font-medium text-slate-900`}>
+                  <Link href={`/rankings/teams/${team.id}`} className="after:absolute after:inset-0 hover:underline">
+                    {team.name}
+                  </Link>
+                </td>
+                <td className={`${tdClass} text-slate-500`}>{team.club?.name ?? ""}</td>
+                <td className={numTdClass}>
+                  {(() => {
+                    const avg = averagePowerRank({ team, colley, elo, massey });
+                    return avg !== undefined ? avg.toFixed(1) : "—";
+                  })()}
+                </td>
+                <td className={`${numTdClass} font-semibold`} style={{ color: brand.purple }}>
+                  {elo ? Math.round(elo.rating) : "—"}
+                </td>
+                <td className={numTdClass}>{elo?.rank ?? "—"}</td>
+                <td className={numTdClass}>{colley?.rank ?? "—"}</td>
+                <td className={numTdClass}>{massey?.rank ?? "—"}</td>
+                <td className={numTdClass}>
+                  {colley?.comparisons ?? elo?.comparisons ?? massey?.comparisons ?? "—"}
+                </td>
+              </tr>
+            ))}
+            {rows.length === 0 && (
+              <tr>
+                <td className={tdClass} colSpan={9}>
+                  No ratings yet for this season/age group.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
     </>
   );
 }
@@ -470,59 +468,70 @@ async function CombineRankingTable({
     sort && accessors[sort] ? sortRows(defaultRows, accessors[sort], dir) : sortRows(defaultRows, combinedScore, "asc");
 
   return (
-    <table className={tableClass}>
-      <thead>
-        <tr>
-          <SortableHeader sortKey="rank" label="Rank" activeSort={sort} dir={dir} baseParams={baseParams} />
-          <SortableHeader sortKey="team" label="Team" activeSort={sort} dir={dir} baseParams={baseParams} />
-          <SortableHeader sortKey="club" label="Club" activeSort={sort} dir={dir} baseParams={baseParams} />
-          <SortableHeader
-            sortKey="combinedScore"
-            label="Combined Score"
-            activeSort={sort}
-            dir={dir}
-            baseParams={baseParams}
-          />
-          <SortableHeader
-            sortKey="npsRank"
-            label="NPS Rank"
-            activeSort={sort}
-            dir={dir}
-            baseParams={baseParams}
-          />
-          <SortableHeader
-            sortKey="powerAvgRank"
-            label="Power Avg Rank"
-            activeSort={sort}
-            dir={dir}
-            baseParams={baseParams}
-          />
-        </tr>
-      </thead>
-      <tbody>
-        {rows.map((r) => (
-          <tr key={r.team.id}>
-            <td className={tdClass}>{rankByTeamId.get(r.team.id) ?? "—"}</td>
-            <td className={tdClass}>{r.team.name}</td>
-            <td className={tdClass}>{r.team.club?.name ?? ""}</td>
-            <td className={tdClass}>
-              {(() => {
-                const score = combinedScore(r);
-                return score !== undefined ? score.toFixed(1) : "—";
-              })()}
-            </td>
-            <td className={tdClass}>{r.npsRank ?? "—"}</td>
-            <td className={tdClass}>{r.powerAvgRank !== undefined ? r.powerAvgRank.toFixed(1) : "—"}</td>
+    <div className={tableWrapClass}>
+      <table className="w-full border-collapse text-sm">
+        <thead>
+          <tr style={{ backgroundColor: brand.purple }}>
+            <SortableHeader sortKey="rank" label="Rank" activeSort={sort} dir={dir} baseParams={baseParams} narrow />
+            <SortableHeader sortKey="team" label="Team" activeSort={sort} dir={dir} baseParams={baseParams} />
+            <SortableHeader sortKey="club" label="Club" activeSort={sort} dir={dir} baseParams={baseParams} />
+            <SortableHeader
+              sortKey="combinedScore"
+              label="Combined Score"
+              activeSort={sort}
+              dir={dir}
+              baseParams={baseParams}
+              narrow
+            />
+            <SortableHeader
+              sortKey="npsRank"
+              label="NPS Rank"
+              activeSort={sort}
+              dir={dir}
+              baseParams={baseParams}
+              narrow
+            />
+            <SortableHeader
+              sortKey="powerAvgRank"
+              label="Power Avg Rank"
+              activeSort={sort}
+              dir={dir}
+              baseParams={baseParams}
+              narrow
+            />
           </tr>
-        ))}
-        {rows.length === 0 && (
-          <tr>
-            <td className={tdClass} colSpan={6}>
-              No ranked teams yet for this season/age group.
-            </td>
-          </tr>
-        )}
-      </tbody>
-    </table>
+        </thead>
+        <tbody className={tbodyClass}>
+          {rows.map((r) => (
+            <tr key={r.team.id} className="relative cursor-pointer">
+              <td className={numTdClass}>
+                <RankBadge rank={rankByTeamId.get(r.team.id)} />
+              </td>
+              <td className={`${tdClass} font-medium text-slate-900`}>
+                <Link href={`/rankings/teams/${r.team.id}`} className="after:absolute after:inset-0 hover:underline">
+                  {r.team.name}
+                </Link>
+              </td>
+              <td className={`${tdClass} text-slate-500`}>{r.team.club?.name ?? ""}</td>
+              <td className={`${numTdClass} font-semibold`} style={{ color: brand.purple }}>
+                {(() => {
+                  const score = combinedScore(r);
+                  return score !== undefined ? score.toFixed(1) : "—";
+                })()}
+              </td>
+              <td className={numTdClass}>{r.npsRank ?? "—"}</td>
+              <td className={numTdClass}>{r.powerAvgRank !== undefined ? r.powerAvgRank.toFixed(1) : "—"}</td>
+            </tr>
+          ))}
+          {rows.length === 0 && (
+            <tr>
+              <td className={tdClass} colSpan={6}>
+                No ranked teams yet for this season/age group.
+              </td>
+            </tr>
+          )}
+        </tbody>
+      </table>
+    </div>
   );
 }
