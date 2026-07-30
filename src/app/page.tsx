@@ -4,6 +4,8 @@ import { LogoStacked } from "@/components/Logo";
 import { brand } from "@/lib/brand";
 import { prisma } from "@/lib/prisma";
 
+export const dynamic = "force-dynamic";
+
 async function getStats() {
   // Sequential, not Promise.all -- see docs/dev-environment.md.
   const eventCount = await prisma.event.count();

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { BUCKET_THRESHOLDS } from "@/lib/rating/fieldStrength";
 import { computeDivisionWeightsForPartition } from "@/lib/rating/computeMatchDivisionWeights";
 import { computeDivisionScoringSuggestion } from "@/lib/rating/computeDivisionScoringSuggestion";
+import type { ScoreBand } from "@/lib/rating/suggestPointTemplate";
 import {
   tableClass,
   thClass,
@@ -253,7 +254,7 @@ export default async function AnalysisPage({
                   </td>
                   <td className={tdClass}>
                     {snapshot?.scoreBand ? (
-                      <span className={scoreBandBadgeClass(snapshot.scoreBand)}>{snapshot.scoreBand}</span>
+                      <span className={scoreBandBadgeClass(snapshot.scoreBand as ScoreBand)}>{snapshot.scoreBand}</span>
                     ) : (
                       "—"
                     )}

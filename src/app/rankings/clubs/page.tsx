@@ -3,6 +3,8 @@ import Link from "next/link";
 import { brand } from "@/lib/brand";
 import { tableWrapClass, thClass, tdClass, numThClass, numTdClass, tbodyClass } from "@/lib/publicUi";
 
+export const dynamic = "force-dynamic";
+
 export default async function PublicClubsPage() {
   const clubs = await prisma.club.findMany({
     include: { region: true, _count: { select: { teams: true } } },
