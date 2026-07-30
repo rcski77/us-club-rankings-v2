@@ -71,7 +71,17 @@ export default async function DivisionDetailPage({
   const addBandWithIds = addDivisionBand.bind(null, eventId, divisionId);
   const addFinishWithIds = addTeamFinish.bind(null, eventId, divisionId);
 
-  const TIER_LABELS = ["OPEN", "NATIONAL", "AMERICAN", "PATRIOT", "LIBERTY", "USA", "FREEDOM"] as const;
+  const TIER_LABELS = [
+    "OPEN",
+    "AMERICAN",
+    "PATRIOT",
+    "LIBERTY",
+    "USA",
+    "FREEDOM",
+    "PREMIER",
+    "CLUB",
+    "CLASSIC",
+  ] as const;
 
   return (
     <div className="max-w-2xl">

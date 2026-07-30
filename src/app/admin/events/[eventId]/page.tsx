@@ -17,12 +17,14 @@ import type { DivisionTierLabel, ImportSource } from "@/generated/prisma/enums";
 
 const TIER_LABELS: DivisionTierLabel[] = [
   "OPEN",
-  "NATIONAL",
   "AMERICAN",
   "PATRIOT",
   "LIBERTY",
   "USA",
   "FREEDOM",
+  "PREMIER",
+  "CLUB",
+  "CLASSIC",
 ];
 
 const SCHEDULE_SOURCES: ImportSource[] = ["AES", "SPORTWRENCH", "TM2", "VBSCHEDULE"];
