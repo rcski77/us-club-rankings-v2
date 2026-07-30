@@ -45,7 +45,7 @@ services:
     environment:
       DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/us_club_rankings
     ports:
-      - "3002:3000"
+      - "3003:3000"
     depends_on:
       postgres:
         condition: service_healthy
