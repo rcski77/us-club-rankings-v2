@@ -193,12 +193,19 @@ model Event {
 
 enum DivisionTierLabel {
   OPEN
-  NATIONAL
   AMERICAN
   PATRIOT
   LIBERTY
   USA
   FREEDOM
+  // AAU tiers -- distinct namespace from the USAV tiers above, but AAU events
+  // never mix with USAV tiers within a single division, so one enum covers both.
+  // USAV's "National" and AAU's "Premier" are treated as the same real-world tier
+  // (top level below anchor events) and merged into this one value -- a label
+  // containing either keyword parses to PREMIER, see TIER_KEYWORDS below.
+  PREMIER
+  CLUB
+  CLASSIC
 }
 
 enum DivisionScoringStatus {

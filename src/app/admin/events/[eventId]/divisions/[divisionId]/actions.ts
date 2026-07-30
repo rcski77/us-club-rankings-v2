@@ -10,7 +10,17 @@ function divisionPath(eventId: string, divisionId: string) {
   return `/admin/events/${eventId}/divisions/${divisionId}`;
 }
 
-const TIER_LABELS = ["OPEN", "NATIONAL", "AMERICAN", "PATRIOT", "LIBERTY", "USA", "FREEDOM"] as const;
+const TIER_LABELS = [
+  "OPEN",
+  "AMERICAN",
+  "PATRIOT",
+  "LIBERTY",
+  "USA",
+  "FREEDOM",
+  "PREMIER",
+  "CLUB",
+  "CLASSIC",
+] as const;
 
 export async function updateDivisionDetails(eventId: string, divisionId: string, formData: FormData) {
   const name = String(formData.get("name") ?? "").trim();
