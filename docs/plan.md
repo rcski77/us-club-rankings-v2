@@ -33,8 +33,12 @@ Two things beyond a straight port were requested:
    suggestion, and to enable a continuously-updating weekly power ranking instead of
    one end-of-season computation.
 
-Scope for this plan: **admin/back-office application only.** The public-facing
-rankings website is explicitly out of scope.
+Scope for this plan originally excluded a public-facing rankings website; that
+changed (2026-07-30) — a read-only public section (`/rankings`) was added in-repo
+alongside the admin app (not a separate app), showing events/divisions/finishes and
+the same NPS/Power/Combined team rankings views as `/admin/team-rankings`. It
+requires no login and is structurally isolated from `/admin` (its own top-level
+route, untouched by `src/proxy.ts`'s `/admin/:path*` matcher) — see §5.
 
 Stack: Next.js (App Router) + TypeScript + PostgreSQL + Prisma — user's explicit
 preference, non-negotiable.
@@ -781,6 +785,30 @@ ratings" button; `/admin/power-rankings/[seasonId]/[ageGroup]` shows Massey as a
 third Rank/Rating/Games column group alongside Colley and Elo in the same merged
 table.
 
+**Public UI Structure (2026-07-30).** A new top-level, no-login route tree,
+`src/app/rankings/` — untouched by `src/proxy.ts`'s `/admin/:path*` middleware
+matcher, so no auth work was needed. Read-only mirrors of existing admin queries,
+no server actions, no links into any `/admin/*` route:
+- `/rankings` — redirects to `/rankings/events`.
+- `/rankings/events` — event list (mirrors `/admin/events`, no "New event" action).
+- `/rankings/events/[eventId]` — divisions list for the event (mirrors
+  `/admin/events/[eventId]`, drops `importBatches` and all edit forms).
+- `/rankings/events/[eventId]/divisions/[divisionId]` — read-only team finishes table
+  (mirrors `/admin/events/[eventId]/divisions/[divisionId]`, drops the point-band/
+  finish edit forms and template/available-teams data).
+- `/rankings/team-rankings?season=&view=nps|power|combine&ageGroup=&sort=&dir=` —
+  same three tabs as `/admin/team-rankings`, same query-param contract, but no
+  recompute button/action and no team-name links into `/admin/teams/[teamId]`.
+
+Shares `sortRows`/`ordinalSuffix`/`getLatestPowerRatings`/`buildPowerRows`/
+`averagePowerRank` with `/admin/team-rankings` via `src/lib/rating/powerRankings.ts`
+(extracted from `admin/team-rankings/page.tsx`, which previously defined these as
+unexported module-local helpers — pure extraction, no behavior change to the admin
+page). Public queries deliberately never `include` `Club.contacts` (real PII —
+name/email/phone/title) even though the admin queries being mirrored don't either;
+called out explicitly since a future edit to either page's `club` include should keep
+it that way.
+
 **Nav consolidation (post-Phase-5, UI-only).** Per user direction, `/admin/rankings`,
 `/admin/power-rankings`, and their `[seasonId]/[ageGroup]` detail routes were all
 removed and fully inlined into a single page, `/admin/team-rankings` — no more
@@ -821,7 +849,10 @@ than reading NPS and Power side by side. Two additive pieces:
   side it has rather than being penalized; a team with neither has no score and sorts
   last. Reuses `getLatestPowerRatings()`/`buildPowerRows()` (factored out of the
   existing `PowerRankingTable` for this purpose) rather than a second, independent copy
-  of the three-engine queries. (Function/component name kept as `CombineRankingTable`
+  of the three-engine queries — as of the public `/rankings` section (2026-07-30) these,
+  plus `sortRows()`/`averagePowerRank()`/`ordinalSuffix()`, moved again into
+  `src/lib/rating/powerRankings.ts` so the admin and public team-rankings pages share
+  one implementation instead of two. (Function/component name kept as `CombineRankingTable`
   in code even after the user-facing tab label was renamed to "Combined Rankings" —
   purely a display-string change, not a rename pass through the codebase.)
 

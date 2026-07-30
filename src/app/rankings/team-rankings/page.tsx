@@ -1,24 +1,12 @@
 import { prisma } from "@/lib/prisma";
-import { redirect } from "next/navigation";
 import Link from "next/link";
-import {
-  selectClass,
-  primaryButtonClass,
-  successBannerClass,
-  tableClass,
-  thClass,
-  tdClass,
-} from "@/lib/ui";
-import { computeColleyRatingsForSeason } from "@/lib/rating/computeColleyRatings";
-import { computeEloRatingsForSeason } from "@/lib/rating/computeEloRatings";
-import { computeMasseyRatingsForSeason } from "@/lib/rating/computeMasseyRatings";
+import { tableClass, thClass, tdClass } from "@/lib/ui";
 import {
   ordinalSuffix,
   sortRows,
   getLatestPowerRatings,
   buildPowerRows,
   averagePowerRank,
-  type PowerRatingsData,
   type PowerRow,
 } from "@/lib/rating/powerRankings";
 import { SeasonFilterSelect } from "./SeasonFilterSelect";
@@ -32,26 +20,7 @@ const VIEWS = [
 type View = (typeof VIEWS)[number]["value"];
 type SortDir = "asc" | "desc";
 
-/** Recomputes Colley, Elo, and Massey ratings for the whole season in one action -- the
- * three engines used to have separate buttons, but staff always want all three current
- * together, not one at a time. */
-async function recomputeAll(formData: FormData) {
-  "use server";
-  const seasonId = String(formData.get("seasonId") ?? "");
-  const view = String(formData.get("view") ?? "nps");
-  const ageGroup = String(formData.get("ageGroup") ?? "14");
-  if (!seasonId) redirect("/admin/team-rankings");
-
-  await computeColleyRatingsForSeason(seasonId);
-  await computeEloRatingsForSeason(seasonId);
-  await computeMasseyRatingsForSeason(seasonId);
-
-  redirect(
-    `/admin/team-rankings?${new URLSearchParams({ season: seasonId, view, ageGroup, recomputed: "1" })}`,
-  );
-}
-
-export default async function TeamRankingsIndexPage({
+export default async function PublicTeamRankingsPage({
   searchParams,
 }: {
   searchParams: Promise<{
@@ -60,17 +29,10 @@ export default async function TeamRankingsIndexPage({
     ageGroup?: string;
     sort?: string;
     dir?: string;
-    recomputed?: string;
   }>;
 }) {
-  const {
-    season: seasonParam,
-    view: viewParam,
-    ageGroup: ageGroupParam,
-    sort,
-    dir: dirParam,
-    recomputed,
-  } = await searchParams;
+  const { season: seasonParam, view: viewParam, ageGroup: ageGroupParam, sort, dir: dirParam } =
+    await searchParams;
 
   const seasons = await prisma.season.findMany({ orderBy: { startDate: "desc" } });
   const activeSeason = seasons.find((s) => s.isActive) ?? seasons[0];
@@ -86,21 +48,15 @@ export default async function TeamRankingsIndexPage({
       view: overrides.view ?? view,
       ageGroup: String(overrides.ageGroup ?? ageGroup),
     });
-    return `/admin/team-rankings?${params}`;
+    return `/rankings/team-rankings?${params}`;
   }
 
   return (
     <div>
       <h1 className="mb-6 text-2xl font-semibold">Team Rankings</h1>
 
-      {recomputed === "1" && (
-        <p className={successBannerClass}>
-          Colley, Elo, and Massey ratings recomputed for every age group in this season.
-        </p>
-      )}
-
       {seasons.length === 0 || !season ? (
-        <p className="text-sm text-slate-500">Create a season first (Admin → Seasons).</p>
+        <p className="text-sm text-slate-500">No seasons available yet.</p>
       ) : (
         <>
           <div className="mb-6 flex items-end gap-3">
@@ -112,18 +68,6 @@ export default async function TeamRankingsIndexPage({
                 <SeasonFilterSelect seasons={seasons} defaultValue={season.id} />
               </label>
             </form>
-
-            <form action={recomputeAll}>
-              <input type="hidden" name="seasonId" value={season.id} />
-              <input type="hidden" name="view" value={view} />
-              <input type="hidden" name="ageGroup" value={ageGroup} />
-              <button type="submit" className={primaryButtonClass}>
-                Recompute ratings
-              </button>
-            </form>
-            <p className="pb-2 text-xs text-slate-500">
-              Runs Colley, Elo, and Massey for every age group in the selected season.
-            </p>
           </div>
 
           <div className="mb-4 flex gap-1 border-b">
@@ -213,7 +157,7 @@ function SortableHeader({
   params.set("dir", nextDir);
   return (
     <th className={thClass}>
-      <Link href={`/admin/team-rankings?${params}`} className="hover:underline" scroll={false}>
+      <Link href={`/rankings/team-rankings?${params}`} className="hover:underline" scroll={false}>
         {label}
         {isActive && (dir === "asc" ? " ▲" : " ▼")}
       </Link>
@@ -275,11 +219,7 @@ async function NpsRankingTable({
         {rows.map((r) => (
           <tr key={r.id}>
             <td className={tdClass}>{r.rank}</td>
-            <td className={tdClass}>
-              <Link href={`/admin/teams/${r.team.id}`} className="text-slate-900 underline">
-                {r.team.name}
-              </Link>
-            </td>
+            <td className={tdClass}>{r.team.name}</td>
             <td className={tdClass}>{r.team.club?.name ?? ""}</td>
             <td className={tdClass}>{r.totalPoints}</td>
             <td className={tdClass}>
@@ -329,12 +269,6 @@ async function PowerRankingTable({
   const { latestColley, latestElo, latestMassey } = data;
   const defaultRows = buildPowerRows(data);
 
-  // Ordinal "Rank" column, positioned first like NPS Rankings' own persisted `rank` --
-  // Avg Rank is the headline number now (see averagePowerRank's comment), so it earns
-  // an actual rank position rather than staying a raw averaged value staff have to
-  // interpret themselves. Computed once by Avg Rank order regardless of which column
-  // the table is currently sorted/displayed by, same as NPS's rank column staying
-  // fixed while other columns are sortable.
   const rankByTeamId = new Map(
     sortRows(defaultRows, averagePowerRank, "asc").map((r, i) => [r.team.id, i + 1]),
   );
@@ -354,9 +288,6 @@ async function PowerRankingTable({
     masseyRating: (r) => r.massey?.rating,
     games: (r) => r.massey?.comparisons,
   };
-  // Default (no explicit column clicked yet) to Avg Rank ascending -- the whole point
-  // of the aggregate column is to be the table's headline ranking, not just one more
-  // sortable field buried among the per-engine ones.
   const rows =
     sort && accessors[sort]
       ? sortRows(defaultRows, accessors[sort], dir)
@@ -452,11 +383,7 @@ async function PowerRankingTable({
           {rows.map(({ team, colley, elo, massey }) => (
             <tr key={team.id}>
               <td className={tdClass}>{rankByTeamId.get(team.id) ?? "—"}</td>
-              <td className={tdClass}>
-                <Link href={`/admin/teams/${team.id}`} className="text-slate-900 underline">
-                  {team.name}
-                </Link>
-              </td>
+              <td className={tdClass}>{team.name}</td>
               <td className={tdClass}>{team.club?.name ?? ""}</td>
               <td className={tdClass}>
                 {(() => {
@@ -478,7 +405,7 @@ async function PowerRankingTable({
           {rows.length === 0 && (
             <tr>
               <td className={tdClass} colSpan={13}>
-                No ratings yet — click &quot;Recompute ratings&quot; above.
+                No ratings yet for this season/age group.
               </td>
             </tr>
           )}
@@ -512,9 +439,6 @@ async function CombineRankingTable({
   const npsRankByTeam = new Map(npsResults.map((r) => [r.teamId, r.rank]));
   const powerAvgRankByTeam = new Map(powerRows.map((r) => [r.team.id, averagePowerRank(r)]));
 
-  // Union of every team appearing in either ranking -- a team with an NPS finish
-  // history but no imported matches yet (or vice versa) still gets a row, just with
-  // one side of the blend missing (see combinedScore below).
   const teamById = new Map<string, (typeof npsResults)[number]["team"]>();
   for (const r of npsResults) teamById.set(r.teamId, r.team);
   for (const r of powerRows) teamById.set(r.team.id, r.team);
@@ -526,29 +450,12 @@ async function CombineRankingTable({
     powerAvgRank: powerAvgRankByTeam.get(teamId),
   }));
 
-  /**
-   * 50% NPS rank + 50% Power Rankings' own Avg Rank (itself the average of Colley/
-   * Elo/Massey rank -- see averagePowerRank above), by request: staff wanted one
-   * number blending the finish-based NPS ranking with the match-based power-rating
-   * consensus, evenly weighted. Both inputs are already ranks (not raw ratings), so
-   * they're on the same ordinal scale and a straight mean is meaningful, unlike
-   * averaging Colley/Elo/Massey's raw ratings directly (see averagePowerRank's own
-   * comment). A team missing one side of the blend (an NPS finish history but no
-   * imported matches yet, or vice versa) falls back to 100% the side it has rather
-   * than being penalized with a worst-case fill-in for the missing half; a team with
-   * neither has no combined score and sorts last (see sortRows).
-   */
   function combinedScore(r: Row): number | undefined {
     const parts = [r.npsRank, r.powerAvgRank].filter((v): v is number => v !== undefined);
     if (parts.length === 0) return undefined;
     return parts.reduce((sum, v) => sum + v, 0) / parts.length;
   }
 
-  // Ordinal "Rank" column by Combined Score order -- same convention as NPS Rankings'
-  // persisted `rank` and Power Rankings' Avg-Rank-derived `rank` (see
-  // PowerRankingTable above): a real "1, 2, 3..." position, held fixed regardless of
-  // which column the table is currently sorted/displayed by, not just the raw blended
-  // score staff would otherwise have to interpret themselves.
   const rankByTeamId = new Map(sortRows(defaultRows, combinedScore, "asc").map((r, i) => [r.team.id, i + 1]));
 
   const accessors: Record<string, (r: Row) => string | number | undefined> = {
@@ -559,9 +466,6 @@ async function CombineRankingTable({
     npsRank: (r) => r.npsRank,
     powerAvgRank: (r) => r.powerAvgRank,
   };
-  // Default to Combined Score ascending -- this tab's whole purpose is that one blended
-  // number, so it should lead the table unsorted, same convention as Power Rankings'
-  // own Avg Rank default.
   const rows =
     sort && accessors[sort] ? sortRows(defaultRows, accessors[sort], dir) : sortRows(defaultRows, combinedScore, "asc");
 
@@ -599,11 +503,7 @@ async function CombineRankingTable({
         {rows.map((r) => (
           <tr key={r.team.id}>
             <td className={tdClass}>{rankByTeamId.get(r.team.id) ?? "—"}</td>
-            <td className={tdClass}>
-              <Link href={`/admin/teams/${r.team.id}`} className="text-slate-900 underline">
-                {r.team.name}
-              </Link>
-            </td>
+            <td className={tdClass}>{r.team.name}</td>
             <td className={tdClass}>{r.team.club?.name ?? ""}</td>
             <td className={tdClass}>
               {(() => {
