@@ -47,6 +47,14 @@ const TIER_KEYWORD_MAP: Record<string, DivisionTierLabel> = {
   PREMIER: "PREMIER",
   CLUB: "CLUB",
   CLASSIC: "CLASSIC",
+  // AAU tiers with no dedicated enum value of their own -- folded onto the nearest
+  // USAV-equivalent enum value per explicit user direction, see the tier-hierarchy
+  // table in docs/domain-notes.md.
+  ELITE: "USA",
+  SELECT: "CLUB",
+  ASCEND: "CLUB",
+  ASPIRE: "FREEDOM",
+  SPIRIT: "FREEDOM",
 };
 
 const TIER_KEYWORDS = Object.keys(TIER_KEYWORD_MAP);

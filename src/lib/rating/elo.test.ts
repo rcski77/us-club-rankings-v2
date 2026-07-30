@@ -1,5 +1,46 @@
 import { describe, expect, it } from "vitest";
-import { buildEloMatches, computeEloHistory, computeEloRatings, explainEloChange } from "./elo";
+import {
+  buildEloMatches,
+  classifyOpponentStrength,
+  classifyResult,
+  computeEloHistory,
+  computeEloRatings,
+  computeMatchPointDiffRatio,
+  explainDivisionEffect,
+  explainEloChange,
+  OPEN_DIVISION_LOSS_SOFTEN,
+  OPEN_DIVISION_WIN_BONUS,
+} from "./elo";
+
+describe("computeMatchPointDiffRatio", () => {
+  it("returns 0 for no sets", () => {
+    expect(computeMatchPointDiffRatio([])).toBe(0);
+  });
+
+  it("returns 0 for a match with equal total points despite an uneven set split", () => {
+    // 20-25, 25-22, 16-14: (20-25)+(25-22)+(16-14) = -5+3+2 = 0
+    const ratio = computeMatchPointDiffRatio([
+      { a: 20, b: 25 },
+      { a: 25, b: 22 },
+      { a: 16, b: 14 },
+    ]);
+    expect(ratio).toBeCloseTo(0, 10);
+  });
+
+  it("returns a high ratio for a near-shutout", () => {
+    const ratio = computeMatchPointDiffRatio([
+      { a: 25, b: 2 },
+      { a: 25, b: 3 },
+    ]);
+    expect(ratio).toBeGreaterThan(0.7);
+  });
+
+  it("is symmetric regardless of which side is ahead", () => {
+    const aAhead = computeMatchPointDiffRatio([{ a: 25, b: 15 }]);
+    const bAhead = computeMatchPointDiffRatio([{ a: 15, b: 25 }]);
+    expect(aAhead).toBeCloseTo(bAhead, 10);
+  });
+});
 
 describe("buildEloMatches", () => {
   it("builds one EloMatch per completed match", () => {
@@ -224,6 +265,63 @@ describe("computeEloRatings", () => {
     );
   });
 
+  it("softens (not amplifies) the loser's rating drop in an above-average-weight division", () => {
+    const base = {
+      teamAId: "a",
+      teamBId: "b",
+      winnerTeamId: "a", // b loses
+      matchDate: new Date("2026-01-01"),
+      setsA: 2,
+      setsB: 0,
+    };
+    const weighted = computeEloRatings([{ ...base, divisionWeight: 1.6 }]);
+    const neutral = computeEloRatings([{ ...base, divisionWeight: 1 }]);
+    const weightedLossDrop = 1500 - weighted.find((r) => r.teamId === "b")!.rating;
+    const neutralLossDrop = 1500 - neutral.find((r) => r.teamId === "b")!.rating;
+    // Softened by the weight's reciprocal (1/1.6), not amplified by the weight itself.
+    expect(weightedLossDrop).toBeCloseTo(neutralLossDrop / 1.6, 10);
+    expect(weightedLossDrop).toBeLessThan(neutralLossDrop);
+  });
+
+  it("keeps below-average-weight divisions symmetric for both win and loss", () => {
+    const base = {
+      teamAId: "a",
+      teamBId: "b",
+      winnerTeamId: "a",
+      matchDate: new Date("2026-01-01"),
+      setsA: 2,
+      setsB: 0,
+    };
+    const weighted = computeEloRatings([{ ...base, divisionWeight: 0.7 }]);
+    const neutral = computeEloRatings([{ ...base, divisionWeight: 1 }]);
+    const winGain = weighted.find((r) => r.teamId === "a")!.rating - 1500;
+    const lossDrop = 1500 - weighted.find((r) => r.teamId === "b")!.rating;
+    const neutralGain = neutral.find((r) => r.teamId === "a")!.rating - 1500;
+    expect(winGain).toBeCloseTo(neutralGain * 0.7, 10);
+    expect(lossDrop).toBeCloseTo(neutralGain * 0.7, 10); // same magnitude as the win, symmetric
+  });
+
+  it("applies the Open-division bonus on top of divisionWeight, directionally", () => {
+    const base = {
+      teamAId: "a",
+      teamBId: "b",
+      winnerTeamId: "a",
+      matchDate: new Date("2026-01-01"),
+      setsA: 2,
+      setsB: 0,
+      divisionWeight: 1.6,
+    };
+    const open = computeEloRatings([{ ...base, isOpenDivision: true }]);
+    const nonOpen = computeEloRatings([{ ...base, isOpenDivision: false }]);
+    const openWinGain = open.find((r) => r.teamId === "a")!.rating - 1500;
+    const nonOpenWinGain = nonOpen.find((r) => r.teamId === "a")!.rating - 1500;
+    expect(openWinGain).toBeCloseTo(nonOpenWinGain * OPEN_DIVISION_WIN_BONUS, 10);
+
+    const openLossDrop = 1500 - open.find((r) => r.teamId === "b")!.rating;
+    const nonOpenLossDrop = 1500 - nonOpen.find((r) => r.teamId === "b")!.rating;
+    expect(openLossDrop).toBeCloseTo(nonOpenLossDrop * OPEN_DIVISION_LOSS_SOFTEN, 10);
+  });
+
   it("replays out of chronological input order the same as sorted order", () => {
     const inOrder = [
       {
@@ -249,6 +347,90 @@ describe("computeEloRatings", () => {
     for (const r of a) {
       expect(r.rating).toBeCloseTo(b.find((x) => x.teamId === r.teamId)!.rating, 10);
     }
+  });
+});
+
+describe("marginMultiplier (via computeEloHistory)", () => {
+  const base = {
+    id: "m1",
+    teamAId: "a",
+    teamBId: "b",
+    winnerTeamId: "a",
+    matchDate: new Date("2026-01-01"),
+    setsA: 2,
+    setsB: 1,
+  };
+
+  it("gives a lower multiplier to a dead-even split than a decisive one, both 2-1", () => {
+    const nailBiter = computeEloHistory([
+      {
+        ...base,
+        setScores: [
+          { a: 20, b: 25 },
+          { a: 25, b: 22 },
+          { a: 16, b: 14 },
+        ],
+      },
+    ]);
+    const decisive = computeEloHistory([
+      {
+        ...base,
+        setScores: [
+          { a: 25, b: 10 },
+          { a: 20, b: 25 },
+          { a: 15, b: 5 },
+        ],
+      },
+    ]);
+    expect(nailBiter[0].multiplier).toBeLessThan(decisive[0].multiplier);
+  });
+
+  it("falls back to the old set-fraction-only multiplier when no setScores are given", () => {
+    const withoutScores = computeEloHistory([base]);
+    // Same as the pre-existing set-fraction formula: 0.8 + 0.4 * (2/3)
+    expect(withoutScores[0].multiplier).toBeCloseTo(0.8 + 0.4 * (2 / 3), 10);
+  });
+
+  it("a 2-1 nail-biter with zero net point differential can classify as narrow", () => {
+    const nailBiter = computeEloHistory([
+      {
+        ...base,
+        setScores: [
+          { a: 20, b: 25 },
+          { a: 25, b: 22 },
+          { a: 16, b: 14 },
+        ],
+      },
+    ]);
+    expect(nailBiter[0].multiplier).toBeLessThanOrEqual(0.95);
+  });
+
+  it("gives a bigger multiplier to a lopsided sweep than a close one", () => {
+    const close = computeEloHistory([
+      {
+        ...base,
+        setsA: 2,
+        setsB: 0,
+        winnerTeamId: "a",
+        setScores: [
+          { a: 26, b: 24 },
+          { a: 26, b: 24 },
+        ],
+      },
+    ]);
+    const blowout = computeEloHistory([
+      {
+        ...base,
+        setsA: 2,
+        setsB: 0,
+        winnerTeamId: "a",
+        setScores: [
+          { a: 25, b: 10 },
+          { a: 25, b: 8 },
+        ],
+      },
+    ]);
+    expect(close[0].multiplier).toBeLessThan(blowout[0].multiplier);
   });
 });
 
@@ -357,5 +539,60 @@ describe("explainEloChange", () => {
   it("mentions the dominant margin on a lopsided favorite win", () => {
     const text = explainEloChange({ won: true, expected: 0.9, multiplier: 1.2 });
     expect(text).toMatch(/dominant margin/);
+  });
+});
+
+describe("classifyResult", () => {
+  it("labels a dominant win with its point gain", () => {
+    expect(classifyResult({ won: true, multiplier: 1.2, delta: 17 })).toBe("Dominant Win (+17 pts)");
+  });
+
+  it("labels a narrow loss with its point loss", () => {
+    expect(classifyResult({ won: false, multiplier: 0.85, delta: -8 })).toBe("Narrow Loss (-8 pts)");
+  });
+
+  it("labels a moderate-margin result", () => {
+    expect(classifyResult({ won: true, multiplier: 1.0, delta: 12 })).toBe("Moderate Win (+12 pts)");
+  });
+});
+
+describe("classifyOpponentStrength", () => {
+  it("classifies a lopsided expectation as much weaker/stronger", () => {
+    expect(classifyOpponentStrength(0.97)).toBe("much weaker");
+    expect(classifyOpponentStrength(0.03)).toBe("much stronger");
+  });
+
+  it("classifies a moderate favorite/underdog gap", () => {
+    expect(classifyOpponentStrength(0.7)).toBe("weaker");
+    expect(classifyOpponentStrength(0.3)).toBe("stronger");
+  });
+
+  it("classifies a near-even matchup", () => {
+    expect(classifyOpponentStrength(0.5)).toBe("evenly matched");
+  });
+});
+
+describe("explainDivisionEffect", () => {
+  it("returns null for a neutral, non-Open division", () => {
+    expect(explainDivisionEffect({ won: true, divisionWeight: 1, isOpenDivision: false })).toBeNull();
+  });
+
+  it("describes a win in a strong, Open division", () => {
+    const text = explainDivisionEffect({ won: true, divisionWeight: 1.6, isOpenDivision: true });
+    expect(text).toMatch(/Open division/);
+    expect(text).toMatch(/1\.60x/);
+    expect(text).toMatch(/count for more/);
+  });
+
+  it("describes a loss in a strong division as softened, not amplified", () => {
+    const text = explainDivisionEffect({ won: false, divisionWeight: 1.6, isOpenDivision: false });
+    expect(text).toMatch(/softened instead of amplified/);
+  });
+
+  it("describes a below-average division as counting less either way", () => {
+    const winText = explainDivisionEffect({ won: true, divisionWeight: 0.7, isOpenDivision: false });
+    const lossText = explainDivisionEffect({ won: false, divisionWeight: 0.7, isOpenDivision: false });
+    expect(winText).toMatch(/counted for less either way/);
+    expect(lossText).toMatch(/counted for less either way/);
   });
 });

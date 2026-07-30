@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { auth } from "@/auth";
 import { notFound, redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import Link from "next/link";
@@ -6,6 +7,7 @@ import {
   inputClass,
   selectClass,
   primaryButtonClass,
+  secondaryButtonClass,
   errorBannerClass,
   successBannerClass,
   tableClass,
@@ -15,16 +17,31 @@ import {
 import { uniqueSlug } from "@/lib/slug";
 import type { DivisionTierLabel, ImportSource } from "@/generated/prisma/enums";
 
+const IMPORT_TYPE_LABELS: Record<string, string> = {
+  TEAM_FINISHES: "Team Finishes",
+  MATCH_RESULTS: "Match Results",
+  DIVISIONS: "Divisions",
+};
+
+const IMPORT_STATUS_LABELS: Record<string, string> = {
+  DRAFT: "Draft",
+  RESOLVED: "Resolved",
+  COMMITTED: "Committed",
+  FAILED: "Failed",
+};
+
+// Best-to-worst division strength, USAV and AAU tiers merged into one order
+// (see docs/domain-notes.md) since both share this one dropdown/enum.
 const TIER_LABELS: DivisionTierLabel[] = [
   "OPEN",
-  "AMERICAN",
-  "PATRIOT",
-  "LIBERTY",
-  "USA",
-  "FREEDOM",
   "PREMIER",
+  "USA",
+  "LIBERTY",
+  "AMERICAN",
   "CLUB",
+  "FREEDOM",
   "CLASSIC",
+  "PATRIOT",
 ];
 
 const SCHEDULE_SOURCES: ImportSource[] = ["AES", "SPORTWRENCH", "TM2", "VBSCHEDULE"];
@@ -61,6 +78,26 @@ async function updateEvent(eventId: string, formData: FormData) {
   revalidatePath(`/admin/events/${eventId}`);
   revalidatePath("/admin/events");
   redirect(`/admin/events/${eventId}?success=1`);
+}
+
+async function startEventImport(eventId: string, formData: FormData) {
+  "use server";
+
+  const session = await auth();
+  const importTypeRaw = String(formData.get("importType") ?? "TEAM_FINISHES");
+  const importType = importTypeRaw === "MATCH_RESULTS" ? "MATCH_RESULTS" : "TEAM_FINISHES";
+
+  const batch = await prisma.importBatch.create({
+    data: {
+      eventId,
+      source: "AES",
+      importType,
+      status: "DRAFT",
+      createdById: session?.user?.id ?? null,
+    },
+  });
+
+  redirect(`/admin/imports/${batch.id}`);
 }
 
 async function createDivision(eventId: string, formData: FormData) {
@@ -110,12 +147,16 @@ export default async function EventDetailPage({
           pointBands: { orderBy: { fromRank: "asc" }, take: 1 },
         },
       },
+      importBatches: {
+        orderBy: { createdAt: "desc" },
+      },
     },
   });
   if (!event) notFound();
 
   const createDivisionWithEvent = createDivision.bind(null, eventId);
   const updateEventWithId = updateEvent.bind(null, eventId);
+  const startEventImportWithId = startEventImport.bind(null, eventId);
 
   return (
     <div>
@@ -135,6 +176,52 @@ export default async function EventDetailPage({
         <p className={errorBannerClass}>Name and valid start/end dates are required.</p>
       )}
       {success === "1" && <p className={successBannerClass}>Event saved.</p>}
+
+      <section className="mb-8">
+        <h2 className="mb-2 text-lg font-medium">Imports</h2>
+        {event.importBatches.length > 0 && (
+          <table className={`${tableClass} mb-3`}>
+            <thead>
+              <tr>
+                <th className={thClass}>Type</th>
+                <th className={thClass}>Status</th>
+                <th className={thClass}>Created</th>
+              </tr>
+            </thead>
+            <tbody>
+              {event.importBatches.map((b) => (
+                <tr key={b.id}>
+                  <td className={tdClass}>
+                    <Link href={`/admin/imports/${b.id}`} className="text-slate-900 underline">
+                      {IMPORT_TYPE_LABELS[b.importType] ?? b.importType}
+                    </Link>
+                  </td>
+                  <td className={tdClass}>{IMPORT_STATUS_LABELS[b.status] ?? b.status}</td>
+                  <td className={tdClass}>{b.createdAt.toISOString().slice(0, 10)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+        <div className="flex flex-wrap gap-3">
+          <form action={startEventImportWithId}>
+            <input type="hidden" name="importType" value="TEAM_FINISHES" />
+            <button type="submit" className={primaryButtonClass}>
+              Start Team Finishes import
+            </button>
+          </form>
+          <form action={startEventImportWithId}>
+            <input type="hidden" name="importType" value="MATCH_RESULTS" />
+            <button type="submit" className={secondaryButtonClass}>
+              Start Match Results import
+            </button>
+          </form>
+        </div>
+        <p className="mt-2 text-xs text-slate-500">
+          Match Results requires Team Finishes to already be imported (it resolves
+          teams/divisions from that data, not from scratch).
+        </p>
+      </section>
 
       <section className="mb-8 max-w-lg">
         <h2 className="mb-2 text-lg font-medium">Edit event</h2>

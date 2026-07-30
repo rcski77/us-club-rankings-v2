@@ -116,7 +116,15 @@ export default async function ImportBatchPage({
 
   return (
     <div>
-      <div className="mb-2 text-sm text-slate-500">
+      <div className="mb-2 flex gap-1 text-sm text-slate-500">
+        <Link href="/admin/events" className="underline">
+          Events
+        </Link>
+        <span>/</span>
+        <Link href={`/admin/events/${batch.eventId}`} className="underline">
+          {batch.event.name}
+        </Link>
+        <span>/</span>
         <Link href="/admin/imports" className="underline">
           Imports
         </Link>
@@ -560,7 +568,15 @@ async function MatchResultsBatchView({
 
   return (
     <div>
-      <div className="mb-2 text-sm text-slate-500">
+      <div className="mb-2 flex gap-1 text-sm text-slate-500">
+        <Link href="/admin/events" className="underline">
+          Events
+        </Link>
+        <span>/</span>
+        <Link href={`/admin/events/${batch.eventId}`} className="underline">
+          {batch.event.name}
+        </Link>
+        <span>/</span>
         <Link href="/admin/imports" className="underline">
           Imports
         </Link>

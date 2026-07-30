@@ -1,8 +1,11 @@
 import { prisma } from "@/lib/prisma";
 import {
   buildEloMatches,
+  classifyOpponentStrength,
+  classifyResult,
   computeEloHistory,
   computeEloRatings as solveElo,
+  explainDivisionEffect,
   explainEloChange,
 } from "./elo";
 import { computeMatchDivisionWeights } from "./computeMatchDivisionWeights";
@@ -97,7 +100,15 @@ type PartitionMatch = Awaited<ReturnType<typeof getPartitionMatches>>["matches"]
  * than recomputing them a second, potentially-inconsistent way. */
 export async function withDivisionWeights(matches: PartitionMatch[]) {
   const weights = await computeMatchDivisionWeights(matches);
-  return matches.map((m) => ({ ...m, divisionWeight: m.divisionId ? weights.get(m.divisionId) : undefined }));
+  return matches.map((m) => ({
+    ...m,
+    divisionWeight: m.divisionId ? weights.get(m.divisionId) : undefined,
+    isOpenDivision: m.division?.tierLabel === "OPEN",
+    // Prisma's raw Json field, coerced to the shape marginMultiplier() expects --
+    // same coercion computeMasseyRatings.ts does independently for the same column,
+    // done once here so buildEloMatches() (both call sites below) doesn't repeat it.
+    setScores: Array.isArray(m.setScores) ? (m.setScores as unknown as { a: number; b: number }[]) : [],
+  }));
 }
 
 /**
@@ -192,7 +203,7 @@ export type TeamEloHistoryEntry = {
   matchDate: Date;
   eventId: string;
   eventName: string;
-  divisionName: string | null;
+  divisionTierLabel: string | null; // e.g. "OPEN" -- the tier, not the full division name
   opponentTeamId: string;
   opponentName: string;
   opponentClubName: string | null;
@@ -203,9 +214,15 @@ export type TeamEloHistoryEntry = {
   ratingAfter: number;
   delta: number;
   opponentRatingBefore: number;
+  opponentStrength: string; // classifyOpponentStrength(expected) -- "much weaker" etc.
   expected: number; // this team's win probability going into the match
-  k: number;
+  k: number; // base K (24 or 40), before margin/division adjustments
+  effectiveWeight: number; // the actual margin*division*openBonus multiplier applied to this side
   multiplier: number;
+  resultLabel: string; // classifyResult() -- "Dominant Win (+17 pts)"
+  divisionWeight: number;
+  isOpenDivision: boolean;
+  divisionEffectExplanation: string | null;
   explanation: string;
 };
 
@@ -243,14 +260,16 @@ export async function getTeamEloHistory(
     const opponentRatingBefore = isA ? s.ratingBBefore : s.ratingABefore;
     const expected = isA ? s.expectedA : 1 - s.expectedA;
     const k = isA ? s.kA : s.kB;
+    const effectiveWeight = isA ? s.effectiveWeightA : s.effectiveWeightB;
     const won = s.winnerTeamId === teamId;
+    const delta = ratingAfter - ratingBefore;
 
     return {
       matchId: s.matchId,
       matchDate: s.matchDate,
       eventId: match.eventId,
       eventName: match.event.name,
-      divisionName: match.division?.name ?? null,
+      divisionTierLabel: match.division?.tierLabel ?? null,
       opponentTeamId: opponent?.id ?? "",
       opponentName: opponent?.name ?? "(unresolved)",
       opponentClubName: opponent?.club?.name ?? null,
@@ -259,11 +278,21 @@ export async function getTeamEloHistory(
       opponentSets: isA ? s.setsB : s.setsA,
       ratingBefore,
       ratingAfter,
-      delta: ratingAfter - ratingBefore,
+      delta,
       opponentRatingBefore,
+      opponentStrength: classifyOpponentStrength(expected),
       expected,
       k,
+      effectiveWeight,
       multiplier: s.multiplier,
+      resultLabel: classifyResult({ won, multiplier: s.multiplier, delta }),
+      divisionWeight: s.divisionWeight,
+      isOpenDivision: s.isOpenDivision,
+      divisionEffectExplanation: explainDivisionEffect({
+        won,
+        divisionWeight: s.divisionWeight,
+        isOpenDivision: s.isOpenDivision,
+      }),
       explanation: explainEloChange({ won, expected, multiplier: s.multiplier }),
     };
   });

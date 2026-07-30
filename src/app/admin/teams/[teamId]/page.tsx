@@ -514,12 +514,14 @@ export default async function TeamDetailPage({
                             <span className="w-14 shrink-0 text-slate-500">
                               {m.matchDate ? m.matchDate.toISOString().slice(11, 16) : "—"}
                             </span>
-                            <span
-                              className={`min-w-32 flex-1 font-medium ${
-                                m.opponent ? "text-slate-900" : "text-slate-400"
-                              }`}
-                            >
-                              {m.opponent?.name ?? "(unresolved)"}
+                            <span className="min-w-32 flex-1 font-medium">
+                              {m.opponent ? (
+                                <Link href={`/admin/teams/${m.opponent.id}`} className="text-slate-900 underline">
+                                  {m.opponent.name}
+                                </Link>
+                              ) : (
+                                <span className="text-slate-400">(unresolved)</span>
+                              )}
                             </span>
                             <span className="w-12 shrink-0 text-slate-500">
                               {m.thisTeamSets}-{m.opponentSets}
@@ -552,25 +554,22 @@ export default async function TeamDetailPage({
                             )}
                           </summary>
                           <div className="border-t border-slate-100 bg-slate-50 px-3 py-3 text-sm">
-                            <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-xs">
-                              <div className="flex justify-between">
-                                <span className="text-slate-500">Opponent</span>
-                                <span>
-                                  {m.opponent ? (
-                                    <Link href={`/admin/teams/${m.opponent.id}`} className="underline">
-                                      {m.opponent.name}
-                                    </Link>
-                                  ) : (
-                                    "(unresolved)"
-                                  )}
-                                </span>
-                              </div>
-                              <div className="flex justify-between">
-                                <span className="text-slate-500">Stage</span>
-                                <span>{m.stage ?? "—"}</span>
-                              </div>
-                              {elo && (
-                                <>
+                            {elo ? (
+                              <>
+                                <div className="mb-2 flex items-center justify-between">
+                                  <span className="text-xs font-semibold text-slate-700">
+                                    Why your Elo changed
+                                  </span>
+                                  <span
+                                    className={`font-mono text-xs font-semibold ${
+                                      elo.delta >= 0 ? "text-green-700" : "text-red-700"
+                                    }`}
+                                  >
+                                    {elo.delta >= 0 ? "+" : ""}
+                                    {elo.delta.toFixed(0)}
+                                  </span>
+                                </div>
+                                <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-xs">
                                   <div className="flex justify-between">
                                     <span className="text-slate-500">Rating</span>
                                     <span>
@@ -579,26 +578,36 @@ export default async function TeamDetailPage({
                                   </div>
                                   <div className="flex justify-between">
                                     <span className="text-slate-500">Opponent rating</span>
-                                    <span>{elo.opponentRatingBefore.toFixed(0)}</span>
+                                    <span>
+                                      {elo.opponentRatingBefore.toFixed(0)} ({elo.opponentStrength})
+                                    </span>
                                   </div>
                                   <div className="flex justify-between">
                                     <span className="text-slate-500">Win expectation</span>
                                     <span>{(elo.expected * 100).toFixed(0)}%</span>
                                   </div>
                                   <div className="flex justify-between">
-                                    <span className="text-slate-500">Matchup volatility (K)</span>
-                                    <span>{elo.k}</span>
+                                    <span className="text-slate-500">Result</span>
+                                    <span>{elo.resultLabel}</span>
                                   </div>
-                                </>
-                              )}
-                            </div>
-                            {elo ? (
-                              <p className="mt-2 text-xs text-slate-600">
-                                <span className="font-medium">Why your Elo changed: </span>
-                                {elo.explanation}
-                              </p>
+                                  <div className="flex justify-between">
+                                    <span className="text-slate-500">Matchup volatility (K)</span>
+                                    <span>
+                                      {elo.k} → {(elo.k * elo.multiplier * elo.effectiveWeight).toFixed(1)}
+                                    </span>
+                                  </div>
+                                  <div className="flex justify-between">
+                                    <span className="text-slate-500">Division</span>
+                                    <span>{elo.divisionTierLabel ?? "—"}</span>
+                                  </div>
+                                </div>
+                                {elo.divisionEffectExplanation && (
+                                  <p className="mt-2 text-xs text-slate-600">{elo.divisionEffectExplanation}</p>
+                                )}
+                                <p className="mt-2 text-xs text-slate-600">{elo.explanation}</p>
+                              </>
                             ) : (
-                              <p className="mt-2 text-xs text-slate-400">
+                              <p className="text-xs text-slate-400">
                                 This match isn&apos;t part of the current Elo rating graph yet — run
                                 &quot;Recompute Elo ratings&quot; from{" "}
                                 <Link href="/admin/team-rankings" className="underline">
