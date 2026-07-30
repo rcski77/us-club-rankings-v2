@@ -18,7 +18,7 @@ const AGE_GROUPS = [12, 13, 14, 15, 16, 17, 18];
 const VIEWS = [
   { value: "nps", label: "NPS Rankings" },
   { value: "power", label: "Power Rankings" },
-  { value: "combine", label: "Combine Rankings" },
+  { value: "combine", label: "Combined Rankings" },
 ] as const;
 type View = (typeof VIEWS)[number]["value"];
 type SortDir = "asc" | "desc";
@@ -671,7 +671,15 @@ async function CombineRankingTable({
     return parts.reduce((sum, v) => sum + v, 0) / parts.length;
   }
 
+  // Ordinal "Rank" column by Combined Score order -- same convention as NPS Rankings'
+  // persisted `rank` and Power Rankings' Avg-Rank-derived `rank` (see
+  // PowerRankingTable above): a real "1, 2, 3..." position, held fixed regardless of
+  // which column the table is currently sorted/displayed by, not just the raw blended
+  // score staff would otherwise have to interpret themselves.
+  const rankByTeamId = new Map(sortRows(defaultRows, combinedScore, "asc").map((r, i) => [r.team.id, i + 1]));
+
   const accessors: Record<string, (r: Row) => string | number | undefined> = {
+    rank: (r) => rankByTeamId.get(r.team.id),
     team: (r) => r.team.name,
     club: (r) => r.team.club?.name ?? "",
     combinedScore,
@@ -688,6 +696,7 @@ async function CombineRankingTable({
     <table className={tableClass}>
       <thead>
         <tr>
+          <SortableHeader sortKey="rank" label="Rank" activeSort={sort} dir={dir} baseParams={baseParams} />
           <SortableHeader sortKey="team" label="Team" activeSort={sort} dir={dir} baseParams={baseParams} />
           <SortableHeader sortKey="club" label="Club" activeSort={sort} dir={dir} baseParams={baseParams} />
           <SortableHeader
@@ -716,6 +725,7 @@ async function CombineRankingTable({
       <tbody>
         {rows.map((r) => (
           <tr key={r.team.id}>
+            <td className={tdClass}>{rankByTeamId.get(r.team.id) ?? "—"}</td>
             <td className={tdClass}>
               <Link href={`/admin/teams/${r.team.id}`} className="text-slate-900 underline">
                 {r.team.name}
@@ -734,7 +744,7 @@ async function CombineRankingTable({
         ))}
         {rows.length === 0 && (
           <tr>
-            <td className={tdClass} colSpan={5}>
+            <td className={tdClass} colSpan={6}>
               No ranked teams yet for this season/age group.
             </td>
           </tr>
