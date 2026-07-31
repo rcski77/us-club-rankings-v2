@@ -20,6 +20,7 @@ import {
   type PowerRow,
 } from "@/lib/rating/powerRankings";
 import { SeasonFilterSelect } from "./SeasonFilterSelect";
+import { SubmitButton } from "@/components/SubmitButton";
 
 const AGE_GROUPS = [12, 13, 14, 15, 16, 17, 18];
 const VIEWS = [
@@ -113,9 +114,9 @@ export default async function TeamRankingsIndexPage({
               <input type="hidden" name="seasonId" value={season.id} />
               <input type="hidden" name="view" value={view} />
               <input type="hidden" name="ageGroup" value={ageGroup} />
-              <button type="submit" className={primaryButtonClass}>
+              <SubmitButton className={primaryButtonClass} pendingText="Recomputing…">
                 Recompute ratings
-              </button>
+              </SubmitButton>
             </form>
             <p className="pb-2 text-xs text-slate-500">
               Runs Colley, Elo, and Massey for every age group in the selected season.
