@@ -737,12 +737,22 @@ Two fixes, in order of how much of the problem each solves:
    thread Next uses to serve every other admin request for the batch's whole
    duration. `resolveBatch` (the server action) now runs it on a `worker_threads`
    thread instead (`src/lib/import/resolveInWorker.ts` /
-   `resolveWorkerEntry.ts`) — see that file's comments for why it's invoked as a
-   plain source file via `tsx` (Turbopack doesn't bundle `new Worker(...)` targets
-   for server code) and why `tsx` is a real, not dev, dependency, and why the
-   Dockerfile's runner stage copies `src/`, `tsconfig.json`, and the full
-   (unpruned) `node_modules` rather than relying on Next's traced `.next/standalone`
-   output for this one path.
+   `resolveWorkerEntry.ts`, via the shared `runInWorker.ts`) — see that file's
+   comments for why it's invoked as a plain source file via `tsx` (Turbopack doesn't
+   bundle `new Worker(...)` targets for server code) and why `tsx` is a real, not
+   dev, dependency, and why the Dockerfile's runner stage copies `src/`,
+   `tsconfig.json`, and the full (unpruned) `node_modules` rather than relying on
+   Next's traced `.next/standalone` output for this one path. **Correction
+   (2026-07-31, same day)**: this broke on the homelab docker host with `Cannot find
+   module '/app/src/lib/import/resolveWorkerEntry.ts'` even though the file was
+   confirmed present on disk — Turbopack intercepts *any* `new Worker(...)`
+   expression, literal or computed, and tries to bundle/resolve it at build time
+   (per Next's own "Magic Comments" docs), which is nondeterministic across builds
+   for a pure-runtime path like this one. Fixed by adding a `/* turbopackIgnore:
+   true */` magic comment directly on the `new Worker(...)` call in
+   `runInWorker.ts`, which tells Turbopack to leave the expression alone entirely.
+   Don't drop that comment if this code is ever refactored — without it the whole
+   approach is a coin flip per build.
 
 This is deliberately the *lightest* fix, not full process isolation. If Resolve
 passes ever grow so long/frequent that they visibly block other admins from using the

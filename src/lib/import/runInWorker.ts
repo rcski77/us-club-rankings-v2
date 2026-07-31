@@ -7,11 +7,11 @@ export type WorkerOutcome<T> = { ok: true; data: T } | { ok: false; error: strin
 // bundler-aware pattern, but Turbopack (both dev and this project's standalone
 // build) doesn't resolve/bundle `new Worker(...)` targets for server code, only
 // "Module not found" at compile time. Building the path at runtime from
-// process.cwd() instead sidesteps Turbopack's static analysis entirely: the worker
-// entry ships as a plain source file, not a bundled asset. process.cwd() is the
-// project root in both `next dev` and the Docker runner image (WORKDIR /app, CMD run
-// from there) -- see the Dockerfile's runner stage, which COPYs `src/` and
-// `tsconfig.json` from the builder stage specifically so this path exists at runtime.
+// process.cwd() instead means the worker entry ships as a plain source file, not a
+// bundled asset. process.cwd() is the project root in both `next dev` and the Docker
+// runner image (WORKDIR /app, CMD run from there) -- see the Dockerfile's runner
+// stage, which COPYs `src/` and `tsconfig.json` from the builder stage specifically
+// so this path exists at runtime.
 function workerEntryPath(entryFilename: string): string {
   return path.join(process.cwd(), "src/lib/import", entryFilename);
 }
@@ -34,7 +34,15 @@ export function runInWorker<TWorkerData, TResult>(
   workerData: TWorkerData,
 ): Promise<TResult> {
   return new Promise((resolve, reject) => {
-    const worker = new Worker(workerEntryPath(entryFilename), {
+    // Turbopack intercepts `new Worker(...)` expressions regardless of whether the
+    // argument is a literal or a computed value (per Next's own "Magic Comments"
+    // docs) and tries to bundle/resolve the target at build time -- which fails for
+    // a plain runtime path like this one ("Cannot find module ... moduleContext" at
+    // runtime, confirmed in prod even though the file is present on disk; observed
+    // build-to-build nondeterminism, not a caching issue). turbopackIgnore tells it
+    // to leave the expression alone and let it resolve at runtime, which is what we
+    // actually want -- see workerEntryPath's comment above.
+    const worker = new Worker(/* turbopackIgnore: true */ workerEntryPath(entryFilename), {
       execArgv: ["--import", "tsx"],
       workerData,
     });
