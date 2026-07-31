@@ -735,45 +735,63 @@ Two fixes, in order of how much of the problem each solves:
 2. The remaining CPU-bound work (looping over every row, doing per-row string
    parsing/lookups) still runs synchronously and would otherwise block the same
    thread Next uses to serve every other admin request for the batch's whole
-   duration. `resolveBatch` (the server action) now runs it on a `worker_threads`
-   thread instead (`src/lib/import/resolveInWorker.ts` /
-   `resolveWorkerEntry.ts`, via the shared `runInWorker.ts`) — see that file's
-   comments for why it's invoked as a plain source file via `tsx` (Turbopack doesn't
-   bundle `new Worker(...)` targets for server code) and why `tsx` is a real, not
-   dev, dependency, and why the Dockerfile's runner stage copies `src/`,
+   duration. `resolveBatch` (the server action) now runs it in a separate process
+   instead, via the shared `runInWorker.ts` helper (`resolveInWorker.ts` /
+   `resolveWorkerEntry.ts`).
+
+   **This took three attempts to get right, and it's worth understanding why**, since
+   the failure mode only ever showed up in a real Docker build against the real
+   bundled server action — never in `next dev`, never in a standalone script, and not
+   even consistently across Docker builds of identical code:
+   1. `node:worker_threads`' `new Worker(...)`. Next's own "Magic Comments" docs
+      confirm Turbopack intercepts `new Worker(...)` expressions to bundle/resolve
+      the target at build time. The *build* succeeded, but the generated runtime
+      moduleContext lookup was unreliable — it worked in one Docker build and threw
+      `Cannot find module '.../resolveWorkerEntry.ts'` in another, for
+      byte-identical code, confirmed live on the homelab docker host. Neither the
+      documented `/* turbopackIgnore: true */` escape-hatch comment nor obscuring the
+      `Worker` identifier (fetching the constructor off the `node:worker_threads`
+      namespace object via a computed property, so there's no literal `new Worker(`
+      text anywhere) fixed it reliably.
+   2. `child_process.fork(...)`. Not in Turbopack's documented list of intercepted
+      expressions, but intercepted anyway, and more aggressively — the *build itself*
+      failed ("Module not found: Can't resolve './ROOT/src/lib/import'") regardless
+      of how the path argument was constructed (`path.join`, plain string
+      concatenation, even base64-decoding the directory segment so there was no
+      path-shaped string literal anywhere in the file). Turbopack appears to
+      intercept any non-literal first argument to `fork(...)`, not the string's
+      actual content.
+   3. `child_process.execFile(...)` — what's actually shipped. `execFile` runs an
+      executable (`process.execPath`, i.e. `node`) with argv; it shares no
+      module-loading shape with anything Turbopack special-cases. No IPC channel
+      (unlike `fork`), so the task payload goes in as a JSON argv string and the
+      result comes back as the last line the child prints to stdout. Confirmed
+      stable across a `--no-cache` Docker rebuild, verified against the real bundled
+      server action (not a standalone script) by actually clicking Resolve through
+      the UI.
+
+   `tsx` is a real, not dev, dependency (it's what runs the plain, unbundled worker
+   entry `.ts` files), and the Dockerfile's runner stage copies `src/`,
    `tsconfig.json`, and the full (unpruned) `node_modules` rather than relying on
-   Next's traced `.next/standalone` output for this one path. **Correction
-   (2026-07-31, same day)**: this broke on the homelab docker host with `Cannot find
-   module '/app/src/lib/import/resolveWorkerEntry.ts'` even though the file was
-   confirmed present on disk — Turbopack intercepts *any* `new Worker(...)`
-   expression, literal or computed, and tries to bundle/resolve it at build time
-   (per Next's own "Magic Comments" docs), which is nondeterministic across builds
-   for a pure-runtime path like this one. Fixed by adding a `/* turbopackIgnore:
-   true */` magic comment directly on the `new Worker(...)` call in
-   `runInWorker.ts`, which tells Turbopack to leave the expression alone entirely.
-   Don't drop that comment if this code is ever refactored — without it the whole
-   approach is a coin flip per build.
+   Next's traced `.next/standalone` output for this one path — none of that changed
+   across the three attempts above, only the process-spawning mechanism did.
 
-This is deliberately the *lightest* fix, not full process isolation. If Resolve
-passes ever grow so long/frequent that they visibly block other admins from using the
-rest of the site concurrently, or need to survive a page navigation, the next steps in
-order of effort:
+This is deliberately the *lightest* fix, not full process isolation via a job queue.
+If Resolve passes ever grow so long/frequent that they need to survive a page
+navigation or want progress reporting, the next step up is **a real job queue +
+separate worker container** (BullMQ+Redis, or a DB-polling table) — the "Resolve"
+button enqueues and returns immediately, a separate `docker-compose` service
+processes it, and the UI polls/refreshes for status. That's the architecturally
+"correct" answer for background work, but is a meaningfully bigger change: new
+service, new dependency, and an async UI instead of this app's current synchronous
+redirect-after-action pattern (see `src/app/admin/CLAUDE.md`'s "Error handling"
+section). `execFile`-based process isolation (what's shipped) already gets you most
+of the practical benefit — the main thread stays responsive, and the work keeps
+running to completion independent of the triggering HTTP request — without that
+added complexity.
 
-- **`child_process.fork()`** — real OS-process isolation (a runaway resolve can't
-  touch the main process's memory), at the cost of IPC plumbing and making sure the
-  forked script can find the generated Prisma client and `DATABASE_URL` in the
-  Docker image, same as the worker_threads work above but for a full process.
-- **A real job queue + separate worker container** (BullMQ+Redis, or a DB-polling
-  table) — the "Resolve" button enqueues and returns immediately, a separate
-  `docker-compose` service processes it, and the UI polls/refreshes for status. This
-  is the architecturally "correct" answer for background work, but is a meaningfully
-  bigger change: new service, new dependency, and an async UI instead of this app's
-  current synchronous redirect-after-action pattern (see
-  `src/app/admin/CLAUDE.md`'s "Error handling" section).
-
-The worker_threads plumbing above (`execArgv: ["--import", "tsx"]`, the
-`process.cwd()`-based entry path) was factored out into `src/lib/import/runInWorker.ts`
-so it isn't duplicated — see below.
+The process-spawning plumbing above was factored out into
+`src/lib/import/runInWorker.ts` so it isn't duplicated — see below.
 
 **Match Results import performance** (2026-07-31, same session): fetching+committing
 Sportwrench match results for a 900-team event produced a Cloudflare `524` (gateway
@@ -792,16 +810,17 @@ Two changes:
    fetch+resolve+commit dropped from what would have been minutes to ~5.4s. Kept
    deliberately conservative (not unbounded) to stay clear of Sportwrench's Cloudflare
    bot protection (the reason `sportwrenchFetch.ts` shells out to curl at all).
-2. **Off the main thread**: `importAesMatchResults`/`importSportwrenchMatchResults`
+2. **Off the main process**: `importAesMatchResults`/`importSportwrenchMatchResults`
    now also run via `runInWorker` (`src/lib/import/commitMatchesInWorker.ts` /
-   `commitMatchesWorkerEntry.ts`) — same mechanism as Resolve, but a different reason:
-   the dominant cost here is wall-clock-bound external I/O, not CPU. Moving it off
-   the main thread keeps the app responsive to other admins during a big import, but
+   `commitMatchesWorkerEntry.ts`) — same mechanism as Resolve (see that note above
+   for why it's `execFile`, not `worker_threads`/`fork`), but a different reason: the
+   dominant cost here is wall-clock-bound external I/O, not CPU. Moving it to a
+   separate process keeps the app responsive to other admins during a big import, but
    — unlike Resolve — does **not** make the triggering request return any faster
    (Cloudflare will still 524 the *browser* if the import runs past ~100s regardless
-   of which thread runs it). The concurrency fix above is what actually avoids the
-   524; the worker thread is what keeps a still-slow one from starving everyone else,
-   and means the import keeps running and committing even after Cloudflare has
+   of which process runs it). The concurrency fix above is what actually avoids the
+   524; the separate process is what keeps a still-slow one from starving everyone
+   else, and means the import keeps running and committing even after Cloudflare has
    already shown the requesting admin an error page.
 
 ---

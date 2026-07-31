@@ -1,70 +1,83 @@
-import { Worker } from "node:worker_threads";
-import path from "node:path";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+
+const execFileAsync = promisify(execFile);
 
 export type WorkerOutcome<T> = { ok: true; data: T } | { ok: false; error: string };
 
-// Deliberately NOT `new URL("./foo", import.meta.url)` -- that's the idiomatic
-// bundler-aware pattern, but Turbopack (both dev and this project's standalone
-// build) doesn't resolve/bundle `new Worker(...)` targets for server code, only
-// "Module not found" at compile time. Building the path at runtime from
-// process.cwd() instead means the worker entry ships as a plain source file, not a
-// bundled asset. process.cwd() is the project root in both `next dev` and the Docker
-// runner image (WORKDIR /app, CMD run from there) -- see the Dockerfile's runner
-// stage, which COPYs `src/` and `tsconfig.json` from the builder stage specifically
-// so this path exists at runtime.
 function workerEntryPath(entryFilename: string): string {
-  return path.join(process.cwd(), "src/lib/import", entryFilename);
+  return `${process.cwd()}/src/lib/import/${entryFilename}`;
 }
 
 /**
- * Runs a src/lib/import/*WorkerEntry.ts file on a worker_threads thread, resolving
- * with whatever result it reports. Shared by resolveInWorker.ts and
- * commitMatchesInWorker.ts -- both move CPU/wall-clock-heavy import work off the
- * thread Next uses to serve every other admin request, for their own different
- * reasons (see each call site).
+ * Runs a src/lib/import/*WorkerEntry.ts file in a separate OS process (via
+ * `child_process.execFile`), resolving with whatever result it prints to stdout as
+ * its last line. Shared by resolveInWorker.ts and commitMatchesInWorker.ts -- both
+ * move heavy import work off the process Next uses to serve every other admin
+ * request, for their own different reasons (see each call site).
  *
- * The entry is plain .ts, run directly (not through Next/Turbopack -- see
- * workerEntryPath above) via `tsx`'s loader, registered per-worker through
- * `execArgv` rather than a project-wide `--import` flag so it only applies to this
- * thread. `tsx` is a real (non-dev) dependency for exactly this reason -- it must be
- * present in the deployed image, not just local dev.
+ * This went through two other approaches first, both of which Turbopack broke in
+ * ways that only showed up in a real Docker build, not `next dev`:
+ *
+ * 1. `node:worker_threads`' `new Worker(...)`. Next's own docs confirm Turbopack
+ *    intercepts `new Worker(...)` expressions to bundle/resolve the target at build
+ *    time. The build itself succeeded, but the *runtime* moduleContext lookup it
+ *    generates was unreliable -- it worked in some Docker builds and threw
+ *    `Cannot find module '.../resolveWorkerEntry.ts'` in others, for byte-identical
+ *    code. Neither the documented `/* turbopackIgnore: true *\/` escape hatch nor
+ *    obscuring the `Worker` identifier (fetching the constructor off the
+ *    `node:worker_threads` namespace object via a computed property, so there's no
+ *    literal `new Worker(` text) fixed it reliably.
+ * 2. `child_process.fork(...)`. Not in Turbopack's documented list of intercepted
+ *    expressions, but it turned out to be intercepted anyway -- and more
+ *    aggressively: the build itself failed outright ("Module not found: Can't
+ *    resolve './ROOT/src/lib/import'"), regardless of how opaque the path argument
+ *    was made (`path.join`, plain string concatenation, even base64-decoding the
+ *    directory segment so there was no path-shaped string literal anywhere in the
+ *    file). Turbopack appears to intercept *any* non-literal first argument to
+ *    `fork(...)`, not the string's content.
+ *
+ * `execFile` doesn't share a module-loading shape with any of Turbopack's
+ * documented or observed intercepted expressions -- it runs an executable
+ * (`process.execPath`, i.e. `node`) with argv, which is conceptually "run a
+ * program," not "load a module." Confirmed stable across a `--no-cache` Docker
+ * rebuild, verified against the real bundled server action (not just a standalone
+ * script) -- see docs/plan.md's "Resolve performance" note for the full history.
+ *
+ * No IPC channel here (execFile doesn't give you one the way fork does), so the
+ * payload goes in as a JSON argv string and the result comes back as the last line
+ * the child process prints to stdout -- see resolveWorkerEntry.ts /
+ * commitMatchesWorkerEntry.ts for the other side of that contract.
  */
-export function runInWorker<TWorkerData, TResult>(
+export async function runInWorker<TWorkerData extends Record<string, unknown>, TResult>(
   entryFilename: string,
   workerData: TWorkerData,
 ): Promise<TResult> {
-  return new Promise((resolve, reject) => {
-    // Turbopack intercepts `new Worker(...)` expressions regardless of whether the
-    // argument is a literal or a computed value (per Next's own "Magic Comments"
-    // docs) and tries to bundle/resolve the target at build time -- which fails for
-    // a plain runtime path like this one ("Cannot find module ... moduleContext" at
-    // runtime, confirmed in prod even though the file is present on disk; observed
-    // build-to-build nondeterminism, not a caching issue). turbopackIgnore tells it
-    // to leave the expression alone and let it resolve at runtime, which is what we
-    // actually want -- see workerEntryPath's comment above.
-    const worker = new Worker(/* turbopackIgnore: true */ workerEntryPath(entryFilename), {
-      execArgv: ["--import", "tsx"],
-      workerData,
-    });
+  let stdout: string;
+  try {
+    ({ stdout } = await execFileAsync(
+      process.execPath,
+      ["--import", "tsx", workerEntryPath(entryFilename), JSON.stringify(workerData)],
+      { maxBuffer: 50 * 1024 * 1024 },
+    ));
+  } catch (err) {
+    // A non-zero exit (e.g. an exception before the entry file's own try/catch
+    // could run, or tsx itself failing to load) rejects instead of resolving --
+    // surface stderr, since that's where the actual stack trace lands.
+    const stderr = err && typeof err === "object" && "stderr" in err ? String(err.stderr) : "";
+    throw new Error(
+      `Worker process (${entryFilename}) failed to run: ${err instanceof Error ? err.message : String(err)}${stderr ? `\n${stderr}` : ""}`,
+    );
+  }
 
-    let settled = false;
+  const lastLine = stdout.trim().split("\n").pop() ?? "";
+  let result: WorkerOutcome<TResult>;
+  try {
+    result = JSON.parse(lastLine);
+  } catch {
+    throw new Error(`Worker process (${entryFilename}) produced unparseable output: ${stdout.slice(-2000)}`);
+  }
 
-    worker.once("message", (result: WorkerOutcome<TResult>) => {
-      settled = true;
-      worker.terminate();
-      if (result.ok) resolve(result.data);
-      else reject(new Error(result.error));
-    });
-
-    worker.once("error", (err) => {
-      settled = true;
-      reject(err);
-    });
-
-    worker.once("exit", (code) => {
-      if (!settled && code !== 0) {
-        reject(new Error(`Worker (${entryFilename}) exited with code ${code} before reporting a result.`));
-      }
-    });
-  });
+  if (result.ok) return result.data;
+  throw new Error(result.error);
 }
