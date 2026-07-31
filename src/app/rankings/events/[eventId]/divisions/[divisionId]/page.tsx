@@ -29,7 +29,7 @@ export default async function PublicDivisionDetailPage({
   const eloSummaries = await getEventEloSummaries(eventId, seasonId, division.ageGroup, division.event.endDate);
 
   return (
-    <div className="max-w-2xl">
+    <div className="max-w-4xl">
       <div className="mb-2 text-sm text-slate-500">
         <Link href="/rankings/events" className="underline">
           Events
