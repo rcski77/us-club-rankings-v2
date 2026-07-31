@@ -178,6 +178,75 @@ export async function computeEloRatingsForPartition(
   return ranked;
 }
 
+export type EventEloSummary = {
+  /** This team's Elo rating as of the partition replay reaching asOfDate (i.e.
+   * including this event's own matches) -- undefined if the team has no rated match
+   * in the partition by then. */
+  rating: number | undefined;
+  /** Net rating change from just this event's matches (0 if the team played matches
+   * in this event but they summed to no net change; undefined if the team played no
+   * rated match in this event). */
+  delta: number | undefined;
+  /** Win-loss record from just this event's rated matches (Match rows with a resolved
+   * winner and matchDate -- see buildEloMatches). Both 0 if the team played no rated
+   * match in this event. */
+  wins: number;
+  losses: number;
+};
+
+/**
+ * Per-team Elo rating (as of this event, within its season/ageGroup partition) plus
+ * the net rating change contributed by just this event's own matches -- for the
+ * public event/division page, which wants to show "how did this event move a team's
+ * Elo" alongside its finish, not the full match-by-match history getTeamEloHistory()
+ * gives a single team. Replays the partition once (same graph
+ * computeEloRatingsForPartition() rates from) and buckets each step's delta by
+ * whether its source Match.eventId matches this event, rather than calling
+ * getTeamEloHistory() per team, which would redundantly re-replay the same partition
+ * once per team on the page.
+ */
+export async function getEventEloSummaries(
+  eventId: string,
+  seasonId: string,
+  ageGroup: number,
+  asOfDate: Date,
+): Promise<Map<string, EventEloSummary>> {
+  const { matches } = await getPartitionMatches(seasonId, ageGroup, asOfDate);
+  const matchById = new Map(matches.map((m) => [m.id, m]));
+  const steps = computeEloHistory(buildEloMatches(await withDivisionWeights(matches)));
+
+  const rating = new Map<string, number>();
+  const delta = new Map<string, number>();
+  const wins = new Map<string, number>();
+  const losses = new Map<string, number>();
+
+  for (const step of steps) {
+    rating.set(step.teamAId, step.ratingAAfter);
+    rating.set(step.teamBId, step.ratingBAfter);
+
+    if (matchById.get(step.matchId)?.eventId === eventId) {
+      delta.set(step.teamAId, (delta.get(step.teamAId) ?? 0) + (step.ratingAAfter - step.ratingABefore));
+      delta.set(step.teamBId, (delta.get(step.teamBId) ?? 0) + (step.ratingBAfter - step.ratingBBefore));
+
+      const winnerId = step.winnerTeamId;
+      const loserId = winnerId === step.teamAId ? step.teamBId : step.teamAId;
+      wins.set(winnerId, (wins.get(winnerId) ?? 0) + 1);
+      losses.set(loserId, (losses.get(loserId) ?? 0) + 1);
+    }
+  }
+
+  const summaries = new Map<string, EventEloSummary>();
+  for (const teamId of rating.keys()) {
+    summaries.set(teamId, {
+      rating: rating.get(teamId),
+      delta: delta.get(teamId),
+      wins: wins.get(teamId) ?? 0,
+      losses: losses.get(teamId) ?? 0,
+    });
+  }
+  return summaries;
+}
+
 /** Recomputes Elo ratings for every distinct ageGroup with a TeamSeason row this season. */
 export async function computeEloRatingsForSeason(
   seasonId: string,

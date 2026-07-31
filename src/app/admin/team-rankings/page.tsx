@@ -16,6 +16,7 @@ import {
   getLatestPowerRatings,
   buildPowerRows,
   averagePowerRank,
+  assignRanksWithTies,
   type PowerRatingsData,
   type PowerRow,
 } from "@/lib/rating/powerRankings";
@@ -346,8 +347,10 @@ async function PowerRankingTable({
   // interpret themselves. Computed once by Avg Rank order regardless of which column
   // the table is currently sorted/displayed by, same as NPS's rank column staying
   // fixed while other columns are sortable.
-  const rankByTeamId = new Map(
-    sortRows(defaultRows, averagePowerRank, "asc").map((r, i) => [r.team.id, i + 1]),
+  const rankByTeamId = assignRanksWithTies(
+    sortRows(defaultRows, averagePowerRank, "asc"),
+    averagePowerRank,
+    (r) => r.team.id,
   );
 
   const accessors: Record<string, (r: PowerRow) => string | number | undefined> = {
@@ -563,7 +566,11 @@ async function CombineRankingTable({
   // PowerRankingTable above): a real "1, 2, 3..." position, held fixed regardless of
   // which column the table is currently sorted/displayed by, not just the raw blended
   // score staff would otherwise have to interpret themselves.
-  const rankByTeamId = new Map(sortRows(defaultRows, combinedScore, "asc").map((r, i) => [r.team.id, i + 1]));
+  const rankByTeamId = assignRanksWithTies(
+    sortRows(defaultRows, combinedScore, "asc"),
+    combinedScore,
+    (r) => r.team.id,
+  );
 
   const accessors: Record<string, (r: Row) => string | number | undefined> = {
     rank: (r) => rankByTeamId.get(r.team.id),

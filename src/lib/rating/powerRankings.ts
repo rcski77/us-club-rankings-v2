@@ -124,6 +124,31 @@ export function buildPowerRows(data: PowerRatingsData): PowerRow[] {
   ];
 }
 
+/** Standard competition ranking (1, 2, 2, 4, ...): rows already sorted by `accessor`
+ * ascending share a rank when their score ties exactly, and the next distinct score
+ * skips ranks accordingly -- same convention as the persisted NPS `rank` column (see
+ * computeRanking.ts). Rows whose accessor is undefined get no rank entry, same as
+ * elsewhere in this file. */
+export function assignRanksWithTies<T>(
+  sortedRows: T[],
+  accessor: (row: T) => number | undefined,
+  idOf: (row: T) => string,
+): Map<string, number> {
+  const ranks = new Map<string, number>();
+  let rank = 0;
+  let lastScore: number | undefined;
+  sortedRows.forEach((row, i) => {
+    const score = accessor(row);
+    if (score === undefined) return;
+    if (lastScore === undefined || score !== lastScore) {
+      rank = i + 1;
+      lastScore = score;
+    }
+    ranks.set(idOf(row), rank);
+  });
+  return ranks;
+}
+
 /**
  * The three engines' ratings live on incompatible scales (Colley ~0.7-1.3, Elo
  * ~1500-2000, Massey ~-30 to +30), so averaging raw ratings would just be dominated

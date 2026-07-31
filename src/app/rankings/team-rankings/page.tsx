@@ -8,6 +8,7 @@ import {
   getLatestPowerRatings,
   buildPowerRows,
   averagePowerRank,
+  assignRanksWithTies,
   type PowerRow,
 } from "@/lib/rating/powerRankings";
 import { SeasonFilterSelect } from "./SeasonFilterSelect";
@@ -285,8 +286,10 @@ async function PowerRankingTable({
   const { latestColley, latestElo, latestMassey } = data;
   const defaultRows = buildPowerRows(data);
 
-  const rankByTeamId = new Map(
-    sortRows(defaultRows, averagePowerRank, "asc").map((r, i) => [r.team.id, i + 1]),
+  const rankByTeamId = assignRanksWithTies(
+    sortRows(defaultRows, averagePowerRank, "asc"),
+    averagePowerRank,
+    (r) => r.team.id,
   );
 
   const accessors: Record<string, (r: PowerRow) => string | number | undefined> = {
@@ -454,7 +457,11 @@ async function CombineRankingTable({
     return parts.reduce((sum, v) => sum + v, 0) / parts.length;
   }
 
-  const rankByTeamId = new Map(sortRows(defaultRows, combinedScore, "asc").map((r, i) => [r.team.id, i + 1]));
+  const rankByTeamId = assignRanksWithTies(
+    sortRows(defaultRows, combinedScore, "asc"),
+    combinedScore,
+    (r) => r.team.id,
+  );
 
   const accessors: Record<string, (r: Row) => string | number | undefined> = {
     rank: (r) => rankByTeamId.get(r.team.id),
