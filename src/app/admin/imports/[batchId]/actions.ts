@@ -7,7 +7,7 @@ import { parseAesEventIdFromUrl } from "@/lib/import/aesEventId";
 import { fetchAesStandingsRows } from "@/lib/import/aesStandings";
 import { parseSportwrenchEventIdFromUrl } from "@/lib/import/sportwrenchEventId";
 import { fetchSportwrenchStandingsRows } from "@/lib/import/sportwrenchStandings";
-import { resolveImportBatch } from "@/lib/import/resolve";
+import { resolveImportBatchInWorker } from "@/lib/import/resolveInWorker";
 import { commitImportBatch } from "@/lib/import/commit";
 import { importAesMatchResults, importSportwrenchMatchResults } from "@/lib/import/commitMatches";
 import { suggestClubName } from "@/lib/import/clubNameSuggestion";
@@ -275,7 +275,7 @@ export async function fetchAndCommitSportwrenchMatches(batchId: string, formData
 }
 
 export async function resolveBatch(batchId: string, formData: FormData) {
-  await resolveImportBatch(batchId);
+  await resolveImportBatchInWorker(batchId);
   redirect(batchPath(batchId, { filter: currentFilter(formData) }));
 }
 

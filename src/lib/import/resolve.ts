@@ -76,11 +76,35 @@ export async function resolveImportBatch(batchId: string): Promise<void> {
   const divisions = await prisma.division.findMany({ where: { eventId: batch.eventId } });
   const regions = await prisma.region.findMany();
   const teamSeasons = await prisma.teamSeason.findMany({ where: { seasonId: batch.event.seasonId } });
-  const teamsWithLineage = await prisma.team.findMany({ where: { lineageKey: { not: null } } });
-  const clubs = await prisma.club.findMany();
   const existingFinishes = await prisma.teamFinish.findMany({
     where: { division: { eventId: batch.eventId } },
   });
+
+  const allRows = batch.files.flatMap((f) => f.rows);
+
+  // Decode every row's team code up front, purely to collect the small set of club
+  // codes / lineage keys this batch actually references -- lets the club/team
+  // lookups below be scoped to just this batch instead of the whole system's
+  // history, which otherwise grows unbounded as more seasons/events accumulate and
+  // was the dominant cost (and CPU spike) of a Resolve pass. decodeAesTeamCode is
+  // pure/cheap and re-run per row in resolveRow below; recomputing it here rather
+  // than threading the decoded value through is a deliberate simplicity trade-off
+  // over the (already small, and one-time) cost of decoding twice.
+  const neededClubCodes = new Set<string>();
+  const neededLineageKeys = new Set<string>();
+  for (const row of allRows) {
+    const decoded = decodeAesTeamCode(row.teamCodeRaw);
+    if (isAesTeamCodeParseError(decoded)) continue;
+    neededClubCodes.add(decoded.clubExternalCode);
+    neededLineageKeys.add(computeLineageKey(decoded.clubExternalCode, decoded.regionCode, decoded.teamNumber));
+  }
+
+  const teamsWithLineage = neededLineageKeys.size
+    ? await prisma.team.findMany({ where: { lineageKey: { in: [...neededLineageKeys] } } })
+    : [];
+  const clubs = neededClubCodes.size
+    ? await prisma.club.findMany({ where: { externalCode: { in: [...neededClubCodes] } } })
+    : [];
 
   const divisionByKey = new Map<string, DivisionRef>();
   for (const d of divisions) {
@@ -132,7 +156,6 @@ export async function resolveImportBatch(batchId: string): Promise<void> {
     claimedKeys: new Set(),
   };
 
-  const allRows = batch.files.flatMap((f) => f.rows);
   const results = allRows.map((row) => ({ id: row.id, data: resolveRow(row, ctx) }));
 
   await prisma.$transaction(

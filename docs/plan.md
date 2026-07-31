@@ -721,6 +721,46 @@ TM2/VBSchedule (still no confirmed sample formats, Open Question 1 below), the
 DIVISIONS/MATCH_RESULTS import types, and a dedicated `/admin/flags` AuditFlag-
 management UI (Phase 6).
 
+**Resolve performance** (2026-07-31): clicking Resolve/Re-resolve on a large batch was
+pinning the whole app's CPU, observed as a real spike on the homelab docker host.
+Two fixes, in order of how much of the problem each solves:
+
+1. `resolveImportBatch` (`src/lib/import/resolve.ts`) used to load *every* Club and
+   every lineage-keyed Team in the entire database (`prisma.club.findMany()` with no
+   filter at all) to resolve one event's batch — a query that only gets heavier as
+   more seasons/events accumulate, regardless of how big the batch itself is. It now
+   decodes every row's team code up front, collects just the club codes / lineage
+   keys the batch actually references, and scopes both queries to `{ in: [...] } }`
+   against that small set. This was the dominant cost.
+2. The remaining CPU-bound work (looping over every row, doing per-row string
+   parsing/lookups) still runs synchronously and would otherwise block the same
+   thread Next uses to serve every other admin request for the batch's whole
+   duration. `resolveBatch` (the server action) now runs it on a `worker_threads`
+   thread instead (`src/lib/import/resolveInWorker.ts` /
+   `resolveWorkerEntry.ts`) — see that file's comments for why it's invoked as a
+   plain source file via `tsx` (Turbopack doesn't bundle `new Worker(...)` targets
+   for server code) and why `tsx` is a real, not dev, dependency, and why the
+   Dockerfile's runner stage copies `src/`, `tsconfig.json`, and the full
+   (unpruned) `node_modules` rather than relying on Next's traced `.next/standalone`
+   output for this one path.
+
+This is deliberately the *lightest* fix, not full process isolation. If Resolve
+passes ever grow so long/frequent that they visibly block other admins from using the
+rest of the site concurrently, or need to survive a page navigation, the next steps in
+order of effort:
+
+- **`child_process.fork()`** — real OS-process isolation (a runaway resolve can't
+  touch the main process's memory), at the cost of IPC plumbing and making sure the
+  forked script can find the generated Prisma client and `DATABASE_URL` in the
+  Docker image, same as the worker_threads work above but for a full process.
+- **A real job queue + separate worker container** (BullMQ+Redis, or a DB-polling
+  table) — the "Resolve" button enqueues and returns immediately, a separate
+  `docker-compose` service processes it, and the UI polls/refreshes for status. This
+  is the architecturally "correct" answer for background work, but is a meaningfully
+  bigger change: new service, new dependency, and an async UI instead of this app's
+  current synchronous redirect-after-action pattern (see
+  `src/app/admin/CLAUDE.md`'s "Error handling" section).
+
 ---
 
 ## 4. Ranking Computation (Phase 1 shipped a subset; full version is Phase 3+)
