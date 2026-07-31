@@ -46,20 +46,25 @@ export function sortRows<T>(
  * throughout (not Promise.all) -- see docs/dev-environment.md.
  */
 export async function getLatestPowerRatings(seasonId: string, ageGroup: number) {
+  // createdAt (not just weekEndingDate) is selected here so the UI can show when a
+  // recompute actually ran, not just which business date it's dated for --
+  // weekEndingDate collapses every same-day recompute onto one value by design (see
+  // normalizeWeekEndingDate), so two runs on the same day are otherwise
+  // indistinguishable to an admin looking at the page.
   const latestColley = await prisma.teamRatingHistory.findFirst({
     where: { seasonId, ageGroup, ratingEngine: "COLLEY" },
     orderBy: { weekEndingDate: "desc" },
-    select: { weekEndingDate: true },
+    select: { weekEndingDate: true, createdAt: true },
   });
   const latestElo = await prisma.teamRatingHistory.findFirst({
     where: { seasonId, ageGroup, ratingEngine: "ELO" },
     orderBy: { weekEndingDate: "desc" },
-    select: { weekEndingDate: true },
+    select: { weekEndingDate: true, createdAt: true },
   });
   const latestMassey = await prisma.teamRatingHistory.findFirst({
     where: { seasonId, ageGroup, ratingEngine: "MASSEY" },
     orderBy: { weekEndingDate: "desc" },
-    select: { weekEndingDate: true },
+    select: { weekEndingDate: true, createdAt: true },
   });
 
   const colleyRatings = latestColley

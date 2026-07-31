@@ -849,9 +849,30 @@ thousands of sequential single-row inserts. Two fixes, same shape as before:
 
 The redundant per-age-group refetching within each engine (each of Colley/Elo/Massey
 re-queries the same season's matches independently, once per age group) was NOT
-addressed here — the two fixes above were enough to bring this comfortably under the
-timeout for the season tested, but it's the next thing to look at if a much larger
-season ever makes this slow again.
+addressed here.
+
+**Correction, same day**: the two fixes above weren't enough on the actual homelab
+docker host's hardware — a real recompute there completed successfully (confirmed via
+`TeamRatingHistory.createdAt`, which the admin UI didn't display until this fix) but
+still occasionally ran long enough to hit Cloudflare's `524` anyway, since the
+request was still `await`-ing the full duration even though the work had moved to a
+separate process. Running work off-process only helps the *rest of the app* stay
+responsive; it does nothing for the *triggering* request's own exposure to a
+fronting proxy's timeout, since that request is still open the whole time it waits.
+
+The actual fix: `recomputeAll` no longer `await`s `recomputeRatingsInWorker(...)` at
+all — it's fire-and-forget (with a `.catch()` so a background failure doesn't crash
+an unrelated request), and the server action redirects immediately with a "recompute
+started" message instead of "recomputed." The worker process keeps running
+independently of the request regardless. This is the same realization that motivates
+the "job queue + separate worker container" alternative noted for Resolve above, just
+implemented here in the minimal way this button needed rather than a general queue:
+no new service, just "don't make the browser wait." The trade-off: the button can no
+longer promise the work is *done* by the time it redirects — only that it *started*.
+`getLatestPowerRatings` now selects `TeamRatingHistory.createdAt` (not just
+`weekEndingDate`, which collapses every same-day recompute onto one value by design)
+so the Power/Combined Rankings "as of" line shows the actual run time, letting an
+admin verify a recompute actually finished without needing DB access.
 
 ---
 

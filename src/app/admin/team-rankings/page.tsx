@@ -31,9 +31,19 @@ const VIEWS = [
 type View = (typeof VIEWS)[number]["value"];
 type SortDir = "asc" | "desc";
 
-/** Recomputes Colley, Elo, and Massey ratings for the whole season in one action -- the
+/** Kicks off Colley, Elo, and Massey ratings for the whole season in one action -- the
  * three engines used to have separate buttons, but staff always want all three current
- * together, not one at a time. */
+ * together, not one at a time.
+ *
+ * Deliberately does NOT await recomputeRatingsInWorker() -- a full-season recompute can
+ * run right up against (and occasionally past) Cloudflare's ~100s proxy timeout on the
+ * homelab docker host, which isn't something the app can raise. The underlying worker
+ * process finishes and writes its results regardless of whether this request waits for
+ * it, so waiting only bought a false-alarm error page for something that actually
+ * succeeded. Redirecting immediately with a "started" (not "complete") message and
+ * relying on TeamRatingHistory.createdAt for freshness (see the "as of" display below)
+ * is honest about what this button can actually promise synchronously.
+ */
 async function recomputeAll(formData: FormData) {
   "use server";
   const seasonId = String(formData.get("seasonId") ?? "");
@@ -41,10 +51,12 @@ async function recomputeAll(formData: FormData) {
   const ageGroup = String(formData.get("ageGroup") ?? "14");
   if (!seasonId) redirect("/admin/team-rankings");
 
-  await recomputeRatingsInWorker(seasonId);
+  recomputeRatingsInWorker(seasonId).catch((err) => {
+    console.error(`Background ratings recompute failed for season ${seasonId}:`, err);
+  });
 
   redirect(
-    `/admin/team-rankings?${new URLSearchParams({ season: seasonId, view, ageGroup, recomputed: "1" })}`,
+    `/admin/team-rankings?${new URLSearchParams({ season: seasonId, view, ageGroup, recomputeStarted: "1" })}`,
   );
 }
 
@@ -57,7 +69,7 @@ export default async function TeamRankingsIndexPage({
     ageGroup?: string;
     sort?: string;
     dir?: string;
-    recomputed?: string;
+    recomputeStarted?: string;
   }>;
 }) {
   const {
@@ -66,7 +78,7 @@ export default async function TeamRankingsIndexPage({
     ageGroup: ageGroupParam,
     sort,
     dir: dirParam,
-    recomputed,
+    recomputeStarted,
   } = await searchParams;
 
   const seasons = await prisma.season.findMany({ orderBy: { startDate: "desc" } });
@@ -90,9 +102,11 @@ export default async function TeamRankingsIndexPage({
     <div>
       <h1 className="mb-6 text-2xl font-semibold">Team Rankings</h1>
 
-      {recomputed === "1" && (
+      {recomputeStarted === "1" && (
         <p className={successBannerClass}>
-          Colley, Elo, and Massey ratings recomputed for every age group in this season.
+          Recompute started for Colley, Elo, and Massey across every age group in this
+          season — it runs in the background and can take a minute or two. Check the
+          &quot;as of&quot; timestamp on Power/Combined Rankings, or just reload in a bit.
         </p>
       )}
 
@@ -362,9 +376,12 @@ async function PowerRankingTable({
   return (
     <>
       <div className="mb-4 flex items-center gap-4 text-sm text-slate-500">
-        {latestColley && <span>Colley as of {latestColley.weekEndingDate.toLocaleDateString()}</span>}
-        {latestElo && <span>Elo as of {latestElo.weekEndingDate.toLocaleDateString()}</span>}
-        {latestMassey && <span>Massey as of {latestMassey.weekEndingDate.toLocaleDateString()}</span>}
+        {/* createdAt (the actual recompute run time), not weekEndingDate (the business
+            date every same-day rerun collapses onto) -- see getLatestPowerRatings's
+            comment for why the two can otherwise look identical for same-day reruns. */}
+        {latestColley && <span>Colley as of {latestColley.createdAt.toLocaleString()}</span>}
+        {latestElo && <span>Elo as of {latestElo.createdAt.toLocaleString()}</span>}
+        {latestMassey && <span>Massey as of {latestMassey.createdAt.toLocaleString()}</span>}
       </div>
 
       <table className={tableClass}>
