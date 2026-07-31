@@ -5,16 +5,18 @@ const execFileAsync = promisify(execFile);
 
 export type WorkerOutcome<T> = { ok: true; data: T } | { ok: false; error: string };
 
-function workerEntryPath(entryFilename: string): string {
-  return `${process.cwd()}/src/lib/import/${entryFilename}`;
+function workerEntryPath(entryRelativePath: string): string {
+  return `${process.cwd()}/src/${entryRelativePath}`;
 }
 
 /**
- * Runs a src/lib/import/*WorkerEntry.ts file in a separate OS process (via
+ * Runs a *WorkerEntry.ts file (path given relative to src/, e.g.
+ * "lib/import/resolveWorkerEntry.ts") in a separate OS process (via
  * `child_process.execFile`), resolving with whatever result it prints to stdout as
- * its last line. Shared by resolveInWorker.ts and commitMatchesInWorker.ts -- both
- * move heavy import work off the process Next uses to serve every other admin
- * request, for their own different reasons (see each call site).
+ * its last line. Shared by resolveInWorker.ts, commitMatchesInWorker.ts, and
+ * recomputeRatingsInWorker.ts -- all move heavy work off the process Next uses to
+ * serve every other admin request, for their own different reasons (see each call
+ * site).
  *
  * This went through two other approaches first, both of which Turbopack broke in
  * ways that only showed up in a real Docker build, not `next dev`:
@@ -47,17 +49,18 @@ function workerEntryPath(entryFilename: string): string {
  * No IPC channel here (execFile doesn't give you one the way fork does), so the
  * payload goes in as a JSON argv string and the result comes back as the last line
  * the child process prints to stdout -- see resolveWorkerEntry.ts /
- * commitMatchesWorkerEntry.ts for the other side of that contract.
+ * commitMatchesWorkerEntry.ts / recomputeRatingsWorkerEntry.ts for the other side
+ * of that contract.
  */
 export async function runInWorker<TWorkerData extends Record<string, unknown>, TResult>(
-  entryFilename: string,
+  entryRelativePath: string,
   workerData: TWorkerData,
 ): Promise<TResult> {
   let stdout: string;
   try {
     ({ stdout } = await execFileAsync(
       process.execPath,
-      ["--import", "tsx", workerEntryPath(entryFilename), JSON.stringify(workerData)],
+      ["--import", "tsx", workerEntryPath(entryRelativePath), JSON.stringify(workerData)],
       { maxBuffer: 50 * 1024 * 1024 },
     ));
   } catch (err) {
@@ -66,7 +69,7 @@ export async function runInWorker<TWorkerData extends Record<string, unknown>, T
     // surface stderr, since that's where the actual stack trace lands.
     const stderr = err && typeof err === "object" && "stderr" in err ? String(err.stderr) : "";
     throw new Error(
-      `Worker process (${entryFilename}) failed to run: ${err instanceof Error ? err.message : String(err)}${stderr ? `\n${stderr}` : ""}`,
+      `Worker process (${entryRelativePath}) failed to run: ${err instanceof Error ? err.message : String(err)}${stderr ? `\n${stderr}` : ""}`,
     );
   }
 
@@ -75,7 +78,7 @@ export async function runInWorker<TWorkerData extends Record<string, unknown>, T
   try {
     result = JSON.parse(lastLine);
   } catch {
-    throw new Error(`Worker process (${entryFilename}) produced unparseable output: ${stdout.slice(-2000)}`);
+    throw new Error(`Worker process (${entryRelativePath}) produced unparseable output: ${stdout.slice(-2000)}`);
   }
 
   if (result.ok) return result.data;

@@ -63,18 +63,18 @@ export async function computeMasseyRatingsForPartition(
     await tx.teamRatingHistory.deleteMany({
       where: { seasonId, ageGroup, weekEndingDate, ratingEngine: "MASSEY" },
     });
-    for (const r of ranked) {
-      await tx.teamRatingHistory.create({
-        data: {
+    if (ranked.length > 0) {
+      await tx.teamRatingHistory.createMany({
+        data: ranked.map((r) => ({
           teamId: r.teamId,
           seasonId,
           ageGroup,
           weekEndingDate,
-          ratingEngine: "MASSEY",
+          ratingEngine: "MASSEY" as const,
           rating: r.rating,
           rank: r.rank,
           comparisons: r.comparisons,
-        },
+        })),
       });
     }
   });

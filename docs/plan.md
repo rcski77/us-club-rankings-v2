@@ -823,6 +823,36 @@ Two changes:
    else, and means the import keeps running and committing even after Cloudflare has
    already shown the requesting admin an error page.
 
+**Team rankings recompute performance** (2026-07-31, same session): clicking
+"Recompute ratings" on `/admin/team-rankings` produced the same Cloudflare `524` as
+the two problems above, for the same reason as Resolve — synchronous, unscoped-ish
+work run inline in the server action. `recomputeAll` runs Colley, Elo, and Massey
+sequentially, each of which refetches a season's match/finish data (with heavy
+`event`/`division`/`teamA+club`/`teamB+club` includes) once per age group, then used
+to persist results with a `for` loop doing one `tx.teamRatingHistory.create()` per
+team — for a season with hundreds of teams across 7 age groups × 3 engines,
+thousands of sequential single-row inserts. Two fixes, same shape as before:
+
+1. **Batched writes**: `computeColleyRatings.ts`/`computeEloRatings.ts`/
+   `computeMasseyRatings.ts` each now do one `tx.teamRatingHistory.createMany(...)`
+   per (engine, age group) instead of a per-team `create()` loop.
+2. **Off the main process**: `recomputeAll` now calls `recomputeRatingsInWorker`
+   (`src/lib/rating/recomputeRatingsInWorker.ts` /
+   `recomputeRatingsWorkerEntry.ts`) — same `runInWorker`/`execFile` mechanism as
+   Resolve and the match-results import, called with the path relative to `src/`
+   (`runInWorker.ts` was generalized to accept that instead of assuming everything
+   lives under `src/lib/import/`, since this one lives under `src/lib/rating/`).
+   Verified end-to-end in a `--no-cache` Docker rebuild by actually clicking
+   "Recompute ratings" through the real UI: full three-engine recompute for a real
+   season completed in ~40s, well under Cloudflare's ~100s timeout, with fresh
+   ratings visible on the Power Rankings tab afterward.
+
+The redundant per-age-group refetching within each engine (each of Colley/Elo/Massey
+re-queries the same season's matches independently, once per age group) was NOT
+addressed here — the two fixes above were enough to bring this comfortably under the
+timeout for the season tested, but it's the next thing to look at if a much larger
+season ever makes this slow again.
+
 ---
 
 ## 4. Ranking Computation (Phase 1 shipped a subset; full version is Phase 3+)

@@ -9,9 +9,7 @@ import {
   thClass,
   tdClass,
 } from "@/lib/ui";
-import { computeColleyRatingsForSeason } from "@/lib/rating/computeColleyRatings";
-import { computeEloRatingsForSeason } from "@/lib/rating/computeEloRatings";
-import { computeMasseyRatingsForSeason } from "@/lib/rating/computeMasseyRatings";
+import { recomputeRatingsInWorker } from "@/lib/rating/recomputeRatingsInWorker";
 import {
   ordinalSuffix,
   sortRows,
@@ -42,9 +40,7 @@ async function recomputeAll(formData: FormData) {
   const ageGroup = String(formData.get("ageGroup") ?? "14");
   if (!seasonId) redirect("/admin/team-rankings");
 
-  await computeColleyRatingsForSeason(seasonId);
-  await computeEloRatingsForSeason(seasonId);
-  await computeMasseyRatingsForSeason(seasonId);
+  await recomputeRatingsInWorker(seasonId);
 
   redirect(
     `/admin/team-rankings?${new URLSearchParams({ season: seasonId, view, ageGroup, recomputed: "1" })}`,
