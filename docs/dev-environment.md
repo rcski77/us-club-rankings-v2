@@ -5,7 +5,7 @@
 ```bash
 npm install
 npm run db:up           # starts Postgres in Docker, see below
-npm run db:push          # sync schema
+npm run db:migrate       # apply committed migrations
 npm run db:seed          # bootstrap SUPER_ADMIN account
 npm run db:seed-regions  # 40 USAV regions
 npm run db:seed-demo     # optional: sample walkthrough data (club/teams/event/rankings)
@@ -34,7 +34,7 @@ To wipe the database entirely (fresh start), also remove the volume:
 ```bash
 docker compose down -v
 npm run db:up
-npm run db:push
+npm run db:migrate
 npm run db:seed
 npm run db:seed-regions
 npm run db:seed-demo    # if you want the sample data back
@@ -49,12 +49,14 @@ connection consistently failed with `P1017` even when the main connection was fi
 Docker Desktop is now available, so the project moved to a real standalone Postgres
 container, which doesn't have either problem.
 
-**Schema changes still use `db push`, not `migrate dev`, for now** — this project has
-no migration history yet (`prisma/migrations/` isn't part of the current workflow).
-Real Postgres can now run `prisma migrate dev` reliably (it auto-manages its own
-shadow database), so this is a viable point to switch to real migrations and generate
-an initial one from the current schema — that hasn't been done yet, so keep using
-`npx prisma db push` for schema changes until it is.
+**Schema changes now use real migrations (`prisma/migrations/`), not `db push`.**
+Real Postgres runs `prisma migrate dev` reliably (it auto-manages its own shadow
+database), so after a `schema.prisma` edit, run `npx prisma migrate dev --name
+<short_description>` to generate and apply the migration — this both updates your
+local dev database and writes a committed SQL file that `migrate deploy` will replay
+against prod (see `docker-compose.prod.yml`'s `migrate` service). Don't hand-edit
+generated migration SQL after the fact; if a migration turns out wrong, fix
+`schema.prisma` and generate a new one.
 
 **Prisma 7's client generator needs a driver adapter.** Unlike the older
 `prisma-client-js` generator, the `prisma-client` generator this project uses doesn't
@@ -86,8 +88,8 @@ updates this convention project-wide.
 ## Regenerating the Prisma client after a schema change
 
 The running `next dev` process caches the generated client at startup. After
-`npm run db:push` following a schema change, also run `npx prisma generate`, then
-**restart the dev server** (a schema change alone won't hot-reload into a already-running
+`npx prisma migrate dev` following a schema change, also run `npx prisma generate`,
+then **restart the dev server** (a schema change alone won't hot-reload into a already-running
 process — you'll see errors like `Cannot read properties of undefined (reading
 'findUnique')` if you forget this, since the running process is still holding the
 pre-change client).

@@ -5,20 +5,21 @@
 #      (--env-file is required in addition to env_file: below -- env_file only
 #      injects vars into the container, it doesn't feed the ${POSTGRES_PASSWORD}
 #      interpolation used in this file)
-#   4. One-time schema setup. Postgres isn't published to the host (see note
-#      on the `postgres` service below), so run this from a throwaway
-#      container attached to the compose network instead of from the host or
-#      another machine — from the repo root on the homelab host:
-#        docker run --rm --network us-club-rankings-v2_default \
-#          -v "$PWD":/app -w /app node:24-alpine \
-#          sh -c "npm ci && npx prisma db push --url postgres://postgres:<POSTGRES_PASSWORD>@postgres:5432/us_club_rankings --accept-data-loss"
-#      then, if this is a fresh install, seed the same way:
+#      This now runs `prisma migrate deploy` automatically via the `migrate`
+#      service below (built from the `deps` stage, which has the Prisma CLI)
+#      before `app` starts -- committed migrations in prisma/migrations/ land
+#      on every redeploy with no manual step. Unlike `db push`, this only ever
+#      applies migration files that were already generated and committed (via
+#      `npx prisma migrate dev` locally) -- nothing is computed or applied
+#      unreviewed at deploy time, so it's safe to run unattended.
+#   4. First deploy only, seed the empty database (same throwaway-container
+#      approach, now that Postgres isn't published to the host):
 #        docker run --rm --network us-club-rankings-v2_default \
 #          -v "$PWD":/app -w /app -e DATABASE_URL=postgres://postgres:<POSTGRES_PASSWORD>@postgres:5432/us_club_rankings \
 #          node:24-alpine sh -c "npm ci && npx tsx prisma/seed.ts && npx tsx prisma/seedRegions.ts"
 #
 #      Alternative — copy over your existing local dev data instead of starting
-#      fresh (skips db:push/seed above; the restore brings the schema with it):
+#      fresh (skips migrate/seed above; the restore brings the schema with it):
 #        # on your dev machine:
 #        docker exec -t us-club-rankings-v2-db pg_dump -U postgres -d us_club_rankings_dev -F c -f /tmp/dump.pgdump
 #        docker cp us-club-rankings-v2-db:/tmp/dump.pgdump ./dump.pgdump
@@ -34,6 +35,21 @@
 #      `"15432:5432"`, to avoid colliding with any other Postgres on the host.
 
 services:
+  migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: deps
+    container_name: us-club-rankings-v2-migrate
+    env_file:
+      - .env.prod
+    environment:
+      DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/us_club_rankings
+    command: ["npx", "prisma", "migrate", "deploy"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+
   app:
     build:
       context: .
@@ -49,6 +65,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
 
   postgres:
     image: postgres:16

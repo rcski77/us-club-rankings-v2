@@ -66,6 +66,7 @@ model Club {
   // (e.g. "skyln" is used by a Dallas-area club under region NT and a
   // Jacksonville-area club under region FL) -- the compound key is.
   @@unique([externalCode, regionId])
+  @@index([regionId])
 }
 
 model ClubContact {
@@ -133,6 +134,7 @@ model Team {
   matchesWon       Match[]             @relation("MatchWinner")
 
   @@index([lineageKey])
+  @@index([clubId])
 }
 
 // One row per (team, season) it participates in -- this is what "a team belongs to
@@ -189,6 +191,8 @@ model Event {
   matches       Match[]
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
+
+  @@index([seasonId])
 }
 
 enum DivisionTierLabel {
@@ -361,6 +365,7 @@ model RankingResult {
 
   @@unique([seasonId, ageGroup, teamId])
   @@index([seasonId, ageGroup, rank])
+  @@index([teamId])
 }
 
 // --- Phase 3: Tier 1 rating engine (Colley) ----------------------------------
@@ -464,6 +469,7 @@ model RankingResultContribution {
   countedInTop3   Boolean
 
   @@unique([rankingResultId, teamFinishId])
+  @@index([teamFinishId])
 }
 
 // --- Phase 2: CSV import pipeline (AES adapter, TEAM_FINISHES only) ---------
@@ -540,6 +546,8 @@ model ImportBatch {
   committedAt DateTime?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
+
+  @@index([eventId])
 }
 
 model ImportFile {
@@ -649,4 +657,9 @@ model AuditFlag {
   division      Division?     @relation(fields: [divisionId], references: [id])
   resolved      Boolean       @default(false) // no UI to flip this yet -- Phase 6 (/admin/flags)
   createdAt     DateTime      @default(now())
+
+  @@index([importBatchId])
+  @@index([teamId])
+  @@index([clubId])
+  @@index([divisionId])
 }

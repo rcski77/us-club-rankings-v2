@@ -36,7 +36,7 @@ for this codebase (see `docs/plan.md`).
 
 ```bash
 npm run db:up
-npm run db:push && npm run db:seed && npm run db:seed-regions && npm run db:seed-demo
+npm run db:migrate && npm run db:seed && npm run db:seed-regions && npm run db:seed-demo
 npm run dev
 ```
 
@@ -58,9 +58,12 @@ Full detail, troubleshooting, and the seed-script reference: `docs/dev-environme
   with `?error=<code>`, and the page renders a banner keyed off that code — not thrown
   exceptions surfaced to the user. See any existing page (e.g.
   `src/app/admin/point-templates/page.tsx`) for the pattern.
-- **After any Prisma schema change**: `npm run db:push` (not `migrate dev`, for now —
-  see `docs/dev-environment.md`), then `npx prisma generate`, then **restart the
-  dev server** — the generated client is cached in the running process.
+- **After any Prisma schema change**: `npx prisma migrate dev --name <short_description>`
+  (see `docs/dev-environment.md`), then `npx prisma generate`, then **restart the
+  dev server** — the generated client is cached in the running process. Prod applies
+  committed migrations automatically on redeploy via `docker-compose.prod.yml`'s
+  `migrate` service (`prisma migrate deploy`) — don't hand-edit generated migration
+  SQL after the fact.
 - Don't add dark-mode styling reactively — `src/app/globals.css` intentionally forces
   light theme (a real bug: the Next.js default dark-mode media query made the admin
   sidebar unreadable against its light background). No dark theme has been designed;
