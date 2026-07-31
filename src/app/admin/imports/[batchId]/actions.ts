@@ -9,7 +9,7 @@ import { parseSportwrenchEventIdFromUrl } from "@/lib/import/sportwrenchEventId"
 import { fetchSportwrenchStandingsRows } from "@/lib/import/sportwrenchStandings";
 import { resolveImportBatchInWorker } from "@/lib/import/resolveInWorker";
 import { commitImportBatch } from "@/lib/import/commit";
-import { importAesMatchResults, importSportwrenchMatchResults } from "@/lib/import/commitMatches";
+import { importAesMatchResultsInWorker, importSportwrenchMatchResultsInWorker } from "@/lib/import/commitMatchesInWorker";
 import { suggestClubName } from "@/lib/import/clubNameSuggestion";
 
 function batchPath(batchId: string, params: Record<string, string | undefined> = {}) {
@@ -179,7 +179,7 @@ export async function fetchAndCommitAesMatches(batchId: string, formData: FormDa
     redirect(batchPath(batchId, { filter, error: "bad-schedule-url" }));
   }
 
-  const result = await importAesMatchResults(batchId, aesEventId!);
+  const result = await importAesMatchResultsInWorker(batchId, aesEventId!);
   if (!result.ok) {
     redirect(batchPath(batchId, { filter, error: "fetch-failed", reason: result.reason }));
   }
@@ -266,7 +266,7 @@ export async function fetchAndCommitSportwrenchMatches(batchId: string, formData
     redirect(batchPath(batchId, { filter, error: "bad-schedule-url" }));
   }
 
-  const result = await importSportwrenchMatchResults(batchId, swEventId!);
+  const result = await importSportwrenchMatchResultsInWorker(batchId, swEventId!);
   if (!result.ok) {
     redirect(batchPath(batchId, { filter, error: "fetch-failed", reason: result.reason }));
   }

@@ -13,7 +13,7 @@ async function main() {
 }
 
 main()
-  .then(() => parentPort?.postMessage({ ok: true as const }))
+  .then(() => parentPort?.postMessage({ ok: true as const, data: undefined }))
   .catch((err) => {
     parentPort?.postMessage({
       ok: false as const,

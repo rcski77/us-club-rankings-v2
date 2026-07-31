@@ -761,6 +761,39 @@ order of effort:
   current synchronous redirect-after-action pattern (see
   `src/app/admin/CLAUDE.md`'s "Error handling" section).
 
+The worker_threads plumbing above (`execArgv: ["--import", "tsx"]`, the
+`process.cwd()`-based entry path) was factored out into `src/lib/import/runInWorker.ts`
+so it isn't duplicated — see below.
+
+**Match Results import performance** (2026-07-31, same session): fetching+committing
+Sportwrench match results for a 900-team event produced a Cloudflare `524` (gateway
+timeout) on the homelab docker host, which sits behind a Cloudflare Tunnel. Root
+cause was different from Resolve's: `fetchSportwrenchMatchResults`
+(`src/lib/import/sportwrenchMatches.ts`) fetched each team's match history with one
+sequential `curl` subprocess call per team — 900+ sequential external round-trips,
+5-8+ minutes of wall time, far past Cloudflare's ~100s proxy timeout (not
+meaningfully raisable outside an Enterprise plan, so the fix has to be code-side).
+Two changes:
+
+1. **Bounded concurrency**: `mapWithConcurrency` (`src/lib/import/concurrency.ts`,
+   tested in `concurrency.test.ts`) runs up to `TEAM_FETCH_CONCURRENCY` (12) of these
+   curl calls at once instead of one at a time — verified in the actual prod Docker
+   image against a real 255-team Sportwrench event (Florida Fest JNQ): the full
+   fetch+resolve+commit dropped from what would have been minutes to ~5.4s. Kept
+   deliberately conservative (not unbounded) to stay clear of Sportwrench's Cloudflare
+   bot protection (the reason `sportwrenchFetch.ts` shells out to curl at all).
+2. **Off the main thread**: `importAesMatchResults`/`importSportwrenchMatchResults`
+   now also run via `runInWorker` (`src/lib/import/commitMatchesInWorker.ts` /
+   `commitMatchesWorkerEntry.ts`) — same mechanism as Resolve, but a different reason:
+   the dominant cost here is wall-clock-bound external I/O, not CPU. Moving it off
+   the main thread keeps the app responsive to other admins during a big import, but
+   — unlike Resolve — does **not** make the triggering request return any faster
+   (Cloudflare will still 524 the *browser* if the import runs past ~100s regardless
+   of which thread runs it). The concurrency fix above is what actually avoids the
+   524; the worker thread is what keeps a still-slow one from starving everyone else,
+   and means the import keeps running and committing even after Cloudflare has
+   already shown the requesting admin an error page.
+
 ---
 
 ## 4. Ranking Computation (Phase 1 shipped a subset; full version is Phase 3+)

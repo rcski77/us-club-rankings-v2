@@ -1,6 +1,17 @@
 import { fetchSportwrench } from "./sportwrenchFetch";
 import { fetchSportwrenchEventInfo, fetchSportwrenchDivisionStandings } from "./sportwrenchStandings";
+import { mapWithConcurrency } from "./concurrency";
 import type { AesFetchedMatch, AesMatchSetScore } from "./aesMatches";
+
+// How many team-match-history requests to have in flight at once (see the loop
+// below). Each is a `curl` subprocess hitting Sportwrench directly -- sequential was
+// taking 5-8+ minutes for a 900-team event (confirmed in prod: a Cloudflare Tunnel
+// in front of the app times out proxied requests at ~100s, well before that
+// finished). Bounded rather than unbounded to stay well clear of whatever request
+// rate would trip Sportwrench's Cloudflare bot protection (the whole reason
+// sportwrenchFetch.ts shells out to curl in the first place) -- picked
+// conservatively; raise it if this still isn't fast enough for the largest events.
+const TEAM_FETCH_CONCURRENCY = 12;
 
 const SW_API_BASE = "https://events.sportwrench.com/api/esw";
 
@@ -102,8 +113,13 @@ export async function fetchSportwrenchMatchResults(eventId: string): Promise<Fet
   }
 
   const matchesById = new Map<string, AesFetchedMatch>();
-  for (const teamId of teamIds) {
-    const rawMatches = await fetchSportwrenchTeamMatches(eventId, teamId);
+  const teamIdList = [...teamIds];
+  const teamMatchLists = await mapWithConcurrency(teamIdList, TEAM_FETCH_CONCURRENCY, (teamId) =>
+    fetchSportwrenchTeamMatches(eventId, teamId),
+  );
+
+  teamIdList.forEach((teamId, i) => {
+    const rawMatches = teamMatchLists[i];
     for (const m of rawMatches) {
       if (matchesById.has(m.match_id)) continue;
 
@@ -138,7 +154,7 @@ export async function fetchSportwrenchMatchResults(eventId: string): Promise<Fet
         stage: m.pb_name ?? m.round_name ?? null,
       });
     }
-  }
+  });
 
   return { matches: [...matchesById.values()], eventName: eventInfo.name };
 }
