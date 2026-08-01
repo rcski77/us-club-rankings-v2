@@ -447,10 +447,33 @@ remain visible as their own columns for staff who want the underlying detail —
 isn't a removal of the per-engine views, just a headline number placed in front of
 them.
 
-**Not yet built**: a periodic/scheduled Massey cross-check re-run (today it's the same manual-trigger
-button as Colley/Elo — background-job infra is Phase 6), Sportwrench/TM2/VBSchedule
-match-level fetchers (AES only so far, matching TEAM_FINISHES's existing source
-coverage).
+**Periodic recompute — done (2026-08-01).** `src/lib/jobs/nightlyRecompute.ts` (Prisma
+orchestration: for every active `Season`, sequentially reruns
+`computeColleyRatingsForSeason`/`computeEloRatingsForSeason`/
+`computeMasseyRatingsForSeason` — the same three engines "Recompute ratings" on
+`/admin/team-rankings` triggers by hand — then `computeDivisionScoringSuggestion` for
+every division in that season, `preserveStatus`d for already-CONFIRMED divisions
+exactly like `/admin/analysis`'s "Run analysis for all divisions" bulk action) plus
+`src/lib/jobs/scheduleNightlyRecompute.ts` (a hand-rolled `setInterval` poll — no new
+cron dependency — comparing wall-clock time in `America/New_York` against a fixed
+2 AM target hour, guarded so it fires at most once per calendar day). Started from
+`instrumentation.ts`'s `register()` hook (Next's documented once-per-server-start file
+convention), Node runtime only. Runs in-process rather than via the `execFile` worker
+pattern the request-triggered buttons use (`recomputeRatingsInWorker.ts`) — that
+workaround exists to dodge Cloudflare's ~100s proxy timeout on a synchronous HTTP
+request, which doesn't apply to a background timer with nothing waiting on it. This is
+a single-process scheduler: correct for the current one-replica homelab deploy
+(`docker-compose.prod.yml`), but would double-run if the app were ever scaled to
+multiple replicas — a real job queue (BullMQ+Redis, or a DB-polling table, per the
+"Resolve performance" note in §3) would be needed at that point. Manual
+"Recompute ratings"/"Run analysis for all divisions" buttons remain — this doesn't
+replace them, just means staff no longer have to remember to click them daily. Closes
+the "periodic/scheduled Massey cross-check re-run" gap this section used to note as
+missing.
+
+Sportwrench match-level fetching is also done (`sportwrenchMatches.ts`, alongside the
+existing `sportwrenchStandings.ts`/TEAM_FINISHES coverage) — **not yet built**: TM2/
+VBSchedule match-level fetchers.
 
 **Non-anchor `PointTemplate` library — seeded.** `prisma/seedPointTemplates.ts` (new
 `db:seed-point-templates` script, idempotent — upserts by name, replaces bands
