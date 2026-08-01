@@ -93,24 +93,42 @@ describe("computeClubScore", () => {
 describe("rankClubs", () => {
   it("sorts qualified clubs before under-qualified clubs regardless of raw score", () => {
     const ranked = rankClubs([
-      { clubId: "weak-qualified", totalPoints: 10, isQualified: true },
-      { clubId: "strong-unqualified", totalPoints: 90, isQualified: false },
+      { clubId: "weak-qualified", totalPoints: 10, isQualified: true, qualifyingAgeGroupCount: 3 },
+      { clubId: "strong-unqualified", totalPoints: 90, isQualified: false, qualifyingAgeGroupCount: 1 },
     ]);
     expect(ranked.map((c) => c.clubId)).toEqual(["weak-qualified", "strong-unqualified"]);
   });
 
-  it("orders each tier by score descending and assigns a continuous rank across tiers", () => {
+  it("orders the qualified tier by score descending and assigns a continuous rank across tiers", () => {
     const ranked = rankClubs([
-      { clubId: "q-low", totalPoints: 10, isQualified: true },
-      { clubId: "q-high", totalPoints: 50, isQualified: true },
-      { clubId: "u-high", totalPoints: 40, isQualified: false },
-      { clubId: "u-low", totalPoints: 5, isQualified: false },
+      { clubId: "q-low", totalPoints: 10, isQualified: true, qualifyingAgeGroupCount: 3 },
+      { clubId: "q-high", totalPoints: 50, isQualified: true, qualifyingAgeGroupCount: 4 },
+      { clubId: "u-2", totalPoints: 5, isQualified: false, qualifyingAgeGroupCount: 2 },
+      { clubId: "u-1", totalPoints: 90, isQualified: false, qualifyingAgeGroupCount: 1 },
     ]);
     expect(ranked.map((c) => ({ clubId: c.clubId, rank: c.rank }))).toEqual([
       { clubId: "q-high", rank: 1 },
       { clubId: "q-low", rank: 2 },
-      { clubId: "u-high", rank: 3 },
-      { clubId: "u-low", rank: 4 },
+      { clubId: "u-2", rank: 3 },
+      { clubId: "u-1", rank: 4 },
     ]);
+  });
+
+  it("orders the under-qualified tier by qualifying age-group count before score", () => {
+    // u-1-high has a much higher score, but fewer top-100 age groups -- count wins
+    const ranked = rankClubs([
+      { clubId: "u-1-high", totalPoints: 90, isQualified: false, qualifyingAgeGroupCount: 1 },
+      { clubId: "u-2-low", totalPoints: 20, isQualified: false, qualifyingAgeGroupCount: 2 },
+      { clubId: "u-0", totalPoints: 5, isQualified: false, qualifyingAgeGroupCount: 0 },
+    ]);
+    expect(ranked.map((c) => c.clubId)).toEqual(["u-2-low", "u-1-high", "u-0"]);
+  });
+
+  it("breaks ties within the same qualifying count by score", () => {
+    const ranked = rankClubs([
+      { clubId: "u-2-low", totalPoints: 20, isQualified: false, qualifyingAgeGroupCount: 2 },
+      { clubId: "u-2-high", totalPoints: 40, isQualified: false, qualifyingAgeGroupCount: 2 },
+    ]);
+    expect(ranked.map((c) => c.clubId)).toEqual(["u-2-high", "u-2-low"]);
   });
 });

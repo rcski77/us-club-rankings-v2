@@ -93,6 +93,7 @@ async function ClubRankingTable({ seasonId }: { seasonId: string }) {
           <th className={thClass}>Rank</th>
           <th className={thClass}>Club</th>
           <th className={thClass}>Total Points</th>
+          <th className={thClass}>Top-100 Age Groups</th>
           {AGE_GROUPS.map((ag) => (
             <th key={ag} className={thClass}>
               {ag}U
@@ -106,12 +107,19 @@ async function ClubRankingTable({ seasonId }: { seasonId: string }) {
             group.rows.length > 0 && (
               <Fragment key={group.label}>
                 <tr>
-                  <td colSpan={3 + AGE_GROUPS.length} className={`${tdClass} bg-slate-100 font-medium`}>
+                  <td colSpan={4 + AGE_GROUPS.length} className={`${tdClass} bg-slate-100 font-medium`}>
                     {group.label}
                   </td>
                 </tr>
                 {group.rows.map((r) => {
                   const byAgeGroup = new Map(r.contributions.map((c) => [c.ageGroup, c]));
+                  // Not persisted directly on ClubRankingResult (only the isQualified
+                  // boolean is) -- derived here from each age group's own rank, same
+                  // top-100 threshold rankClubs() used to order the under-qualified
+                  // tier by this count.
+                  const qualifyingAgeGroupCount = r.contributions.filter(
+                    (c) => c.rank !== null && c.rank <= 100,
+                  ).length;
                   return (
                     <tr key={r.id}>
                       <td className={tdClass}>{r.rank}</td>
@@ -125,6 +133,7 @@ async function ClubRankingTable({ seasonId }: { seasonId: string }) {
                         </Link>
                       </td>
                       <td className={tdClass}>{r.totalPoints.toFixed(1)}</td>
+                      <td className={tdClass}>{qualifyingAgeGroupCount}</td>
                       {AGE_GROUPS.map((ag) => {
                         const c = byAgeGroup.get(ag);
                         if (!c || !c.team) {
@@ -152,7 +161,7 @@ async function ClubRankingTable({ seasonId }: { seasonId: string }) {
         )}
         {results.length === 0 && (
           <tr>
-            <td className={tdClass} colSpan={3 + AGE_GROUPS.length}>
+            <td className={tdClass} colSpan={4 + AGE_GROUPS.length}>
               No club rankings yet — click &quot;Recompute club rankings&quot; above.
             </td>
           </tr>
