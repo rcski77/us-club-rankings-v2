@@ -124,7 +124,7 @@ export default async function ImportsPage({
             return (
               <tr key={b.id}>
                 <td className={tdClass}>
-                  <Link href={`/admin/imports/${b.id}`} className="text-slate-900 underline">
+                  <Link href={`/admin/imports/${b.id}`} prefetch={false} className="text-slate-900 underline">
                     {b.event.name}
                   </Link>
                 </td>

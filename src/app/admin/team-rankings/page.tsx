@@ -143,6 +143,7 @@ export default async function TeamRankingsIndexPage({
               <Link
                 key={v.value}
                 href={tabHref({ view: v.value })}
+                prefetch={false}
                 className={
                   v.value === view
                     ? "border-b-2 border-slate-900 px-3 py-2 text-sm font-medium text-slate-900"
@@ -159,6 +160,7 @@ export default async function TeamRankingsIndexPage({
               <Link
                 key={a}
                 href={tabHref({ ageGroup: a })}
+                prefetch={false}
                 className={
                   a === ageGroup
                     ? "border-b-2 border-slate-900 px-3 py-2 text-sm font-medium text-slate-900"
@@ -288,7 +290,7 @@ async function NpsRankingTable({
           <tr key={r.id}>
             <td className={tdClass}>{r.rank}</td>
             <td className={tdClass}>
-              <Link href={`/admin/teams/${r.team.id}`} className="text-slate-900 underline">
+              <Link href={`/admin/teams/${r.team.id}`} prefetch={false} className="text-slate-900 underline">
                 {r.team.name}
               </Link>
             </td>
@@ -470,7 +472,7 @@ async function PowerRankingTable({
             <tr key={team.id}>
               <td className={tdClass}>{rankByTeamId.get(team.id) ?? "—"}</td>
               <td className={tdClass}>
-                <Link href={`/admin/teams/${team.id}`} className="text-slate-900 underline">
+                <Link href={`/admin/teams/${team.id}`} prefetch={false} className="text-slate-900 underline">
                   {team.name}
                 </Link>
               </td>
@@ -621,7 +623,7 @@ async function CombineRankingTable({
           <tr key={r.team.id}>
             <td className={tdClass}>{rankByTeamId.get(r.team.id) ?? "—"}</td>
             <td className={tdClass}>
-              <Link href={`/admin/teams/${r.team.id}`} className="text-slate-900 underline">
+              <Link href={`/admin/teams/${r.team.id}`} prefetch={false} className="text-slate-900 underline">
                 {r.team.name}
               </Link>
             </td>

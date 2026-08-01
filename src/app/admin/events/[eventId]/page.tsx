@@ -195,7 +195,7 @@ export default async function EventDetailPage({
               {event.importBatches.map((b) => (
                 <tr key={b.id}>
                   <td className={tdClass}>
-                    <Link href={`/admin/imports/${b.id}`} className="text-slate-900 underline">
+                    <Link href={`/admin/imports/${b.id}`} prefetch={false} className="text-slate-900 underline">
                       {IMPORT_TYPE_LABELS[b.importType] ?? b.importType}
                     </Link>
                   </td>
@@ -331,6 +331,7 @@ export default async function EventDetailPage({
               <td className={tdClass}>
                 <Link
                   href={`/admin/events/${event.id}/divisions/${d.id}`}
+                  prefetch={false}
                   className="text-slate-900 underline"
                 >
                   {d.name}

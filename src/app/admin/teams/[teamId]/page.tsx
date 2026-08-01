@@ -362,6 +362,7 @@ export default async function TeamDetailPage({
                 <Link
                   key={s.id}
                   href={`/admin/teams/${teamId}?season=${s.id}`}
+                  prefetch={false}
                   className={
                     s.id === activeSeasonId
                       ? "-mb-px rounded-t border border-b-0 bg-white px-3 py-1.5 text-sm font-medium"
@@ -394,6 +395,7 @@ export default async function TeamDetailPage({
                       <td className={tdClass}>
                         <Link
                           href={`/admin/events/${f.division.eventId}`}
+                          prefetch={false}
                           className="text-slate-900 underline"
                         >
                           {f.division.event.name}
@@ -402,6 +404,7 @@ export default async function TeamDetailPage({
                       <td className={tdClass}>
                         <Link
                           href={`/admin/events/${f.division.eventId}/divisions/${f.division.id}`}
+                          prefetch={false}
                           className="text-slate-900 underline"
                         >
                           {f.division.name}
@@ -460,6 +463,7 @@ export default async function TeamDetailPage({
                   <span>
                     <Link
                       href={`/admin/events/${g.event.id}`}
+                      prefetch={false}
                       className="font-medium text-slate-900 underline"
                     >
                       {g.event.name}
@@ -516,7 +520,7 @@ export default async function TeamDetailPage({
                             </span>
                             <span className="min-w-32 flex-1 font-medium">
                               {m.opponent ? (
-                                <Link href={`/admin/teams/${m.opponent.id}`} className="text-slate-900 underline">
+                                <Link href={`/admin/teams/${m.opponent.id}`} prefetch={false} className="text-slate-900 underline">
                                   {m.opponent.name}
                                 </Link>
                               ) : (

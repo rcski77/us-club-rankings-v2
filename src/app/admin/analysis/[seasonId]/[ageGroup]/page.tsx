@@ -221,6 +221,7 @@ export default async function AnalysisPage({
                   <td className={tdClass}>
                     <Link
                       href={`/admin/events/${division.eventId}/divisions/${division.id}/scoring`}
+                      prefetch={false}
                       className="underline"
                     >
                       {division.name}

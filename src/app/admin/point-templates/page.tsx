@@ -66,7 +66,7 @@ export default async function PointTemplatesPage({
           {templates.map((t) => (
             <tr key={t.id}>
               <td className={tdClass}>
-                <Link href={`/admin/point-templates/${t.id}`} className="text-slate-900 underline">
+                <Link href={`/admin/point-templates/${t.id}`} prefetch={false} className="text-slate-900 underline">
                   {t.name}
                 </Link>
               </td>
