@@ -1,11 +1,10 @@
 import { prisma } from "@/lib/prisma";
 import { redirect } from "next/navigation";
-import { revalidatePath } from "next/cache";
 import Link from "next/link";
 import { Fragment } from "react";
 import { primaryButtonClass, successBannerClass, tableClass, thClass, tdClass, stripedTbodyClass } from "@/lib/ui";
 import { ordinalSuffix } from "@/lib/rating/powerRankings";
-import { computeClubRankingForSeason } from "@/lib/ranking/computeClubRanking";
+import { computeClubRankingInWorker } from "@/lib/ranking/computeClubRankingInWorker";
 import { AGE_GROUPS } from "@/lib/ranking/clubRanking";
 import type { ClubRankingSource } from "@/generated/prisma/enums";
 import { SeasonFilterSelect } from "../team-rankings/SeasonFilterSelect";
@@ -16,23 +15,39 @@ const SOURCES = [
   { value: "COMBINED", label: "Combined" },
 ] as const;
 
+/**
+ * Deliberately does NOT await computeClubRankingInWorker() -- the COMBINED source in
+ * particular re-derives Power Rankings' Colley/Elo/Massey data once per age group on
+ * top of the NPS query, which on a season with a full year of real data ran past
+ * Cloudflare's ~100s proxy timeout on the homelab docker host when awaited inline
+ * (NPS alone stayed fast enough not to show the problem). Same fire-and-forget +
+ * "started" (not "recomputed") redirect as team-rankings' own recomputeAll -- see
+ * docs/plan.md's "Team rankings recompute performance" note for why waiting on the
+ * worker process doesn't help: the triggering request is exposed to the fronting
+ * proxy's timeout for as long as it stays open, regardless of which process does the
+ * actual work.
+ */
 async function recomputeClubRankings(formData: FormData) {
   "use server";
   const seasonId = String(formData.get("seasonId") ?? "");
   const source = String(formData.get("source") ?? "NPS") as ClubRankingSource;
   if (!seasonId) redirect("/admin/club-rankings");
 
-  await computeClubRankingForSeason(seasonId, source);
-  revalidatePath("/admin/club-rankings");
-  redirect(`/admin/club-rankings?${new URLSearchParams({ season: seasonId, source, recomputed: "1" })}`);
+  computeClubRankingInWorker(seasonId, source).catch((err) => {
+    console.error(`Background club-ranking recompute failed for season ${seasonId} (${source}):`, err);
+  });
+
+  redirect(
+    `/admin/club-rankings?${new URLSearchParams({ season: seasonId, source, recomputeStarted: "1" })}`,
+  );
 }
 
 export default async function ClubRankingsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ season?: string; source?: string; recomputed?: string }>;
+  searchParams: Promise<{ season?: string; source?: string; recomputeStarted?: string }>;
 }) {
-  const { season: seasonParam, source: sourceParam, recomputed } = await searchParams;
+  const { season: seasonParam, source: sourceParam, recomputeStarted } = await searchParams;
 
   const seasons = await prisma.season.findMany({ orderBy: { startDate: "desc" } });
   const activeSeason = seasons.find((s) => s.isActive) ?? seasons[0];
@@ -43,7 +58,12 @@ export default async function ClubRankingsPage({
     <div>
       <h1 className="mb-6 text-2xl font-semibold">Club Rankings</h1>
 
-      {recomputed === "1" && <p className={successBannerClass}>Club rankings recomputed.</p>}
+      {recomputeStarted === "1" && (
+        <p className={successBannerClass}>
+          Recompute started — it runs in the background and can take a minute or two on a full
+          season. Reload in a bit to see fresh results.
+        </p>
+      )}
 
       {seasons.length === 0 || !season ? (
         <p className="text-sm text-slate-500">Create a season first (Admin → Seasons).</p>

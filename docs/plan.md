@@ -577,6 +577,29 @@ Verified against real dev data after recompute: 0 negative totals across 876 NPS
 rows and 1305 Combined rows (previously the Combined view showed totals as low as
 roughly -25).
 
+**Club rankings recompute performance fix (2026-08-01).** Reported from the real
+homelab prod stack: NPS recompute worked, but Combined produced a server error
+(Cloudflare `524` gateway timeout) — same shape of problem already solved once for
+"Recompute ratings" on `/admin/team-rankings` (see the "Team rankings recompute
+performance" note above), not yet applied to club rankings' own recompute action.
+Root cause: `recomputeClubRankings` (`admin/club-rankings/page.tsx`) `await`ed
+`computeClubRankingForSeason` inline in the server action. NPS is cheap (one
+`RankingResult` query per age group) so it stayed under Cloudflare's ~100s proxy
+timeout; COMBINED calls `computeCombinedRankByTeam` once per age group, each of
+which re-derives Power Rankings' whole Colley/Elo/Massey dataset on top of that —
+on a full season of real data this ran long enough to 524. Fix, identical shape to
+the team-ratings one: new `computeClubRankingInWorker.ts` /
+`computeClubRankingWorkerEntry.ts` (same `runInWorker`/`execFile` mechanism as
+`recomputeRatingsInWorker.ts` — see that file's own comment for why `execFile`, not
+`worker_threads`/`fork`), and the server action no longer `await`s it — fire-and-
+forget with a `.catch()`, redirecting immediately with a "recompute started"
+message (`recomputeStarted=1`) instead of "recomputed," same as team-rankings'
+`recomputeAll`. Verified in the browser against real dev data: the redirect now
+returns in ~2s regardless of source, and the background worker process completes
+and produces fresh `ClubRankingResult` rows a few seconds later (confirmed via a
+follow-up reload) — not yet re-verified against the actual prod Docker/Cloudflare
+stack the way the original team-ratings fix was, since that requires a real deploy.
+
 ## Deviations from the original plan
 
 The plan below is preserved close to its original approved form for continuity, but
