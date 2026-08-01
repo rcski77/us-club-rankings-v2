@@ -39,6 +39,7 @@ model Season {
   teamSeasons TeamSeason[]
   events      Event[]
   ratingHistory TeamRatingHistory[]
+  clubRankingResults ClubRankingResult[]
   createdAt   DateTime     @default(now())
 }
 
@@ -59,6 +60,7 @@ model Club {
   contacts     ClubContact[]
   importRows   ImportRow[]
   auditFlags   AuditFlag[]
+  clubRankingResults ClubRankingResult[]
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
 
@@ -132,6 +134,7 @@ model Team {
   matchesAsTeamA   Match[]             @relation("MatchTeamA")
   matchesAsTeamB   Match[]             @relation("MatchTeamB")
   matchesWon       Match[]             @relation("MatchWinner")
+  clubRankingContributions ClubRankingResultContribution[]
 
   @@index([lineageKey])
   @@index([clubId])
@@ -470,6 +473,55 @@ model RankingResultContribution {
 
   @@unique([rankingResultId, teamFinishId])
   @@index([teamFinishId])
+}
+
+// --- Phase 7: club-level ranking ---------------------------------------------
+// See docs/plan.md §8. Rolls up the existing team-level RankingResult per (season,
+// club): the club's single highest-ranked team in each age group (13-18) maps rank
+// to a linear 101-rank point value, weighted 20% flat per age group, best 5 of 6
+// summed. Mirrors RankingResult/RankingResultContribution's delete-and-replace-by-
+// partition pattern (partitioned by seasonId here, not seasonId+ageGroup, since a
+// club's score spans every age group at once). v1 limitation: does not yet account
+// for a club holding multiple Club rows (different externalCode/region) that are
+// really the same real-world program -- see the club-alias/grouping note in
+// docs/plan.md §8; each Club row is ranked independently for now.
+model ClubRankingResult {
+  id           String   @id @default(cuid())
+  seasonId     String
+  season       Season   @relation(fields: [seasonId], references: [id])
+  clubId       String
+  club         Club     @relation(fields: [clubId], references: [id])
+  totalPoints  Float // weighted sum of the best 5 of 6 age-group scores -- Float
+  // (unlike RankingResult.totalPoints, which is raw Int points), since this is
+  // already post-20%-weighting.
+  rank         Int // position within the two-tier sort: qualified clubs by score
+  // first, then under-qualified clubs by score -- see isQualified.
+  isQualified  Boolean // 3+ age groups with a team ranked in that age group's own
+  // top 100 (see docs/plan.md §8 point 1). Under-qualified clubs are still scored
+  // and ranked, just sorted after every qualified club.
+  algorithmVersion String @default("phase7-v1")
+  computedAt   DateTime @default(now())
+
+  contributions ClubRankingResultContribution[]
+
+  @@unique([seasonId, clubId])
+  @@index([seasonId, isQualified, rank])
+}
+
+model ClubRankingResultContribution {
+  id                  String            @id @default(cuid())
+  clubRankingResultId String
+  clubRankingResult   ClubRankingResult @relation(fields: [clubRankingResultId], references: [id], onDelete: Cascade)
+  ageGroup            Int // 13-18
+  teamId              String? // the club's best-ranked team in this age group;
+  // null if the club has no ranked team at all in this age group.
+  team                Team?             @relation(fields: [teamId], references: [id])
+  rank                Int? // that team's RankingResult.rank for this age group
+  rawPoints           Int? // 101 - rank, ties already baked into rank
+  weightedPoints      Float? // rawPoints * 0.20
+  countedInBest5      Boolean // false for the one dropped (lowest) age-group slot
+
+  @@unique([clubRankingResultId, ageGroup])
 }
 
 // --- Phase 2: CSV import pipeline (AES adapter, TEAM_FINISHES only) ---------
