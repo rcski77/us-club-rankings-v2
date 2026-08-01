@@ -35,10 +35,10 @@ export default async function Home() {
             Events
           </Link>
           <Link
-            href="/rankings/clubs"
+            href="/rankings/club-rankings"
             className="rounded-lg border border-slate-300 px-5 py-2.5 text-sm font-semibold text-slate-700 transition-colors hover:border-slate-400 hover:bg-slate-100"
           >
-            Clubs
+            Club Rankings
           </Link>
           <Link
             href="/rankings/team-rankings"
