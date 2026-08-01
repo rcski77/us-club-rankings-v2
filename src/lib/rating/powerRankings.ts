@@ -166,3 +166,42 @@ export function averagePowerRank(r: PowerRow): number | undefined {
   if (ranks.length === 0) return undefined;
   return ranks.reduce((sum, v) => sum + v, 0) / ranks.length;
 }
+
+/**
+ * The Combined Rankings view's blend (50% NPS rank + 50% Power Rankings' own Avg
+ * Rank), factored out of the admin and public team-rankings pages' near-identical
+ * `CombineRankingTable` components so a third consumer (Phase 7 club rankings'
+ * "Combined" tab) doesn't need its own fourth copy of this math. Returns a team's
+ * *rank position* within this (season, ageGroup)'s combined ordering -- not the raw
+ * blended score -- ties handled the same competition-ranking way as
+ * `RankingResult.rank` (see assignRanksWithTies). A team missing one side of the
+ * blend falls back to 100% the side it has; a team with neither has no combined rank
+ * and is simply absent from the returned map.
+ */
+export async function computeCombinedRankByTeam(seasonId: string, ageGroup: number): Promise<Map<string, number>> {
+  const npsResults = await prisma.rankingResult.findMany({
+    where: { seasonId, ageGroup },
+    select: { teamId: true, rank: true },
+  });
+  const powerData = await getLatestPowerRatings(seasonId, ageGroup);
+  const powerRows = buildPowerRows(powerData);
+
+  const npsRankByTeam = new Map(npsResults.map((r) => [r.teamId, r.rank]));
+  const powerAvgRankByTeam = new Map(powerRows.map((r) => [r.team.id, averagePowerRank(r)]));
+
+  const teamIds = new Set([...npsRankByTeam.keys(), ...powerAvgRankByTeam.keys()]);
+  type Row = { teamId: string; npsRank: number | undefined; powerAvgRank: number | undefined };
+  const rows: Row[] = Array.from(teamIds).map((teamId) => ({
+    teamId,
+    npsRank: npsRankByTeam.get(teamId),
+    powerAvgRank: powerAvgRankByTeam.get(teamId),
+  }));
+
+  function combinedScore(r: Row): number | undefined {
+    const parts = [r.npsRank, r.powerAvgRank].filter((v): v is number => v !== undefined);
+    if (parts.length === 0) return undefined;
+    return parts.reduce((sum, v) => sum + v, 0) / parts.length;
+  }
+
+  return assignRanksWithTies(sortRows(rows, combinedScore, "asc"), combinedScore, (r) => r.teamId);
+}

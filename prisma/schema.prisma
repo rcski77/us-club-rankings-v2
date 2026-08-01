@@ -476,21 +476,31 @@ model RankingResultContribution {
 }
 
 // --- Phase 7: club-level ranking ---------------------------------------------
-// See docs/plan.md §8. Rolls up the existing team-level RankingResult per (season,
+// See docs/plan.md §8. Rolls up an existing team-level per-team rank per (season,
 // club): the club's single highest-ranked team in each age group (13-18) maps rank
 // to a linear 101-rank point value, weighted 20% flat per age group, best 5 of 6
 // summed. Mirrors RankingResult/RankingResultContribution's delete-and-replace-by-
-// partition pattern (partitioned by seasonId here, not seasonId+ageGroup, since a
-// club's score spans every age group at once). v1 limitation: does not yet account
-// for a club holding multiple Club rows (different externalCode/region) that are
-// really the same real-world program -- see the club-alias/grouping note in
-// docs/plan.md §8; each Club row is ranked independently for now.
+// partition pattern (partitioned by seasonId+source here, not seasonId+ageGroup,
+// since a club's score spans every age group at once). v1 limitation: does not yet
+// account for a club holding multiple Club rows (different externalCode/region)
+// that are really the same real-world program -- see the club-alias/grouping note
+// in docs/plan.md §8; each Club row is ranked independently for now.
+
+enum ClubRankingSource {
+  NPS // per-team rank = RankingResult.rank (points-based finishes)
+  COMBINED // per-team rank = the Combined Rankings blend (50% NPS rank + 50% Power
+  // Rankings' Avg Rank) -- see computeCombinedRankByTeam in powerRankings.ts.
+}
+
 model ClubRankingResult {
   id           String   @id @default(cuid())
   seasonId     String
   season       Season   @relation(fields: [seasonId], references: [id])
   clubId       String
   club         Club     @relation(fields: [clubId], references: [id])
+  source       ClubRankingSource @default(NPS) // which per-team ranking this rollup
+  // is built from -- NPS and COMBINED are computed and stored independently, shown
+  // as separate tabs on /admin/club-rankings, not blended together.
   totalPoints  Float // weighted sum of the best 5 of 6 age-group scores -- Float
   // (unlike RankingResult.totalPoints, which is raw Int points), since this is
   // already post-20%-weighting.
@@ -504,8 +514,8 @@ model ClubRankingResult {
 
   contributions ClubRankingResultContribution[]
 
-  @@unique([seasonId, clubId])
-  @@index([seasonId, isQualified, rank])
+  @@unique([seasonId, clubId, source])
+  @@index([seasonId, source, isQualified, rank])
 }
 
 model ClubRankingResultContribution {
