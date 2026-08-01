@@ -55,7 +55,7 @@ preference, non-negotiable.
 | 4 | Cross-season bootstrapping and calibration | Not started |
 | 5 | Tier 2 upgrade (Elo + Massey from real match data) | In progress (MATCH_RESULTS import ✅; Elo engine ✅; Massey engine ✅, incl. division-strength weighting; CPI activation dropped; Colley→Elo default-labeling relabel not started) |
 | 6 | Polish — flags, ballots, weight config, background jobs, hosting | Not started |
-| 7 | Club-level ranking (new tier, alongside existing team ranking) | Not started — methodology scoped from legacy site, see §8 |
+| 7 | Club-level ranking (new tier, alongside existing team ranking) | Admin side done (2026-08-01) — see §8 and the Status entry below |
 
 **Where things actually stand right now:** a fully working admin app for hand-operated
 season management — create a season, clubs, teams (enrolled per-season via
@@ -486,6 +486,31 @@ against the live suggestion pipeline: regenerating a suggestion for the (previou
 untested, still-DRAFT) 14 American/USAV Nationals division now correctly picks a
 template proportional to its percentile (17th → "170 max") instead of the single
 option that existed before this tier library existed.
+
+**Phase 7, admin side — done (2026-08-01).** New `ClubRankingResult`/
+`ClubRankingResultContribution` models (`prisma/schema.prisma`, delete-and-replace
+per `seasonId`, same audit-trail pattern as `RankingResult`/
+`RankingResultContribution`), plus `src/lib/ranking/clubRanking.ts` (pure: linear
+`101 - rank` scoring with ties already baked into `RankingResult.rank`, flat 20%
+weight per age group, best-5-of-6 drop-lowest treating a missing age group as an
+implicit 0 slot, 3-of-6-in-top-100 qualification, two-tier qualified/under-qualified
+sort — unit-tested) and `computeClubRanking.ts` (orchestration: rolls up the
+season's already-computed `RankingResult` rows per club, taking only each club's
+single best-ranked team per age group per §8 point 2 — deliberately cheap, no new
+team-level computation). New `/admin/club-rankings` page mirrors
+`/admin/team-rankings`'s season-selector-plus-manual-recompute pattern (a
+"Recompute club rankings" button, not wired into the nightly job for this first
+pass — matches how team ratings/rankings themselves started in Phase 3), single
+table grouped into Qualified/Under-qualified sections (one `<table>`, full-width
+label rows, per `admin/CLAUDE.md`'s grouped-table convention) with a column per age
+group showing which team+rank counted and the dropped age group struck through.
+**Known v1 limitation, by explicit user decision**: ships without the
+club-alias/grouping mechanism the design implications note below still calls out as
+a dependency — each `Club` row is ranked independently, so a club holding multiple
+`externalCode`s (e.g. after a code change) will have its top finishes split across
+what this rollup treats as separate clubs and undercount until that mechanism
+exists. Public-facing `/rankings` display not built this pass (admin-only scope,
+per explicit user request).
 
 ## Deviations from the original plan
 
