@@ -55,7 +55,7 @@ preference, non-negotiable.
 | 4 | Cross-season bootstrapping and calibration | Not started |
 | 5 | Tier 2 upgrade (Elo + Massey from real match data) | In progress (MATCH_RESULTS import ✅; Elo engine ✅; Massey engine ✅, incl. division-strength weighting; CPI activation dropped; Colley→Elo default-labeling relabel not started) |
 | 6 | Polish — flags, ballots, weight config, background jobs, hosting | Not started |
-| 7 | Club-level ranking (new tier, alongside existing team ranking) | Admin side done (2026-08-01) — see §8 and the Status entry below |
+| 7 | Club-level ranking (new tier, alongside existing team ranking) | Done (2026-08-01), admin + public — see §8 and the Status entries below |
 
 **Where things actually stand right now:** a fully working admin app for hand-operated
 season management — create a season, clubs, teams (enrolled per-season via
@@ -538,6 +538,28 @@ execute` + `prisma migrate resolve --applied` rather than `prisma migrate dev`,
 since this session's non-interactive shell can't satisfy that command's TTY
 requirement — the generated `migration.sql` itself came from `prisma migrate diff`,
 not hand-written.
+
+**Phase 7, public view — done (2026-08-01).** New `/rankings/club-rankings`
+(`src/app/rankings/club-rankings/page.tsx`) — a read-only counterpart to
+`/admin/club-rankings`: same NPS/Combined tabs and qualified/under-qualified
+two-tier table (reads the same `ClubRankingResult`/`ClubRankingResultContribution`
+rows an admin has already computed), but with the recompute button, `SubmitButton`,
+and success banner dropped entirely — the public site only ever displays what staff
+last computed, same convention as the rest of `/rankings`. Styled with
+`src/lib/publicUi.tsx`'s `tableWrapClass`/`tbodyClass`/`RankBadge` and
+`src/lib/brand.ts`'s `brand.purple` pill-tab treatment (team-rankings' public page's
+conventions), not admin's plain `src/lib/ui.ts` tables — gold/silver/bronze
+`RankBadge` on the Rank column, purple header row, zebra striping. Reuses
+`/rankings/team-rankings`'s existing `SeasonFilterSelect.tsx` via a relative import
+rather than a third near-duplicate copy (the public site already had two,
+`events/` and `team-rankings/`, before this addition — not worth a fourth). Links to
+`/rankings/clubs/[clubId]` and `/rankings/teams/[teamId]` (both pre-existing public
+routes). New "Club Rankings" entry in `PublicHeader.tsx`'s nav, alongside the
+existing Events/Clubs/Rankings links. `src/proxy.ts`'s matcher is `/admin/:path*`
+only, so no gating change was needed for the new route. Verified in the browser:
+renders correctly against real dev data on both tabs, visually consistent with
+`/rankings/team-rankings`, dropped (best-5-of-6) age-group cells struck through
+same as the admin view.
 
 ## Deviations from the original plan
 
