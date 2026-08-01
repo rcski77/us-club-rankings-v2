@@ -36,11 +36,16 @@ export type ClubScore = {
  */
 export type BestRankByAgeGroup = Partial<Record<ClubAgeGroup, { teamId: string; rank: number }>>;
 
-/** rank -> points, strictly linear, no floor. Ties already share a rank value coming
- * out of RankingResult (see computeRanking.ts's competition-ranking logic), so ties
- * naturally share the same point value here too -- no separate tie handling needed. */
+/** rank -> points, strictly linear from 1st (100) down to 100th (1), floored at 0
+ * for any rank outside the top 100 -- a team ranked 101st or worse contributes
+ * nothing to its club's score rather than a negative number (by explicit user
+ * decision; the legacy site's own "no floor" wording was ambiguous about ranks this
+ * far outside the top 100, since the linear scale was really describing the
+ * qualifying range). Ties already share a rank value coming out of RankingResult
+ * (see computeRanking.ts's competition-ranking logic), so ties naturally share the
+ * same point value here too -- no separate tie handling needed. */
 export function rankToPoints(rank: number): number {
-  return 101 - rank;
+  return Math.max(0, 101 - rank);
 }
 
 export function computeClubScore(bestRankByAgeGroup: BestRankByAgeGroup): ClubScore {

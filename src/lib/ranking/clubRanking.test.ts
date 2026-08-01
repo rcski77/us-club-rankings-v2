@@ -2,11 +2,17 @@ import { describe, expect, it } from "vitest";
 import { computeClubScore, rankClubs, rankToPoints } from "./clubRanking";
 
 describe("rankToPoints", () => {
-  it("maps rank 1 to 100 and descends linearly with no floor", () => {
+  it("maps rank 1 to 100 and descends linearly through the top 100", () => {
     expect(rankToPoints(1)).toBe(100);
     expect(rankToPoints(2)).toBe(99);
     expect(rankToPoints(5)).toBe(96);
-    expect(rankToPoints(150)).toBe(-49);
+    expect(rankToPoints(100)).toBe(1);
+  });
+
+  it("floors at 0 for any rank outside the top 100, never negative", () => {
+    expect(rankToPoints(101)).toBe(0);
+    expect(rankToPoints(150)).toBe(0);
+    expect(rankToPoints(424)).toBe(0);
   });
 
   it("gives tied ranks the same point value", () => {
@@ -79,6 +85,19 @@ describe("computeClubScore", () => {
     });
     const contribution = result.contributions.find((c) => c.ageGroup === 13)!;
     expect(contribution.weightedPoints).toBeCloseTo(20, 10);
+  });
+
+  it("never produces a negative total, even when every age group is far outside the top 100", () => {
+    const result = computeClubScore({
+      13: { teamId: "a", rank: 424 },
+      14: { teamId: "b", rank: 300 },
+      15: { teamId: "c", rank: 500 },
+      16: { teamId: "d", rank: 150 },
+      17: { teamId: "e", rank: 101 },
+      18: { teamId: "f", rank: 999 },
+    });
+    expect(result.totalPoints).toBe(0);
+    expect(result.contributions.every((c) => (c.weightedPoints ?? 0) >= 0)).toBe(true);
   });
 
   it("returns a zero score for a club with no ranked teams at all", () => {
