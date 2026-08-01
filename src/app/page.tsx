@@ -51,17 +51,26 @@ export default async function Home() {
         <div className="mt-10 flex flex-wrap justify-center gap-8 text-center">
           {[
             { label: "Events", value: stats.eventCount },
-            { label: "Clubs", value: stats.clubCount },
-            { label: "Teams", value: stats.teamCount },
+            { label: "Clubs", value: stats.clubCount, href: "/rankings/club-rankings" },
+            { label: "Teams", value: stats.teamCount, href: "/rankings/team-rankings" },
             { label: "Matches", value: stats.matchCount },
-          ].map((stat) => (
-            <div key={stat.label}>
-              <div className="text-2xl font-semibold" style={{ color: brand.purple }}>
-                {stat.value.toLocaleString()}
-              </div>
-              <div className="text-xs uppercase tracking-wide text-slate-500">{stat.label}</div>
-            </div>
-          ))}
+          ].map((stat) => {
+            const body = (
+              <>
+                <div className="text-2xl font-semibold" style={{ color: brand.purple }}>
+                  {stat.value.toLocaleString()}
+                </div>
+                <div className="text-xs uppercase tracking-wide text-slate-500">{stat.label}</div>
+              </>
+            );
+            return stat.href ? (
+              <Link key={stat.label} href={stat.href} className="transition-opacity hover:opacity-75">
+                {body}
+              </Link>
+            ) : (
+              <div key={stat.label}>{body}</div>
+            );
+          })}
         </div>
       </main>
     </div>
