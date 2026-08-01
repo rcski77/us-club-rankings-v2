@@ -561,6 +561,22 @@ renders correctly against real dev data on both tabs, visually consistent with
 `/rankings/team-rankings`, dropped (best-5-of-6) age-group cells struck through
 same as the admin view.
 
+**Phase 7 — floor per-age-group points at 0 (2026-08-01).** By explicit user
+decision, diverging from §8 point 2's literal "strictly linear... with no floor"
+wording: `rankToPoints()` (`clubRanking.ts`) now returns `Math.max(0, 101 - rank)`
+instead of the bare `101 - rank`. Surfaced by real data on the Combined view (a much
+larger ranked population than NPS, since Combined includes every team with any
+Colley/Elo/Massey rating, not just those with points-based finishes) — an
+under-qualified club's weaker age groups could land at rank 300-900+, producing
+double-digit negative weighted contributions and confusing negative
+"Total Points" for the whole club. A team ranked outside the top 100 in an age
+group now contributes exactly 0 to that slot instead of a negative number; a club's
+total can now never go negative. No other part of the formula changed (still
+best-5-of-6, still 20% flat weight, still ties share a rank's point value).
+Verified against real dev data after recompute: 0 negative totals across 876 NPS
+rows and 1305 Combined rows (previously the Combined view showed totals as low as
+roughly -25).
+
 ## Deviations from the original plan
 
 The plan below is preserved close to its original approved form for continuity, but
