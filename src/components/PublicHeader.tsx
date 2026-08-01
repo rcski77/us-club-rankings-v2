@@ -12,9 +12,8 @@ export function PublicHeader() {
         </Link>
         <nav className="flex items-center gap-6">
           <NavLink href="/rankings/events">Events</NavLink>
-          <NavLink href="/rankings/clubs">Clubs</NavLink>
+          <NavLink href="/rankings/club-rankings">Clubs</NavLink>
           <NavLink href="/rankings/team-rankings">Rankings</NavLink>
-          <NavLink href="/rankings/club-rankings">Club Rankings</NavLink>
           <Link
             href="/admin"
             className="rounded border border-white/30 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-white/10"
