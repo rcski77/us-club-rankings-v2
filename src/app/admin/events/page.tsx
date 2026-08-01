@@ -31,7 +31,7 @@ export default async function EventsPage() {
           {events.map((e) => (
             <tr key={e.id}>
               <td className={tdClass}>
-                <Link href={`/admin/events/${e.id}`} className="text-slate-900 underline">
+                <Link href={`/admin/events/${e.id}`} prefetch={false} className="text-slate-900 underline">
                   {e.name}
                 </Link>
               </td>

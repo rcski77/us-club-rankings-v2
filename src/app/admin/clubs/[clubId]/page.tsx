@@ -170,7 +170,7 @@ export default async function ClubDetailPage({
             return (
               <tr key={t.id}>
                 <td className={tdClass}>
-                  <Link href={`/admin/teams/${t.id}`} className="text-slate-900 underline">
+                  <Link href={`/admin/teams/${t.id}`} prefetch={false} className="text-slate-900 underline">
                     {t.name}
                   </Link>
                 </td>

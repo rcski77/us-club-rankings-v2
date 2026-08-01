@@ -42,6 +42,11 @@ npm run dev
 
 Full detail, troubleshooting, and the seed-script reference: `docs/dev-environment.md`.
 
+## Git workflow
+
+Always commit to a new branch, not directly to `master` — even for small changes.
+Merge (and push, if asked) once the change is verified.
+
 ## Conventions worth knowing before editing
 
 - **Sequential `await`, never `Promise.all`, for multiple Prisma queries in the same

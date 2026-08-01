@@ -100,7 +100,7 @@ export default async function ClubsPage({
           {clubs.map((c) => (
             <tr key={c.id}>
               <td className={tdClass}>
-                <Link href={`/admin/clubs/${c.id}`} className="text-slate-900 underline">
+                <Link href={`/admin/clubs/${c.id}`} prefetch={false} className="text-slate-900 underline">
                   {c.name}
                 </Link>
               </td>
