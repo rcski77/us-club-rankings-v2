@@ -22,6 +22,10 @@ export type AgeGroupContribution = {
 export type ClubScore = {
   totalPoints: number;
   isQualified: boolean;
+  qualifyingAgeGroupCount: number; // count of age groups with a team ranked in that
+  // age group's own top 100 -- 3+ makes isQualified true, but also used to order
+  // under-qualified clubs among themselves (a club with 2 such age groups ranks
+  // above one with only 1, before either falls back to raw score -- see rankClubs).
   contributions: AgeGroupContribution[];
 };
 
@@ -40,11 +44,11 @@ export function rankToPoints(rank: number): number {
 }
 
 export function computeClubScore(bestRankByAgeGroup: BestRankByAgeGroup): ClubScore {
-  const isQualified =
-    AGE_GROUPS.filter((ag) => {
-      const entry = bestRankByAgeGroup[ag];
-      return entry !== undefined && entry.rank <= QUALIFYING_TOP_N;
-    }).length >= MIN_QUALIFYING_AGE_GROUPS;
+  const qualifyingAgeGroupCount = AGE_GROUPS.filter((ag) => {
+    const entry = bestRankByAgeGroup[ag];
+    return entry !== undefined && entry.rank <= QUALIFYING_TOP_N;
+  }).length;
+  const isQualified = qualifyingAgeGroupCount >= MIN_QUALIFYING_AGE_GROUPS;
 
   // Every one of the six age groups gets a slot -- an age group with no ranked team
   // is a real 0, not an absence, since "sum best 5 of 6" always drops exactly one
@@ -84,24 +88,32 @@ export function computeClubScore(bestRankByAgeGroup: BestRankByAgeGroup): ClubSc
     .filter((c) => c.countedInBest5)
     .reduce((sum, c) => sum + (c.weightedPoints ?? 0), 0);
 
-  return { totalPoints, isQualified, contributions };
+  return { totalPoints, isQualified, qualifyingAgeGroupCount, contributions };
 }
 
 export type RankableClub = {
   clubId: string;
   totalPoints: number;
   isQualified: boolean;
+  qualifyingAgeGroupCount: number;
 };
 
 /**
- * Two-tier sort: every qualified club (by score, descending) before every
- * under-qualified club (by score, descending) -- docs/plan.md §8 point 1. `rank` is
- * a single continuous position across both tiers (1, 2, 3, ... through the qualified
- * group, then continuing through the under-qualified group), matching how
- * RankingResult.rank is a single sequence rather than restarting per group.
+ * Two-tier sort: every qualified club before every under-qualified club --
+ * docs/plan.md §8 point 1. Within the qualified tier, every club has the same
+ * qualifyingAgeGroupCount floor (3+) so score alone orders them; within the
+ * under-qualified tier, a club with 2 top-100 age groups ranks above one with only
+ * 1 (and 1 above 0), score breaking ties within the same count -- not a design-doc
+ * requirement, but a natural extension of the same "more qualifying age groups is
+ * better" principle §8 already applies at the 3-team threshold. `rank` is a single
+ * continuous position across both tiers (1, 2, 3, ... through qualified, then
+ * continuing through under-qualified), matching how RankingResult.rank is a single
+ * sequence rather than restarting per group.
  */
 export function rankClubs<T extends RankableClub>(clubs: T[]): (T & { rank: number })[] {
+  const byCountThenScore = (a: T, b: T) =>
+    b.qualifyingAgeGroupCount - a.qualifyingAgeGroupCount || b.totalPoints - a.totalPoints;
   const qualified = clubs.filter((c) => c.isQualified).sort((a, b) => b.totalPoints - a.totalPoints);
-  const underQualified = clubs.filter((c) => !c.isQualified).sort((a, b) => b.totalPoints - a.totalPoints);
+  const underQualified = clubs.filter((c) => !c.isQualified).sort(byCountThenScore);
   return [...qualified, ...underQualified].map((c, i) => ({ ...c, rank: i + 1 }));
 }
