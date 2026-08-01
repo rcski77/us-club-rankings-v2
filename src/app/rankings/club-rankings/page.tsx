@@ -95,7 +95,7 @@ async function ClubRankingTable({ seasonId, source }: { seasonId: string; source
             <th className={numThClass}>Total Points</th>
             <th className={numThClass}>Top-100 Age Groups</th>
             {AGE_GROUPS.map((ag) => (
-              <th key={ag} className={thClass}>
+              <th key={ag} className={numThClass}>
                 {ag}U
               </th>
             ))}
@@ -124,7 +124,7 @@ async function ClubRankingTable({ seasonId, source }: { seasonId: string; source
                         <td className={numTdClass}>
                           <RankBadge rank={r.rank} />
                         </td>
-                        <td className={`${tdClass} font-medium text-slate-900`}>
+                        <td className={`${tdClass} max-w-[180px] truncate font-medium text-slate-900`}>
                           <Link href={`/rankings/clubs/${r.club.id}`} className="after:absolute after:inset-0 hover:underline">
                             {r.club.name}
                           </Link>
@@ -137,7 +137,7 @@ async function ClubRankingTable({ seasonId, source }: { seasonId: string; source
                           const c = byAgeGroup.get(ag);
                           if (!c || !c.team) {
                             return (
-                              <td key={ag} className={`${tdClass} text-slate-400`}>
+                              <td key={ag} className={`${numTdClass} text-slate-400`}>
                                 —
                               </td>
                             );
@@ -145,13 +145,13 @@ async function ClubRankingTable({ seasonId, source }: { seasonId: string; source
                           return (
                             <td
                               key={ag}
-                              className={`${tdClass} relative z-10 ${c.countedInBest5 ? "" : "text-slate-400 line-through"}`}
+                              className={`${numTdClass} relative z-10 ${c.countedInBest5 ? "" : "text-slate-400 line-through"}`}
+                              title={c.team.name}
                             >
                               <Link href={`/rankings/teams/${c.team.id}`} className="hover:underline">
-                                {c.team.name}
-                              </Link>{" "}
-                              ({c.rank}
-                              {ordinalSuffix(c.rank ?? 0)})
+                                {c.rank}
+                                {ordinalSuffix(c.rank ?? 0)}
+                              </Link>
                             </td>
                           );
                         })}
