@@ -512,6 +512,33 @@ what this rollup treats as separate clubs and undercount until that mechanism
 exists. Public-facing `/rankings` display not built this pass (admin-only scope,
 per explicit user request).
 
+**Phase 7 — under-qualified tiebreak by top-100 count, then NPS/Combined dual
+source (2026-08-01).** Two follow-ups on real-data review: (1) `rankClubs()`
+(`clubRanking.ts`) now orders the under-qualified tier by `qualifyingAgeGroupCount`
+(a club with 2 age groups in that age group's own top 100 ranks above one with only
+1, then 0) before falling back to score — previously score alone could put a
+weak-everywhere club with one lucky high score above a club genuinely closer to
+qualifying; the admin table shows the same count in a new column. (2) Club rankings
+can now be computed from either of two per-team rankings, shown as separate tabs on
+`/admin/club-rankings` (NPS / Combined) with independent recompute buttons and
+storage — `ClubRankingResult` gained a `source: ClubRankingSource` (`NPS` |
+`COMBINED`) field, unique/partitioned on `(seasonId, clubId, source)` instead of
+`(seasonId, clubId)`. `computeClubRankingForSeason(seasonId, source)` reads either
+`RankingResult.rank` directly (NPS) or a new `computeCombinedRankByTeam(seasonId,
+ageGroup)` (`src/lib/rating/powerRankings.ts`) — the Combined Rankings blend (50%
+NPS rank + 50% Power Rankings' Avg Rank) factored out of the near-identical
+`CombineRankingTable` logic already duplicated between the admin and public
+team-rankings pages, so club rankings didn't become a third copy of that math.
+Verified in the browser against real dev data: the Combined tab produces materially
+different per-club ordering than the NPS tab (e.g. Legacy dropping from #3 to #5,
+ARIZONA STORM rising to #3) confirming it's a genuine independent computation, not a
+re-display of the same NPS data; the NPS tab's own stored results were unaffected by
+computing Combined for the first time. Migration applied out-of-band via `prisma db
+execute` + `prisma migrate resolve --applied` rather than `prisma migrate dev`,
+since this session's non-interactive shell can't satisfy that command's TTY
+requirement — the generated `migration.sql` itself came from `prisma migrate diff`,
+not hand-written.
+
 ## Deviations from the original plan
 
 The plan below is preserved close to its original approved form for continuity, but

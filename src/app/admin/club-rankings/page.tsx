@@ -7,29 +7,37 @@ import { primaryButtonClass, successBannerClass, tableClass, thClass, tdClass, s
 import { ordinalSuffix } from "@/lib/rating/powerRankings";
 import { computeClubRankingForSeason } from "@/lib/ranking/computeClubRanking";
 import { AGE_GROUPS } from "@/lib/ranking/clubRanking";
+import type { ClubRankingSource } from "@/generated/prisma/enums";
 import { SeasonFilterSelect } from "../team-rankings/SeasonFilterSelect";
 import { SubmitButton } from "@/components/SubmitButton";
+
+const SOURCES = [
+  { value: "NPS", label: "NPS" },
+  { value: "COMBINED", label: "Combined" },
+] as const;
 
 async function recomputeClubRankings(formData: FormData) {
   "use server";
   const seasonId = String(formData.get("seasonId") ?? "");
+  const source = String(formData.get("source") ?? "NPS") as ClubRankingSource;
   if (!seasonId) redirect("/admin/club-rankings");
 
-  await computeClubRankingForSeason(seasonId);
+  await computeClubRankingForSeason(seasonId, source);
   revalidatePath("/admin/club-rankings");
-  redirect(`/admin/club-rankings?${new URLSearchParams({ season: seasonId, recomputed: "1" })}`);
+  redirect(`/admin/club-rankings?${new URLSearchParams({ season: seasonId, source, recomputed: "1" })}`);
 }
 
 export default async function ClubRankingsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ season?: string; recomputed?: string }>;
+  searchParams: Promise<{ season?: string; source?: string; recomputed?: string }>;
 }) {
-  const { season: seasonParam, recomputed } = await searchParams;
+  const { season: seasonParam, source: sourceParam, recomputed } = await searchParams;
 
   const seasons = await prisma.season.findMany({ orderBy: { startDate: "desc" } });
   const activeSeason = seasons.find((s) => s.isActive) ?? seasons[0];
   const season = seasons.find((s) => s.id === seasonParam) ?? activeSeason;
+  const source: ClubRankingSource = sourceParam === "COMBINED" ? "COMBINED" : "NPS";
 
   return (
     <div>
@@ -43,6 +51,7 @@ export default async function ClubRankingsPage({
         <>
           <div className="mb-6 flex items-end gap-3">
             <form method="get" className="flex items-end gap-3">
+              <input type="hidden" name="source" value={source} />
               <label className="flex flex-col gap-1 text-sm">
                 Season
                 <SeasonFilterSelect seasons={seasons} defaultValue={season.id} />
@@ -51,26 +60,46 @@ export default async function ClubRankingsPage({
 
             <form action={recomputeClubRankings}>
               <input type="hidden" name="seasonId" value={season.id} />
+              <input type="hidden" name="source" value={source} />
               <SubmitButton className={primaryButtonClass} pendingText="Recomputing…">
-                Recompute club rankings
+                Recompute {source === "NPS" ? "NPS" : "Combined"} club rankings
               </SubmitButton>
             </form>
             <p className="pb-2 text-xs text-slate-500">
-              Rolls up the season&apos;s already-computed Team Rankings into a per-club score. Run
-              Team Rankings&apos; own recompute first if those look stale.
+              {source === "NPS"
+                ? "Rolls up the season's NPS Rankings (points-based finishes) into a per-club score."
+                : "Rolls up the season's Combined Rankings (50% NPS rank + 50% Power Avg Rank) into a per-club score."}{" "}
+              Run Team Rankings&apos; own recompute first if those look stale.
             </p>
           </div>
 
-          <ClubRankingTable seasonId={season.id} />
+          <div className="mb-6 flex gap-1 border-b">
+            {SOURCES.map((s) => (
+              <Link
+                key={s.value}
+                href={`/admin/club-rankings?${new URLSearchParams({ season: season.id, source: s.value })}`}
+                prefetch={false}
+                className={
+                  s.value === source
+                    ? "border-b-2 border-slate-900 px-3 py-2 text-sm font-medium text-slate-900"
+                    : "border-b-2 border-transparent px-3 py-2 text-sm text-slate-500 hover:text-slate-900"
+                }
+              >
+                {s.label}
+              </Link>
+            ))}
+          </div>
+
+          <ClubRankingTable seasonId={season.id} source={source} />
         </>
       )}
     </div>
   );
 }
 
-async function ClubRankingTable({ seasonId }: { seasonId: string }) {
+async function ClubRankingTable({ seasonId, source }: { seasonId: string; source: ClubRankingSource }) {
   const results = await prisma.clubRankingResult.findMany({
-    where: { seasonId },
+    where: { seasonId, source },
     include: {
       club: true,
       contributions: { include: { team: true }, orderBy: { ageGroup: "asc" } },
@@ -162,7 +191,7 @@ async function ClubRankingTable({ seasonId }: { seasonId: string }) {
         {results.length === 0 && (
           <tr>
             <td className={tdClass} colSpan={4 + AGE_GROUPS.length}>
-              No club rankings yet — click &quot;Recompute club rankings&quot; above.
+              No club rankings yet for this view — click &quot;Recompute&quot; above.
             </td>
           </tr>
         )}
