@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { prisma } from "@/lib/prisma";
 import { computeCombinedRankByTeam } from "@/lib/rating/powerRankings";
 import type { ClubRankingSource } from "@/generated/prisma/enums";
@@ -65,12 +66,29 @@ export async function computeClubRankingForSeason(seasonId: string, source: Club
 
   const ranked = rankClubs(scored);
 
-  await prisma.$transaction(async (tx) => {
-    await tx.clubRankingResult.deleteMany({ where: { seasonId, source } });
+  // Pre-generate each ClubRankingResult's id client-side (schema's @default(cuid())
+  // only fires when createMany doesn't supply one) so both tables can be bulk-
+  // inserted via one createMany call each, instead of the previous per-club
+  // create()+createMany() loop -- for a season with a full year of real clubs (over
+  // a thousand), that loop's sequential round-trips blew past Prisma's default 5s
+  // interactive-transaction timeout on the actual homelab prod hardware ("Invalid
+  // `prisma.clubRankingResult.create()` invocation: Transaction API error: A query
+  // cannot be executed on an expired transaction"), even after the recompute button
+  // itself was moved off the request thread (see the "Club rankings recompute
+  // performance fix" note in docs/plan.md -- that fix addressed the *request*
+  // timeout, this one addresses a separate *transaction* timeout underneath it). Not
+  // a literal cuid (randomUUID() instead) -- the id column is just a String primary
+  // key, nothing depends on the specific ID format.
+  const rowsWithIds = ranked.map((club) => ({ ...club, id: randomUUID() }));
 
-    for (const club of ranked) {
-      const result = await tx.clubRankingResult.create({
-        data: {
+  await prisma.$transaction(
+    async (tx) => {
+      await tx.clubRankingResult.deleteMany({ where: { seasonId, source } });
+      if (rowsWithIds.length === 0) return;
+
+      await tx.clubRankingResult.createMany({
+        data: rowsWithIds.map((club) => ({
+          id: club.id,
           seasonId,
           clubId: club.clubId,
           source,
@@ -78,19 +96,25 @@ export async function computeClubRankingForSeason(seasonId: string, source: Club
           rank: club.rank,
           isQualified: club.isQualified,
           algorithmVersion: ALGORITHM_VERSION,
-        },
-      });
-      await tx.clubRankingResultContribution.createMany({
-        data: club.contributions.map((c) => ({
-          clubRankingResultId: result.id,
-          ageGroup: c.ageGroup,
-          teamId: c.teamId,
-          rank: c.rank,
-          rawPoints: c.rawPoints,
-          weightedPoints: c.weightedPoints,
-          countedInBest5: c.countedInBest5,
         })),
       });
-    }
-  });
+      await tx.clubRankingResultContribution.createMany({
+        data: rowsWithIds.flatMap((club) =>
+          club.contributions.map((c) => ({
+            clubRankingResultId: club.id,
+            ageGroup: c.ageGroup,
+            teamId: c.teamId,
+            rank: c.rank,
+            rawPoints: c.rawPoints,
+            weightedPoints: c.weightedPoints,
+            countedInBest5: c.countedInBest5,
+          })),
+        ),
+      });
+    },
+    // Same margin as the other large-batch transactions in this codebase (see
+    // commit.ts/commitMatches.ts) -- belt-and-suspenders alongside the createMany
+    // batching above, which should already keep this well under even the default.
+    { timeout: 120_000, maxWait: 10_000 },
+  );
 }

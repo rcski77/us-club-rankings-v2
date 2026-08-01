@@ -600,6 +600,34 @@ and produces fresh `ClubRankingResult` rows a few seconds later (confirmed via a
 follow-up reload) — not yet re-verified against the actual prod Docker/Cloudflare
 stack the way the original team-ratings fix was, since that requires a real deploy.
 
+**Club rankings recompute — second, deeper cause (2026-08-01, same day).** The
+worker-process fix above was necessary but not sufficient: real prod logs (homelab
+Docker host) showed the button still failing, now with a *different* error surfaced
+this time instead of a silent 524 — `Invalid prisma.clubRankingResult.create()
+invocation: Transaction API error: A query cannot be executed on an expired
+transaction. The timeout for this transaction was 5000 ms, however 5007 ms passed`.
+Moving the work off the request thread fixed the *request's* exposure to
+Cloudflare's proxy timeout, but did nothing for a second, independent timeout
+underneath it: `computeClubRankingForSeason`'s persistence step looped one
+`tx.clubRankingResult.create()` + `tx.clubRankingResultContribution.createMany()`
+per club inside a single Prisma interactive transaction — for a season with a full
+year of real clubs (1300+), that's 1300+ sequential round-trips against Postgres,
+which blew past Prisma's default 5-second interactive-transaction timeout on real
+homelab hardware (never reproduced locally against the smaller dev dataset). Same
+shape of fix as the "Team rankings recompute performance" note's **batched writes**
+half (the request-thread half doesn't apply the same way here, since this failure
+was already happening inside the worker process): `computeClubRankingForSeason`
+now pre-generates each `ClubRankingResult` row's id client-side (`randomUUID()`,
+not a literal cuid — the id column is just a `String` primary key, nothing depends
+on the specific format) so both tables can be bulk-inserted via one `createMany`
+call each instead of the per-club loop, and the transaction itself now passes an
+explicit `{ timeout: 120_000, maxWait: 10_000 }` (same margin already used by
+`commit.ts`/`commitMatches.ts` for their own large-batch transactions) as
+belt-and-suspenders alongside the batching. Verified in the browser against real
+dev data (1307 Combined rows): recompute completes and shows fresh data within
+seconds of the "started" redirect. Real prod verification still pending a redeploy
+at the time of this note.
+
 ## Deviations from the original plan
 
 The plan below is preserved close to its original approved form for continuity, but
