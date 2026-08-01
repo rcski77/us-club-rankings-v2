@@ -382,9 +382,9 @@ async function PowerRankingTable({
         {/* createdAt (the actual recompute run time), not weekEndingDate (the business
             date every same-day rerun collapses onto) -- see getLatestPowerRatings's
             comment for why the two can otherwise look identical for same-day reruns. */}
-        {latestColley && <span>Colley as of {latestColley.createdAt.toLocaleString()}</span>}
-        {latestElo && <span>Elo as of {latestElo.createdAt.toLocaleString()}</span>}
-        {latestMassey && <span>Massey as of {latestMassey.createdAt.toLocaleString()}</span>}
+        {latestColley && <span>Colley as of {latestColley.createdAt.toLocaleString("en-US", { timeZone: "America/New_York", timeZoneName: "short" })}</span>}
+        {latestElo && <span>Elo as of {latestElo.createdAt.toLocaleString("en-US", { timeZone: "America/New_York", timeZoneName: "short" })}</span>}
+        {latestMassey && <span>Massey as of {latestMassey.createdAt.toLocaleString("en-US", { timeZone: "America/New_York", timeZoneName: "short" })}</span>}
       </div>
 
       <table className={tableClass}>
