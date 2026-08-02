@@ -30,6 +30,15 @@ COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 COPY --from=builder /app/prisma ./prisma
 
+# .next/standalone's own file-tracing misses instrumentation.ts (root-level
+# register() hook -- src/lib/jobs/scheduleNightlyRecompute.ts) and several chunks
+# it depends on, so instrumentation.js is silently absent from the pruned
+# standalone/.next/server and register() never runs in prod. Overlaying the full
+# builder .next/server on top guarantees nothing traced-but-missing breaks this
+# again, at the same "bigger image, but correct" cost already accepted below for
+# node_modules.
+COPY --from=builder --chown=nextjs:nodejs /app/.next/server ./.next/server
+
 # resolveImportBatchInWorker (src/lib/import/resolveInWorker.ts) runs a plain .ts
 # worker-thread entry via tsx, outside Next/Turbopack's own bundling -- so unlike the
 # rest of this image, it needs the raw source tree, tsconfig.json (tsx reads it for
