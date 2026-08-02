@@ -2,7 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { brand } from "@/lib/brand";
-import { tableWrapClass, thClass, tdClass, numThClass, numTdClass, tbodyClass } from "@/lib/publicUi";
+import { tableWrapClass, thClass, tdClass, primaryTdClass, numThClass, numTdClass, tbodyClass } from "@/lib/publicUi";
 
 export default async function PublicEventDetailPage({
   params,
@@ -56,7 +56,7 @@ export default async function PublicEventDetailPage({
           <tbody className={tbodyClass}>
             {event.divisions.map((d) => (
               <tr key={d.id} className="relative cursor-pointer">
-                <td className={`${tdClass} font-medium text-slate-900`}>
+                <td className={primaryTdClass}>
                   <Link
                     href={`/rankings/events/${event.id}/divisions/${d.id}`}
                     className="after:absolute after:inset-0 hover:underline"

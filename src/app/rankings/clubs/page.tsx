@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import Link from "next/link";
 import { brand } from "@/lib/brand";
-import { tableWrapClass, thClass, tdClass, numThClass, numTdClass, tbodyClass } from "@/lib/publicUi";
+import { tableWrapClass, thClass, tdClass, primaryTdClass, numThClass, numTdClass, tbodyClass } from "@/lib/publicUi";
 import { DEFAULT_PAGE_SIZE, Pagination, parsePage } from "../Pagination";
 
 export const dynamic = "force-dynamic";
@@ -40,7 +40,7 @@ export default async function PublicClubsPage({
           <tbody className={tbodyClass}>
             {clubs.map((c) => (
               <tr key={c.id} className="relative cursor-pointer">
-                <td className={`${tdClass} font-medium text-slate-900`}>
+                <td className={primaryTdClass}>
                   <Link href={`/rankings/clubs/${c.id}`} className="after:absolute after:inset-0 hover:underline">
                     {c.name}
                   </Link>

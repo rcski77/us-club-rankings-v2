@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { PublicHeader } from "@/components/PublicHeader";
+import { PublicFooter } from "@/components/PublicFooter";
 import { LogoStacked } from "@/components/Logo";
 import { brand } from "@/lib/brand";
 import { prisma } from "@/lib/prisma";
@@ -73,6 +74,7 @@ export default async function Home() {
           })}
         </div>
       </main>
+      <PublicFooter />
     </div>
   );
 }

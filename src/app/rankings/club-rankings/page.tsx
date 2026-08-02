@@ -111,7 +111,10 @@ async function ClubRankingTable({
             <th className={numThClass}>Rank</th>
             <th className={thClass}>Club</th>
             <th className={numThClass}>Total Points</th>
-            <th className={numThClass}>Top-100 Age Groups</th>
+            <th className={numThClass}>
+              <span className="sm:hidden">Top-100</span>
+              <span className="hidden sm:inline">Top-100 Age Groups</span>
+            </th>
             {AGE_GROUPS.map((ag) => (
               <th key={ag} className={numThClass}>
                 {ag}U

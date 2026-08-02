@@ -2,7 +2,17 @@ import { prisma } from "@/lib/prisma";
 import type { Prisma } from "@/generated/prisma/client";
 import Link from "next/link";
 import { brand } from "@/lib/brand";
-import { tableWrapClass, thClass, tdClass, numThClass, numTdClass, tbodyClass, RankBadge } from "@/lib/publicUi";
+import {
+  tableWrapClass,
+  thClass,
+  tdClass,
+  primaryTdClass,
+  secondaryTdClass,
+  numThClass,
+  numTdClass,
+  tbodyClass,
+  RankBadge,
+} from "@/lib/publicUi";
 import {
   ordinalSuffix,
   sortRows,
@@ -248,12 +258,12 @@ async function NpsRankingTable({
               <td className={numTdClass}>
                 <RankBadge rank={r.rank} />
               </td>
-              <td className={`${tdClass} font-medium text-slate-900`}>
+              <td className={primaryTdClass}>
                 <Link href={`/rankings/teams/${r.team.id}`} className="after:absolute after:inset-0 hover:underline">
                   {r.team.name}
                 </Link>
               </td>
-              <td className={`${tdClass} text-slate-500`}>{r.team.club?.name ?? ""}</td>
+              <td className={secondaryTdClass}>{r.team.club?.name ?? ""}</td>
               <td className={`${numTdClass} font-semibold`} style={{ color: brand.purple }}>
                 {r.totalPoints}
               </td>
@@ -413,12 +423,12 @@ async function PowerRankingTable({
                 <td className={numTdClass}>
                   <RankBadge rank={rankByTeamId.get(team.id)} />
                 </td>
-                <td className={`${tdClass} font-medium text-slate-900`}>
+                <td className={primaryTdClass}>
                   <Link href={`/rankings/teams/${team.id}`} className="after:absolute after:inset-0 hover:underline">
                     {team.name}
                   </Link>
                 </td>
-                <td className={`${tdClass} text-slate-500`}>{team.club?.name ?? ""}</td>
+                <td className={secondaryTdClass}>{team.club?.name ?? ""}</td>
                 <td className={numTdClass}>
                   {(() => {
                     const avg = averagePowerRank({ team, colley, elo, massey });
@@ -560,12 +570,12 @@ async function CombineRankingTable({
               <td className={numTdClass}>
                 <RankBadge rank={rankByTeamId.get(r.team.id)} />
               </td>
-              <td className={`${tdClass} font-medium text-slate-900`}>
+              <td className={primaryTdClass}>
                 <Link href={`/rankings/teams/${r.team.id}`} className="after:absolute after:inset-0 hover:underline">
                   {r.team.name}
                 </Link>
               </td>
-              <td className={`${tdClass} text-slate-500`}>{r.team.club?.name ?? ""}</td>
+              <td className={secondaryTdClass}>{r.team.club?.name ?? ""}</td>
               <td className={`${numTdClass} font-semibold`} style={{ color: brand.purple }}>
                 {(() => {
                   const score = combinedScore(r);

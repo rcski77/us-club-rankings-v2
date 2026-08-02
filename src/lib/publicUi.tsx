@@ -1,10 +1,21 @@
 // Shared table chrome for public-facing pages (rankings, team detail, etc.) --
 // deliberately fancier than the plain admin tables (src/lib/ui.ts): rounded card,
 // dark brand-purple header, zebra striping, and a colored badge for rank columns.
-export const tableWrapClass = "overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm";
+export const tableWrapClass = "overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm";
 export const thClass =
   "px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-white/85 whitespace-nowrap";
 export const tdClass = "px-4 py-3 text-sm text-slate-700 whitespace-nowrap";
+// For the primary name/link column (team, club, tournament, ...) -- wraps and caps
+// width on narrow screens so one long name can't force the whole table wider than the
+// viewport, pushing every other column out past the horizontal scroll; reverts to the
+// normal single-line behavior once there's room (sm+).
+export const primaryTdClass =
+  "max-w-[9.5rem] whitespace-normal break-words px-4 py-3 text-sm font-medium text-slate-900 sm:max-w-none sm:whitespace-nowrap";
+// Same idea as primaryTdClass, for a secondary text column (e.g. a team's club name)
+// that sits next to the primary column -- narrower cap since it's not the main thing
+// being scanned.
+export const secondaryTdClass =
+  "max-w-[7rem] whitespace-normal break-words px-4 py-3 text-sm text-slate-500 sm:max-w-none sm:whitespace-nowrap";
 // Narrower/centered variant for single-number columns (ranks, ratings, matches played,
 // points) -- the roomy px-4 padding on tdClass/thClass is meant for name/text columns
 // and otherwise pushes wide tables past the page.

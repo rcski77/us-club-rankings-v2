@@ -3,7 +3,16 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { scoringStatusBadgeClass } from "@/lib/ui";
 import { brand } from "@/lib/brand";
-import { tableWrapClass, thClass, tdClass, numThClass, numTdClass, tbodyClass, RankBadge } from "@/lib/publicUi";
+import {
+  tableWrapClass,
+  thClass,
+  tdClass,
+  primaryTdClass,
+  numThClass,
+  numTdClass,
+  tbodyClass,
+  RankBadge,
+} from "@/lib/publicUi";
 import { getEventEloSummaries } from "@/lib/rating/computeEloRatings";
 
 export default async function PublicDivisionDetailPage({
@@ -70,7 +79,7 @@ export default async function PublicDivisionDetailPage({
                     <td className={numTdClass}>
                       <RankBadge rank={f.rank} />
                     </td>
-                    <td className={`${tdClass} font-medium text-slate-900`}>
+                    <td className={primaryTdClass}>
                       <Link
                         href={`/rankings/teams/${f.team.id}`}
                         className="after:absolute after:inset-0 hover:underline"

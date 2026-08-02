@@ -2,7 +2,16 @@ import { prisma } from "@/lib/prisma";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { brand } from "@/lib/brand";
-import { tableWrapClass, thClass, tdClass, numThClass, numTdClass, tbodyClass, rowListClass } from "@/lib/publicUi";
+import {
+  tableWrapClass,
+  thClass,
+  tdClass,
+  primaryTdClass,
+  numThClass,
+  numTdClass,
+  tbodyClass,
+  rowListClass,
+} from "@/lib/publicUi";
 import { getTeamEloHistory } from "@/lib/rating/computeEloRatings";
 
 export default async function PublicTeamDetailPage({
@@ -182,7 +191,7 @@ export default async function PublicTeamDetailPage({
                       : null;
                     return (
                       <tr key={f.id}>
-                        <td className={`${tdClass} font-medium text-slate-900`}>
+                        <td className={primaryTdClass}>
                           <Link href={`/rankings/events/${f.division.eventId}`} className="hover:underline">
                             {f.division.event.name}
                           </Link>

@@ -8,14 +8,23 @@ import { brand } from "@/lib/brand";
 export function LogoHorizontal({
   variant = "onLight",
   width = 170,
+  className,
 }: {
   variant?: "onLight" | "onDark";
   width?: number;
+  className?: string;
 }) {
   const onDark = variant === "onDark";
   const height = (width * 56) / 340;
   return (
-    <svg viewBox="0 0 340 56" width={width} height={height} role="img" aria-label="US Club Rankings 2.0">
+    <svg
+      viewBox="0 0 340 56"
+      width={width}
+      height={height}
+      className={className}
+      role="img"
+      aria-label="US Club Rankings 2.0"
+    >
       <rect x="3.83" y="36.63" width="38.33" height="8.63" rx="1.44" fill={onDark ? "#FFFFFF" : brand.purple} />
       <rect x="3.83" y="25.13" width="27.79" height="8.63" rx="1.44" fill={brand.teal} />
       <rect x="3.83" y="13.63" width="17.25" height="8.63" rx="1.44" fill={brand.yellow} />
