@@ -12,6 +12,7 @@ import {
   addTeamFinish,
   removeTeamFinish,
   updateTeamFinishRank,
+  adjustDivisionBandPoints,
 } from "./actions";
 import {
   inputClass,
@@ -55,21 +56,20 @@ export default async function DivisionDetailPage({
     include: { team: { include: seasonScopedTeam } },
     orderBy: { rank: "asc" },
   });
-  const teams = await prisma.team.findMany({
-    where: { seasons: { some: { seasonId } } },
-    include: seasonScopedTeam,
+  const finishedTeamIds = finishes.map((f) => f.teamId);
+  const availableTeams = await prisma.team.findMany({
+    where: { id: { notIn: finishedTeamIds }, seasons: { some: { seasonId } } },
+    select: { id: true, name: true, seasons: { where: { seasonId }, select: { ageGroup: true } } },
     orderBy: { name: "asc" },
   });
-  teams.sort((a, b) => (b.seasons[0]?.ageGroup ?? 0) - (a.seasons[0]?.ageGroup ?? 0));
-
-  const finishedTeamIds = new Set(finishes.map((f) => f.teamId));
-  const availableTeams = teams.filter((t) => !finishedTeamIds.has(t.id));
+  availableTeams.sort((a, b) => (b.seasons[0]?.ageGroup ?? 0) - (a.seasons[0]?.ageGroup ?? 0));
 
   const isConfirmed = division.scoringStatus === "CONFIRMED";
   const updateDetailsWithIds = updateDivisionDetails.bind(null, eventId, divisionId);
   const applyTemplateWithIds = applyTemplate.bind(null, eventId, divisionId);
   const addBandWithIds = addDivisionBand.bind(null, eventId, divisionId);
   const addFinishWithIds = addTeamFinish.bind(null, eventId, divisionId);
+  const adjustBandsWithIds = adjustDivisionBandPoints.bind(null, eventId, divisionId);
 
   // Best-to-worst division strength, USAV and AAU tiers merged into one order
   // (see docs/domain-notes.md) since both share this one dropdown/enum.
@@ -169,7 +169,25 @@ export default async function DivisionDetailPage({
       </section>
 
       <section className="mb-8">
-        <h2 className="mb-2 text-lg font-medium">Point curve</h2>
+        <div className="mb-2 flex items-center gap-3">
+          <h2 className="text-lg font-medium">Point curve</h2>
+          {!isConfirmed && division.pointBands.length > 0 && (
+            <div className="flex items-center gap-1">
+              <form action={adjustBandsWithIds}>
+                <input type="hidden" name="delta" value="1" />
+                <button type="submit" className={smallSecondaryButtonClass} title="Bump every band up 1 point">
+                  +1 all
+                </button>
+              </form>
+              <form action={adjustBandsWithIds}>
+                <input type="hidden" name="delta" value="-1" />
+                <button type="submit" className={smallSecondaryButtonClass} title="Bump every band down 1 point">
+                  -1 all
+                </button>
+              </form>
+            </div>
+          )}
+        </div>
 
         <table className={`${tableClass} mb-4`}>
           <thead>

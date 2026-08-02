@@ -106,6 +106,24 @@ export async function updateDivisionBandPoints(
   redirect(divisionPath(eventId, divisionId));
 }
 
+export async function adjustDivisionBandPoints(
+  eventId: string,
+  divisionId: string,
+  formData: FormData,
+) {
+  const delta = Number(formData.get("delta"));
+  if (!delta) redirect(`${divisionPath(eventId, divisionId)}?error=invalid`);
+
+  // Skip bands that would go negative rather than clamping to 0, so a -1 nudge
+  // never silently flattens a low band to the same points as the one below it.
+  await prisma.divisionPointBand.updateMany({
+    where: delta < 0 ? { divisionId, points: { gte: -delta } } : { divisionId },
+    data: { points: { increment: delta } },
+  });
+
+  redirect(divisionPath(eventId, divisionId));
+}
+
 export async function confirmDivisionScoring(eventId: string, divisionId: string) {
   const division = await prisma.division.findUniqueOrThrow({
     where: { id: divisionId },
