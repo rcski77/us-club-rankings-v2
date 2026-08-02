@@ -2,13 +2,25 @@ import { prisma } from "@/lib/prisma";
 import Link from "next/link";
 import { brand } from "@/lib/brand";
 import { tableWrapClass, thClass, tdClass, numThClass, numTdClass, tbodyClass } from "@/lib/publicUi";
+import { DEFAULT_PAGE_SIZE, Pagination, parsePage } from "../Pagination";
 
 export const dynamic = "force-dynamic";
 
-export default async function PublicClubsPage() {
+export default async function PublicClubsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ page?: string }>;
+}) {
+  const { page: pageParam } = await searchParams;
+  const page = parsePage(pageParam);
+
+  // Sequential awaits (not Promise.all) -- see docs/dev-environment.md.
+  const totalCount = await prisma.club.count();
   const clubs = await prisma.club.findMany({
     include: { region: true, _count: { select: { teams: true } } },
     orderBy: { name: "asc" },
+    skip: (page - 1) * DEFAULT_PAGE_SIZE,
+    take: DEFAULT_PAGE_SIZE,
   });
 
   return (
@@ -50,6 +62,7 @@ export default async function PublicClubsPage() {
           </tbody>
         </table>
       </div>
+      <Pagination page={page} totalCount={totalCount} pageSize={DEFAULT_PAGE_SIZE} basePath="/rankings/clubs" baseParams={new URLSearchParams()} />
     </div>
   );
 }

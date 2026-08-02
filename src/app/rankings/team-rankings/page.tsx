@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import type { Prisma } from "@/generated/prisma/client";
 import Link from "next/link";
 import { brand } from "@/lib/brand";
 import { tableWrapClass, thClass, tdClass, numThClass, numTdClass, tbodyClass, RankBadge } from "@/lib/publicUi";
@@ -12,6 +13,7 @@ import {
   type PowerRow,
 } from "@/lib/rating/powerRankings";
 import { SeasonFilterSelect } from "./SeasonFilterSelect";
+import { DEFAULT_PAGE_SIZE, Pagination, parsePage } from "../Pagination";
 
 const AGE_GROUPS = [12, 13, 14, 15, 16, 17, 18];
 const VIEWS = [
@@ -31,10 +33,12 @@ export default async function PublicTeamRankingsPage({
     ageGroup?: string;
     sort?: string;
     dir?: string;
+    page?: string;
   }>;
 }) {
-  const { season: seasonParam, view: viewParam, ageGroup: ageGroupParam, sort, dir: dirParam } =
+  const { season: seasonParam, view: viewParam, ageGroup: ageGroupParam, sort, dir: dirParam, page: pageParam } =
     await searchParams;
+  const page = parsePage(pageParam);
 
   const seasons = await prisma.season.findMany({ orderBy: { startDate: "desc" } });
   const activeSeason = seasons.find((s) => s.isActive) ?? seasons[0];
@@ -112,6 +116,7 @@ export default async function PublicTeamRankingsPage({
               ageGroup={ageGroup}
               sort={sort}
               dir={dir}
+              page={page}
               baseParams={new URLSearchParams({ season: season.id, view, ageGroup: String(ageGroup) })}
             />
           ) : view === "power" ? (
@@ -120,6 +125,7 @@ export default async function PublicTeamRankingsPage({
               ageGroup={ageGroup}
               sort={sort}
               dir={dir}
+              page={page}
               baseParams={new URLSearchParams({ season: season.id, view, ageGroup: String(ageGroup) })}
             />
           ) : (
@@ -128,6 +134,7 @@ export default async function PublicTeamRankingsPage({
               ageGroup={ageGroup}
               sort={sort}
               dir={dir}
+              page={page}
               baseParams={new URLSearchParams({ season: season.id, view, ageGroup: String(ageGroup) })}
             />
           )}
@@ -171,20 +178,37 @@ function SortableHeader({
   );
 }
 
+// Maps a sortable column to a Prisma orderBy clause so the NPS table can page at the
+// DB level even under a non-default sort -- sortRows() in JS would require fetching
+// every team in the age group first, defeating the point of pagination.
+const NPS_ORDER_BY: Record<string, (dir: SortDir) => Prisma.RankingResultOrderByWithRelationInput> = {
+  rank: (dir) => ({ rank: dir }),
+  team: (dir) => ({ team: { name: dir } }),
+  club: (dir) => ({ team: { club: { name: dir } } }),
+  totalPoints: (dir) => ({ totalPoints: dir }),
+};
+
 async function NpsRankingTable({
   seasonId,
   ageGroup,
   sort,
   dir,
+  page,
   baseParams,
 }: {
   seasonId: string;
   ageGroup: number;
   sort?: string;
   dir: SortDir;
+  page: number;
   baseParams: URLSearchParams;
 }) {
-  const results = await prisma.rankingResult.findMany({
+  const orderBy: Prisma.RankingResultOrderByWithRelationInput =
+    sort && NPS_ORDER_BY[sort] ? NPS_ORDER_BY[sort](dir) : { rank: "asc" };
+
+  // Sequential awaits (not Promise.all) -- see docs/dev-environment.md.
+  const totalCount = await prisma.rankingResult.count({ where: { seasonId, ageGroup } });
+  const rows = await prisma.rankingResult.findMany({
     where: { seasonId, ageGroup },
     include: {
       team: { include: { club: true } },
@@ -193,18 +217,13 @@ async function NpsRankingTable({
         orderBy: { rankInSeason: "asc" },
       },
     },
-    orderBy: { rank: "asc" },
+    orderBy,
+    skip: (page - 1) * DEFAULT_PAGE_SIZE,
+    take: DEFAULT_PAGE_SIZE,
   });
 
-  const accessors: Record<string, (r: (typeof results)[number]) => string | number | undefined> = {
-    rank: (r) => r.rank,
-    team: (r) => r.team.name,
-    club: (r) => r.team.club?.name ?? "",
-    totalPoints: (r) => r.totalPoints,
-  };
-  const rows = sort && accessors[sort] ? sortRows(results, accessors[sort], dir) : results;
-
   return (
+    <>
     <div className={tableWrapClass}>
       <table className="w-full border-collapse text-sm">
         <thead>
@@ -266,6 +285,14 @@ async function NpsRankingTable({
         </tbody>
       </table>
     </div>
+    <Pagination
+      page={page}
+      totalCount={totalCount}
+      pageSize={DEFAULT_PAGE_SIZE}
+      basePath="/rankings/team-rankings"
+      baseParams={sort ? new URLSearchParams({ ...Object.fromEntries(baseParams), sort, dir }) : baseParams}
+    />
+    </>
   );
 }
 
@@ -274,18 +301,23 @@ async function PowerRankingTable({
   ageGroup,
   sort,
   dir,
+  page,
   baseParams,
 }: {
   seasonId: string;
   ageGroup: number;
   sort?: string;
   dir: SortDir;
+  page: number;
   baseParams: URLSearchParams;
 }) {
   const data = await getLatestPowerRatings(seasonId, ageGroup);
   const { latestColley, latestElo, latestMassey } = data;
   const defaultRows = buildPowerRows(data);
 
+  // Rank is computed across the whole age group (each engine's rank is relative to
+  // every other team), so this can't page at the query level like the NPS table --
+  // the full set has to be fetched and ranked before slicing out the current page.
   const rankByTeamId = assignRanksWithTies(
     sortRows(defaultRows, averagePowerRank, "asc"),
     averagePowerRank,
@@ -303,10 +335,12 @@ async function PowerRankingTable({
     masseyRank: (r) => r.massey?.rank,
     matchesPlayed: (r) => r.colley?.comparisons ?? r.elo?.comparisons ?? r.massey?.comparisons,
   };
-  const rows =
+  const sortedRows =
     sort && accessors[sort]
       ? sortRows(defaultRows, accessors[sort], dir)
       : sortRows(defaultRows, averagePowerRank, "asc");
+  const totalCount = sortedRows.length;
+  const rows = sortedRows.slice((page - 1) * DEFAULT_PAGE_SIZE, page * DEFAULT_PAGE_SIZE);
 
   return (
     <>
@@ -412,6 +446,13 @@ async function PowerRankingTable({
           </tbody>
         </table>
       </div>
+      <Pagination
+        page={page}
+        totalCount={totalCount}
+        pageSize={DEFAULT_PAGE_SIZE}
+        basePath="/rankings/team-rankings"
+        baseParams={sort ? new URLSearchParams({ ...Object.fromEntries(baseParams), sort, dir }) : baseParams}
+      />
     </>
   );
 }
@@ -421,12 +462,14 @@ async function CombineRankingTable({
   ageGroup,
   sort,
   dir,
+  page,
   baseParams,
 }: {
   seasonId: string;
   ageGroup: number;
   sort?: string;
   dir: SortDir;
+  page: number;
   baseParams: URLSearchParams;
 }) {
   // Sequential awaits (not Promise.all) -- see docs/dev-environment.md.
@@ -471,10 +514,13 @@ async function CombineRankingTable({
     npsRank: (r) => r.npsRank,
     powerAvgRank: (r) => r.powerAvgRank,
   };
-  const rows =
+  const sortedRows =
     sort && accessors[sort] ? sortRows(defaultRows, accessors[sort], dir) : sortRows(defaultRows, combinedScore, "asc");
+  const totalCount = sortedRows.length;
+  const rows = sortedRows.slice((page - 1) * DEFAULT_PAGE_SIZE, page * DEFAULT_PAGE_SIZE);
 
   return (
+    <>
     <div className={tableWrapClass}>
       <table className="w-full border-collapse text-sm">
         <thead>
@@ -540,5 +586,13 @@ async function CombineRankingTable({
         </tbody>
       </table>
     </div>
+    <Pagination
+      page={page}
+      totalCount={totalCount}
+      pageSize={DEFAULT_PAGE_SIZE}
+      basePath="/rankings/team-rankings"
+      baseParams={sort ? new URLSearchParams({ ...Object.fromEntries(baseParams), sort, dir }) : baseParams}
+    />
+    </>
   );
 }

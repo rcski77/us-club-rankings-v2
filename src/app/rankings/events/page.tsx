@@ -3,6 +3,7 @@ import Link from "next/link";
 import { brand } from "@/lib/brand";
 import { tableWrapClass, thClass, tdClass, numThClass, numTdClass, tbodyClass } from "@/lib/publicUi";
 import { SeasonFilterSelect } from "./SeasonFilterSelect";
+import { DEFAULT_PAGE_SIZE, Pagination, parsePage } from "../Pagination";
 
 function TeamsIcon() {
   return (
@@ -44,21 +45,27 @@ function DateIcon() {
 export default async function PublicEventsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ season?: string }>;
+  searchParams: Promise<{ season?: string; page?: string }>;
 }) {
-  const { season: seasonParam } = await searchParams;
+  const { season: seasonParam, page: pageParam } = await searchParams;
+  const page = parsePage(pageParam);
 
   const seasons = await prisma.season.findMany({ orderBy: { startDate: "desc" } });
   const activeSeason = seasons.find((s) => s.isActive) ?? seasons[0];
   const selectedSeasonId = seasonParam === "all" ? "all" : seasonParam && seasons.some((s) => s.id === seasonParam) ? seasonParam : activeSeason?.id ?? "all";
 
+  const eventsWhere = selectedSeasonId === "all" ? {} : { seasonId: selectedSeasonId };
+  // Sequential awaits (not Promise.all) -- see docs/dev-environment.md.
+  const totalCount = await prisma.event.count({ where: eventsWhere });
   const events = await prisma.event.findMany({
-    where: selectedSeasonId === "all" ? {} : { seasonId: selectedSeasonId },
+    where: eventsWhere,
     include: {
       _count: { select: { divisions: true, matches: true } },
       divisions: { select: { _count: { select: { finishes: true } } } },
     },
     orderBy: { startDate: "desc" },
+    skip: (page - 1) * DEFAULT_PAGE_SIZE,
+    take: DEFAULT_PAGE_SIZE,
   });
 
   return (
@@ -143,6 +150,13 @@ export default async function PublicEventsPage({
           </tbody>
         </table>
       </div>
+      <Pagination
+        page={page}
+        totalCount={totalCount}
+        pageSize={DEFAULT_PAGE_SIZE}
+        basePath="/rankings/events"
+        baseParams={new URLSearchParams({ season: selectedSeasonId })}
+      />
     </div>
   );
 }

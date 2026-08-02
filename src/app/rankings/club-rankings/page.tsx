@@ -7,6 +7,7 @@ import { ordinalSuffix } from "@/lib/rating/powerRankings";
 import { AGE_GROUPS } from "@/lib/ranking/clubRanking";
 import type { ClubRankingSource } from "@/generated/prisma/enums";
 import { SeasonFilterSelect } from "../team-rankings/SeasonFilterSelect";
+import { DEFAULT_PAGE_SIZE, Pagination, parsePage } from "../Pagination";
 
 const SOURCES = [
   { value: "NPS", label: "NPS" },
@@ -16,9 +17,10 @@ const SOURCES = [
 export default async function PublicClubRankingsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ season?: string; source?: string }>;
+  searchParams: Promise<{ season?: string; source?: string; page?: string }>;
 }) {
-  const { season: seasonParam, source: sourceParam } = await searchParams;
+  const { season: seasonParam, source: sourceParam, page: pageParam } = await searchParams;
+  const page = parsePage(pageParam);
 
   const seasons = await prisma.season.findMany({ orderBy: { startDate: "desc" } });
   const activeSeason = seasons.find((s) => s.isActive) ?? seasons[0];
@@ -60,14 +62,27 @@ export default async function PublicClubRankingsPage({
             ))}
           </div>
 
-          <ClubRankingTable seasonId={season.id} source={source} />
+          <ClubRankingTable seasonId={season.id} source={source} page={page} />
         </>
       )}
     </div>
   );
 }
 
-async function ClubRankingTable({ seasonId, source }: { seasonId: string; source: ClubRankingSource }) {
+async function ClubRankingTable({
+  seasonId,
+  source,
+  page,
+}: {
+  seasonId: string;
+  source: ClubRankingSource;
+  page: number;
+}) {
+  // rank is precomputed and stored (unlike the power/combined team-rankings views),
+  // so this can page at the DB level -- qualified clubs are already ranked ahead of
+  // under-qualified ones, so a page boundary landing between the two groups just
+  // means one of the two group headers below doesn't render on that page.
+  const totalCount = await prisma.clubRankingResult.count({ where: { seasonId, source } });
   const results = await prisma.clubRankingResult.findMany({
     where: { seasonId, source },
     include: {
@@ -75,6 +90,8 @@ async function ClubRankingTable({ seasonId, source }: { seasonId: string; source
       contributions: { include: { team: true }, orderBy: { ageGroup: "asc" } },
     },
     orderBy: { rank: "asc" },
+    skip: (page - 1) * DEFAULT_PAGE_SIZE,
+    take: DEFAULT_PAGE_SIZE,
   });
 
   const qualified = results.filter((r) => r.isQualified);
@@ -86,6 +103,7 @@ async function ClubRankingTable({ seasonId, source }: { seasonId: string; source
   ];
 
   return (
+    <>
     <div className={tableWrapClass}>
       <table className="w-full border-collapse text-sm">
         <thead>
@@ -171,5 +189,13 @@ async function ClubRankingTable({ seasonId, source }: { seasonId: string; source
         </tbody>
       </table>
     </div>
+    <Pagination
+      page={page}
+      totalCount={totalCount}
+      pageSize={DEFAULT_PAGE_SIZE}
+      basePath="/rankings/club-rankings"
+      baseParams={new URLSearchParams({ season: seasonId, source })}
+    />
+    </>
   );
 }
