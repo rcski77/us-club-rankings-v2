@@ -23,15 +23,13 @@ async function startImportBatch(formData: FormData) {
   const importType = importTypeRaw === "MATCH_RESULTS" ? "MATCH_RESULTS" : "TEAM_FINISHES";
   if (!eventId) redirect("/admin/imports?error=invalid");
 
-  const event = await prisma.event.findUnique({ where: { id: eventId } });
-  // Batch source follows the event's own configured platform (set on the event's
-  // page) rather than always being AES -- otherwise a Sportwrench event's batches
-  // would display and behave (via the Fetch button's scheduleSource check) as
-  // Sportwrench while the batch's own `source` column still claimed AES.
+  // Created with no schedule attached -- pick one of the event's schedule links (or
+  // add a new one) from the event's own page, which has the full picker/bulk-start
+  // UI for events with several AES/Sportwrench schedule pages. This quick-start form
+  // is for the common manual-CSV-only case.
   const batch = await prisma.importBatch.create({
     data: {
       eventId,
-      source: event?.scheduleSource ?? "AES",
       importType,
       status: "DRAFT",
       createdById: session?.user?.id ?? null,
@@ -157,11 +155,10 @@ export default async function ImportsPage({
 
       <h2 className="mb-2 text-lg font-medium">Start import</h2>
       <p className="mb-2 text-xs text-slate-500">
-        Source is taken from the event&apos;s own schedule platform (set on the
-        event&apos;s page) — AES and Sportwrench have working Fetch buttons, other
-        platforms don&apos;t yet. Match Results requires the event&apos;s Team
-        Finishes to already be imported (it resolves teams/divisions from that data,
-        not from scratch).
+        Starts a batch with no schedule link attached (fine for manual CSV uploads).
+        To fetch from AES/Sportwrench, or to combine an event split across multiple
+        schedule pages, use the event&apos;s own page instead — it has a schedule-link
+        picker and a bulk &quot;start all&quot; action.
       </p>
       <form action={startImportBatch} className="flex flex-wrap items-end gap-3">
         <label className="flex flex-col gap-1 text-sm">

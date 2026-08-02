@@ -11,6 +11,7 @@ import {
   fetchSportwrenchStandings,
   fetchAndCommitSportwrenchMatches,
   resolveBatch,
+  updateBatchSchedule,
   overrideRowDivision,
   overrideRowClub,
   overrideRowTeam,
@@ -32,6 +33,7 @@ import {
   thClass,
   tdClass,
 } from "@/lib/ui";
+import type { ImportSource } from "@/generated/prisma/enums";
 
 const STATUS_COLORS: Record<string, string> = {
   OK: "text-green-700",
@@ -55,7 +57,7 @@ export default async function ImportBatchPage({
   const batch = await prisma.importBatch.findUnique({
     where: { id: batchId },
     include: {
-      event: { include: { season: true } },
+      event: { include: { season: true, schedules: { orderBy: { createdAt: "asc" } } } },
       files: { include: { rows: { orderBy: { rowNumber: "asc" } } }, orderBy: { createdAt: "asc" } },
     },
   });
@@ -116,6 +118,10 @@ export default async function ImportBatchPage({
   const commitWithId = commitBatch.bind(null, batchId);
   const deleteWithId = deleteBatch.bind(null, batchId);
   const saveAllSuggestedClubNamesWithId = saveAllSuggestedClubNames.bind(null, batchId);
+  const updateBatchScheduleWithId = updateBatchSchedule.bind(null, batchId);
+  const currentEventScheduleId = batch.event.schedules.find(
+    (s) => s.url === batch.scheduleUrl && s.source === batch.scheduleSource,
+  )?.id;
 
   return (
     <div>
@@ -166,12 +172,12 @@ export default async function ImportBatchPage({
       )}
       {error === "no-schedule-url" && (
         <p className={errorBannerClass}>
-          This event has no schedule URL set for a supported platform — add one on the event&apos;s page
-          first.
+          No schedule URL set for a supported platform on this import — set one below,
+          or on the event&apos;s page to use as the default for new imports.
         </p>
       )}
       {error === "bad-schedule-url" && (
-        <p className={errorBannerClass}>Could not find an event id in this event&apos;s schedule URL.</p>
+        <p className={errorBannerClass}>Could not find an event id in this import&apos;s schedule URL.</p>
       )}
       {error === "fetch-failed" && (
         <p className={errorBannerClass}>Fetching standings failed: {reason ?? "unknown error"}.</p>
@@ -233,29 +239,66 @@ export default async function ImportBatchPage({
           </form>
         )}
 
-        {!isCommitted && batch.event.scheduleUrl && (
-          <div className="mt-4 flex items-center gap-3 border-t border-slate-200 pt-4">
-            {batch.event.scheduleSource === "AES" ? (
-              <form action={fetchAesStandingsWithId}>
+        {!isCommitted && (
+          <div className="mt-4 border-t border-slate-200 pt-4">
+            {batch.event.schedules.length > 0 ? (
+              <form action={updateBatchScheduleWithId} className="mb-3 flex flex-wrap items-end gap-3">
                 <input type="hidden" name="filter" value={filter ?? ""} />
-                <SubmitButton className={secondaryButtonClass} pendingText="Fetching…">
-                  Fetch standings from AES
-                </SubmitButton>
-              </form>
-            ) : batch.event.scheduleSource === "SPORTWRENCH" ? (
-              <form action={fetchSportwrenchStandingsWithId}>
-                <input type="hidden" name="filter" value={filter ?? ""} />
-                <SubmitButton className={secondaryButtonClass} pendingText="Fetching…">
-                  Fetch standings from Sportwrench
+                <label className="flex flex-1 flex-col gap-1 text-sm">
+                  Schedule for this import
+                  <select
+                    name="eventScheduleId"
+                    className={selectClass}
+                    defaultValue={currentEventScheduleId ?? ""}
+                  >
+                    <option value="">No schedule (manual CSV upload)</option>
+                    {batch.event.schedules.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.label ? `${s.label} — ` : ""}
+                        {s.source} — {s.url}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <SubmitButton className={secondaryButtonClass} pendingText="Saving…">
+                  Save schedule
                 </SubmitButton>
               </form>
             ) : (
-              <p className="text-sm text-slate-500">
-                Schedule URL set ({batch.event.scheduleSource ?? "platform not set"}), but fetching
-                isn&apos;t supported for that platform yet.
+              <p className="mb-3 text-sm text-slate-500">
+                This event has no schedule links yet —{" "}
+                <Link href={`/admin/events/${batch.eventId}`} className="underline">
+                  add one on the event&apos;s page
+                </Link>{" "}
+                to enable Fetch.
               </p>
             )}
-            <span className="truncate text-xs text-slate-400">{batch.event.scheduleUrl}</span>
+
+            {batch.scheduleUrl && (
+              <div className="flex items-center gap-3">
+                {batch.scheduleSource === "AES" ? (
+                  <form action={fetchAesStandingsWithId}>
+                    <input type="hidden" name="filter" value={filter ?? ""} />
+                    <SubmitButton className={secondaryButtonClass} pendingText="Fetching…">
+                      Fetch standings from AES
+                    </SubmitButton>
+                  </form>
+                ) : batch.scheduleSource === "SPORTWRENCH" ? (
+                  <form action={fetchSportwrenchStandingsWithId}>
+                    <input type="hidden" name="filter" value={filter ?? ""} />
+                    <SubmitButton className={secondaryButtonClass} pendingText="Fetching…">
+                      Fetch standings from Sportwrench
+                    </SubmitButton>
+                  </form>
+                ) : (
+                  <p className="text-sm text-slate-500">
+                    Schedule URL set ({batch.scheduleSource ?? "platform not set"}), but fetching isn&apos;t
+                    supported for that platform yet.
+                  </p>
+                )}
+                <span className="truncate text-xs text-slate-400">{batch.scheduleUrl}</span>
+              </div>
+            )}
           </div>
         )}
       </section>
@@ -534,7 +577,11 @@ export default async function ImportBatchPage({
 }
 
 type MatchResultsBatch = NonNullable<Awaited<ReturnType<typeof prisma.importBatch.findUnique>>> & {
-  event: { name: string; season: { label: string }; scheduleUrl: string | null; scheduleSource: string | null };
+  event: {
+    name: string;
+    season: { label: string };
+    schedules: { id: string; url: string; source: ImportSource; label: string | null }[];
+  };
 };
 
 // MATCH_RESULTS batches don't use the ImportRow-based upload/preview/override
@@ -577,6 +624,10 @@ async function MatchResultsBatchView({
   const fetchAndCommitAesWithId = fetchAndCommitAesMatches.bind(null, batch.id);
   const fetchAndCommitSportwrenchWithId = fetchAndCommitSportwrenchMatches.bind(null, batch.id);
   const deleteWithId = deleteBatch.bind(null, batch.id);
+  const updateBatchScheduleWithId = updateBatchSchedule.bind(null, batch.id);
+  const currentEventScheduleId = batch.event.schedules.find(
+    (s) => s.url === batch.scheduleUrl && s.source === batch.scheduleSource,
+  )?.id;
 
   return (
     <div>
@@ -624,12 +675,12 @@ async function MatchResultsBatchView({
       )}
       {error === "no-schedule-url" && (
         <p className={errorBannerClass}>
-          This event has no schedule URL set for a supported platform — add one on the event&apos;s page
-          first.
+          No schedule URL set for a supported platform on this import — set one below,
+          or on the event&apos;s page to use as the default for new imports.
         </p>
       )}
       {error === "bad-schedule-url" && (
-        <p className={errorBannerClass}>Could not find an event id in this event&apos;s schedule URL.</p>
+        <p className={errorBannerClass}>Could not find an event id in this import&apos;s schedule URL.</p>
       )}
       {error === "fetch-failed" && (
         <p className={errorBannerClass}>Fetching match results failed: {reason ?? "unknown error"}.</p>
@@ -637,7 +688,39 @@ async function MatchResultsBatchView({
       {success === "committed" && <p className={successBannerClass}>Match results imported.</p>}
 
       <section className="mb-8">
-        {batch.event.scheduleSource === "AES" && batch.event.scheduleUrl ? (
+        {!isCommitted &&
+          (batch.event.schedules.length > 0 ? (
+            <form action={updateBatchScheduleWithId} className="mb-4 flex flex-wrap items-end gap-3">
+              <label className="flex flex-1 flex-col gap-1 text-sm">
+                Schedule for this import
+                <select
+                  name="eventScheduleId"
+                  className={selectClass}
+                  defaultValue={currentEventScheduleId ?? ""}
+                >
+                  <option value="">No schedule (manual CSV upload)</option>
+                  {batch.event.schedules.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.label ? `${s.label} — ` : ""}
+                      {s.source} — {s.url}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <SubmitButton className={secondaryButtonClass} pendingText="Saving…">
+                Save schedule
+              </SubmitButton>
+            </form>
+          ) : (
+            <p className="mb-4 text-sm text-slate-500">
+              This event has no schedule links yet —{" "}
+              <Link href={`/admin/events/${batch.eventId}`} className="underline">
+                add one on the event&apos;s page
+              </Link>{" "}
+              to enable Fetch.
+            </p>
+          ))}
+        {batch.scheduleSource === "AES" && batch.scheduleUrl ? (
           <>
             <form action={fetchAndCommitAesWithId}>
               <SubmitButton className={primaryButtonClass} pendingText="Fetching & importing…">
@@ -652,9 +735,9 @@ async function MatchResultsBatchView({
               are skipped, not created as new records — re-running after importing
               more Team Finishes for this event can pick up previously-skipped ones.
             </p>
-            <p className="mt-2 truncate text-xs text-slate-400">{batch.event.scheduleUrl}</p>
+            <p className="mt-2 truncate text-xs text-slate-400">{batch.scheduleUrl}</p>
           </>
-        ) : batch.event.scheduleSource === "SPORTWRENCH" && batch.event.scheduleUrl ? (
+        ) : batch.scheduleSource === "SPORTWRENCH" && batch.scheduleUrl ? (
           <>
             <form action={fetchAndCommitSportwrenchWithId}>
               <SubmitButton className={primaryButtonClass} pendingText="Fetching & importing…">
@@ -670,12 +753,12 @@ async function MatchResultsBatchView({
               importing more Team Finishes for this event can pick up
               previously-skipped ones.
             </p>
-            <p className="mt-2 truncate text-xs text-slate-400">{batch.event.scheduleUrl}</p>
+            <p className="mt-2 truncate text-xs text-slate-400">{batch.scheduleUrl}</p>
           </>
         ) : (
           <p className="text-sm text-slate-500">
-            This event has no schedule URL set for a supported platform — add one on
-            the event&apos;s page first.
+            No schedule set for a supported platform on this import — set one above,
+            or on the event&apos;s page first.
           </p>
         )}
       </section>

@@ -100,16 +100,13 @@ export async function uploadImportFile(batchId: string, formData: FormData) {
 export async function fetchAesStandings(batchId: string, formData: FormData) {
   const filter = currentFilter(formData);
 
-  const batch = await prisma.importBatch.findUniqueOrThrow({
-    where: { id: batchId },
-    include: { event: true },
-  });
+  const batch = await prisma.importBatch.findUniqueOrThrow({ where: { id: batchId } });
 
-  if (batch.event.scheduleSource !== "AES" || !batch.event.scheduleUrl) {
+  if (batch.scheduleSource !== "AES" || !batch.scheduleUrl) {
     redirect(batchPath(batchId, { filter, error: "no-schedule-url" }));
   }
 
-  const aesEventId = parseAesEventIdFromUrl(batch.event.scheduleUrl!);
+  const aesEventId = parseAesEventIdFromUrl(batch.scheduleUrl!);
   if (!aesEventId) {
     redirect(batchPath(batchId, { filter, error: "bad-schedule-url" }));
   }
@@ -165,16 +162,13 @@ export async function fetchAesStandings(batchId: string, formData: FormData) {
 export async function fetchAndCommitAesMatches(batchId: string, formData: FormData) {
   const filter = currentFilter(formData);
 
-  const batch = await prisma.importBatch.findUniqueOrThrow({
-    where: { id: batchId },
-    include: { event: true },
-  });
+  const batch = await prisma.importBatch.findUniqueOrThrow({ where: { id: batchId } });
 
-  if (batch.event.scheduleSource !== "AES" || !batch.event.scheduleUrl) {
+  if (batch.scheduleSource !== "AES" || !batch.scheduleUrl) {
     redirect(batchPath(batchId, { filter, error: "no-schedule-url" }));
   }
 
-  const aesEventId = parseAesEventIdFromUrl(batch.event.scheduleUrl!);
+  const aesEventId = parseAesEventIdFromUrl(batch.scheduleUrl!);
   if (!aesEventId) {
     redirect(batchPath(batchId, { filter, error: "bad-schedule-url" }));
   }
@@ -190,16 +184,13 @@ export async function fetchAndCommitAesMatches(batchId: string, formData: FormDa
 export async function fetchSportwrenchStandings(batchId: string, formData: FormData) {
   const filter = currentFilter(formData);
 
-  const batch = await prisma.importBatch.findUniqueOrThrow({
-    where: { id: batchId },
-    include: { event: true },
-  });
+  const batch = await prisma.importBatch.findUniqueOrThrow({ where: { id: batchId } });
 
-  if (batch.event.scheduleSource !== "SPORTWRENCH" || !batch.event.scheduleUrl) {
+  if (batch.scheduleSource !== "SPORTWRENCH" || !batch.scheduleUrl) {
     redirect(batchPath(batchId, { filter, error: "no-schedule-url" }));
   }
 
-  const swEventId = parseSportwrenchEventIdFromUrl(batch.event.scheduleUrl!);
+  const swEventId = parseSportwrenchEventIdFromUrl(batch.scheduleUrl!);
   if (!swEventId) {
     redirect(batchPath(batchId, { filter, error: "bad-schedule-url" }));
   }
@@ -252,16 +243,13 @@ export async function fetchSportwrenchStandings(batchId: string, formData: FormD
 export async function fetchAndCommitSportwrenchMatches(batchId: string, formData: FormData) {
   const filter = currentFilter(formData);
 
-  const batch = await prisma.importBatch.findUniqueOrThrow({
-    where: { id: batchId },
-    include: { event: true },
-  });
+  const batch = await prisma.importBatch.findUniqueOrThrow({ where: { id: batchId } });
 
-  if (batch.event.scheduleSource !== "SPORTWRENCH" || !batch.event.scheduleUrl) {
+  if (batch.scheduleSource !== "SPORTWRENCH" || !batch.scheduleUrl) {
     redirect(batchPath(batchId, { filter, error: "no-schedule-url" }));
   }
 
-  const swEventId = parseSportwrenchEventIdFromUrl(batch.event.scheduleUrl!);
+  const swEventId = parseSportwrenchEventIdFromUrl(batch.scheduleUrl!);
   if (!swEventId) {
     redirect(batchPath(batchId, { filter, error: "bad-schedule-url" }));
   }
@@ -272,6 +260,25 @@ export async function fetchAndCommitSportwrenchMatches(batchId: string, formData
   }
 
   redirect(batchPath(batchId, { filter, success: "committed" }));
+}
+
+// Points this batch at one of its event's saved EventSchedule links (or clears it,
+// for a manual-CSV-only batch) -- copies url/source onto the batch as a frozen
+// snapshot (see ImportBatch.scheduleUrl's comment in schema.prisma), so later edits
+// to the EventSchedule list don't retroactively change an in-progress batch.
+export async function updateBatchSchedule(batchId: string, formData: FormData) {
+  const filter = currentFilter(formData);
+  const eventScheduleId = String(formData.get("eventScheduleId") ?? "").trim() || null;
+
+  const schedule = eventScheduleId
+    ? await prisma.eventSchedule.findUnique({ where: { id: eventScheduleId } })
+    : null;
+
+  await prisma.importBatch.update({
+    where: { id: batchId },
+    data: { scheduleUrl: schedule?.url ?? null, scheduleSource: schedule?.source ?? null },
+  });
+  redirect(batchPath(batchId, { filter }));
 }
 
 export async function resolveBatch(batchId: string, formData: FormData) {

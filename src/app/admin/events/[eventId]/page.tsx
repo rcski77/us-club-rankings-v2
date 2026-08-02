@@ -8,6 +8,7 @@ import {
   selectClass,
   primaryButtonClass,
   secondaryButtonClass,
+  smallSecondaryButtonClass,
   errorBannerClass,
   successBannerClass,
   tableClass,
@@ -57,11 +58,6 @@ async function updateEvent(eventId: string, formData: FormData) {
   const city = String(formData.get("city") ?? "").trim() || null;
   const state = String(formData.get("state") ?? "").trim() || null;
   const zip = String(formData.get("zip") ?? "").trim() || null;
-  const scheduleUrl = String(formData.get("scheduleUrl") ?? "").trim() || null;
-  const scheduleSourceRaw = String(formData.get("scheduleSource") ?? "").trim();
-  const scheduleSource = SCHEDULE_SOURCES.includes(scheduleSourceRaw as ImportSource)
-    ? (scheduleSourceRaw as ImportSource)
-    : null;
 
   const startDate = startDateRaw ? new Date(startDateRaw) : null;
   const endDate = endDateRaw ? new Date(endDateRaw) : null;
@@ -72,7 +68,7 @@ async function updateEvent(eventId: string, formData: FormData) {
 
   await prisma.event.update({
     where: { id: eventId },
-    data: { name, startDate, endDate, isAnchor, addressLine, city, state, zip, scheduleUrl, scheduleSource },
+    data: { name, startDate, endDate, isAnchor, addressLine, city, state, zip },
   });
 
   revalidatePath(`/admin/events/${eventId}`);
@@ -80,27 +76,90 @@ async function updateEvent(eventId: string, formData: FormData) {
   redirect(`/admin/events/${eventId}?success=1`);
 }
 
-async function startEventImport(eventId: string, formData: FormData) {
+async function addEventSchedule(eventId: string, formData: FormData) {
+  "use server";
+
+  const url = String(formData.get("url") ?? "").trim();
+  const sourceRaw = String(formData.get("source") ?? "").trim();
+  const label = String(formData.get("label") ?? "").trim() || null;
+  const source = SCHEDULE_SOURCES.includes(sourceRaw as ImportSource) ? (sourceRaw as ImportSource) : null;
+
+  if (!url || !source) {
+    redirect(`/admin/events/${eventId}?error=invalid-schedule`);
+  }
+
+  await prisma.eventSchedule.create({ data: { eventId, url, source: source!, label } });
+
+  revalidatePath(`/admin/events/${eventId}`);
+  redirect(`/admin/events/${eventId}`);
+}
+
+async function deleteEventSchedule(eventId: string, scheduleId: string) {
+  "use server";
+
+  await prisma.eventSchedule.delete({ where: { id: scheduleId } });
+
+  revalidatePath(`/admin/events/${eventId}`);
+  redirect(`/admin/events/${eventId}`);
+}
+
+// Starts one import batch against a single schedule link (or none, for a
+// manual-CSV-only import) -- eventScheduleId "" means no schedule.
+async function startImportForSchedule(eventId: string, formData: FormData) {
+  "use server";
+
+  const session = await auth();
+  const importTypeRaw = String(formData.get("importType") ?? "TEAM_FINISHES");
+  const importType = importTypeRaw === "MATCH_RESULTS" ? "MATCH_RESULTS" : "TEAM_FINISHES";
+  const eventScheduleId = String(formData.get("eventScheduleId") ?? "").trim() || null;
+
+  const schedule = eventScheduleId
+    ? await prisma.eventSchedule.findUnique({ where: { id: eventScheduleId } })
+    : null;
+
+  const batch = await prisma.importBatch.create({
+    data: {
+      eventId,
+      source: schedule?.source ?? "AES",
+      importType,
+      status: "DRAFT",
+      scheduleUrl: schedule?.url ?? null,
+      scheduleSource: schedule?.source ?? null,
+      createdById: session?.user?.id ?? null,
+    },
+  });
+
+  redirect(`/admin/imports/${batch.id}`);
+}
+
+// Starts one import batch per schedule link on this event, in one click -- this is
+// what lets a weekend split across several AES/Sportwrench schedule pages get
+// combined into a single event without starting each import by hand. Sequential,
+// not Promise.all -- see docs/dev-environment.md.
+async function startImportForAllSchedules(eventId: string, formData: FormData) {
   "use server";
 
   const session = await auth();
   const importTypeRaw = String(formData.get("importType") ?? "TEAM_FINISHES");
   const importType = importTypeRaw === "MATCH_RESULTS" ? "MATCH_RESULTS" : "TEAM_FINISHES";
 
-  const event = await prisma.event.findUnique({ where: { id: eventId } });
-  // Batch source follows the event's own configured platform -- see the identical
-  // comment on startImportBatch in admin/imports/page.tsx.
-  const batch = await prisma.importBatch.create({
-    data: {
-      eventId,
-      source: event?.scheduleSource ?? "AES",
-      importType,
-      status: "DRAFT",
-      createdById: session?.user?.id ?? null,
-    },
-  });
+  const schedules = await prisma.eventSchedule.findMany({ where: { eventId } });
+  for (const schedule of schedules) {
+    await prisma.importBatch.create({
+      data: {
+        eventId,
+        source: schedule.source,
+        importType,
+        status: "DRAFT",
+        scheduleUrl: schedule.url,
+        scheduleSource: schedule.source,
+        createdById: session?.user?.id ?? null,
+      },
+    });
+  }
 
-  redirect(`/admin/imports/${batch.id}`);
+  revalidatePath(`/admin/events/${eventId}`);
+  redirect(`/admin/events/${eventId}?success=imports-started`);
 }
 
 async function createDivision(eventId: string, formData: FormData) {
@@ -143,6 +202,7 @@ export default async function EventDetailPage({
     where: { id: eventId },
     include: {
       season: true,
+      schedules: { orderBy: { createdAt: "asc" } },
       divisions: {
         orderBy: [{ ageGroup: "desc" }, { name: "asc" }],
         include: {
@@ -159,7 +219,9 @@ export default async function EventDetailPage({
 
   const createDivisionWithEvent = createDivision.bind(null, eventId);
   const updateEventWithId = updateEvent.bind(null, eventId);
-  const startEventImportWithId = startEventImport.bind(null, eventId);
+  const addEventScheduleWithId = addEventSchedule.bind(null, eventId);
+  const startImportForAllSchedulesWithId = startImportForAllSchedules.bind(null, eventId);
+  const startImportForScheduleWithId = startImportForSchedule.bind(null, eventId);
 
   return (
     <div>
@@ -178,7 +240,83 @@ export default async function EventDetailPage({
       {error === "invalid" && (
         <p className={errorBannerClass}>Name and valid start/end dates are required.</p>
       )}
+      {error === "invalid-schedule" && (
+        <p className={errorBannerClass}>A schedule URL and platform are both required.</p>
+      )}
       {success === "1" && <p className={successBannerClass}>Event saved.</p>}
+      {success === "imports-started" && (
+        <p className={successBannerClass}>Started one import per schedule link below.</p>
+      )}
+
+      <section className="mb-8">
+        <h2 className="mb-2 text-lg font-medium">Schedule links</h2>
+        <p className="mb-2 text-xs text-slate-500">
+          One row per results/schedule page this event&apos;s divisions are spread
+          across. Most events have exactly one -- add more here when one weekend is
+          split across several AES/Sportwrench schedule pages (e.g. separate pages per
+          age group), then start an import for each below to combine them all into
+          this one event.
+        </p>
+        {event.schedules.length > 0 && (
+          <table className={`${tableClass} mb-3`}>
+            <thead>
+              <tr>
+                <th className={thClass}>Label</th>
+                <th className={thClass}>Platform</th>
+                <th className={thClass}>URL</th>
+                <th className={thClass}></th>
+              </tr>
+            </thead>
+            <tbody>
+              {event.schedules.map((s) => {
+                const deleteWithIds = deleteEventSchedule.bind(null, eventId, s.id);
+                return (
+                  <tr key={s.id}>
+                    <td className={tdClass}>{s.label ?? "—"}</td>
+                    <td className={tdClass}>{s.source}</td>
+                    <td className={`${tdClass} max-w-[20rem] truncate text-xs text-slate-500`}>{s.url}</td>
+                    <td className={tdClass}>
+                      <form action={deleteWithIds}>
+                        <button type="submit" className={smallSecondaryButtonClass}>
+                          Remove
+                        </button>
+                      </form>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
+        <form action={addEventScheduleWithId} className="flex flex-wrap items-end gap-3">
+          <label className="flex flex-1 flex-col gap-1 text-sm">
+            Schedule URL
+            <input
+              name="url"
+              placeholder="https://results.advancedeventsystems.com/event/..."
+              required
+              className={inputClass}
+            />
+          </label>
+          <label className="flex flex-col gap-1 text-sm">
+            Platform
+            <select name="source" className={selectClass} defaultValue="AES" required>
+              {SCHEDULE_SOURCES.map((s) => (
+                <option key={s} value={s}>
+                  {s}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex flex-col gap-1 text-sm">
+            Label (optional)
+            <input name="label" placeholder="15s/16s" className={`${inputClass} w-32`} />
+          </label>
+          <button type="submit" className={secondaryButtonClass}>
+            Add schedule link
+          </button>
+        </form>
+      </section>
 
       <section className="mb-8">
         <h2 className="mb-2 text-lg font-medium">Imports</h2>
@@ -188,6 +326,7 @@ export default async function EventDetailPage({
               <tr>
                 <th className={thClass}>Type</th>
                 <th className={thClass}>Status</th>
+                <th className={thClass}>Schedule</th>
                 <th className={thClass}>Created</th>
               </tr>
             </thead>
@@ -200,21 +339,67 @@ export default async function EventDetailPage({
                     </Link>
                   </td>
                   <td className={tdClass}>{IMPORT_STATUS_LABELS[b.status] ?? b.status}</td>
+                  <td className={`${tdClass} max-w-[16rem] truncate text-xs text-slate-500`}>
+                    {b.scheduleUrl ?? "—"}
+                  </td>
                   <td className={tdClass}>{b.createdAt.toISOString().slice(0, 10)}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         )}
-        <div className="flex flex-wrap gap-3">
-          <form action={startEventImportWithId}>
+
+        {event.schedules.length > 1 && (
+          <div className="mb-4 flex flex-wrap gap-3 border-b border-slate-200 pb-4">
+            <form action={startImportForAllSchedulesWithId}>
+              <input type="hidden" name="importType" value="TEAM_FINISHES" />
+              <button type="submit" className={primaryButtonClass}>
+                Start Team Finishes import for all {event.schedules.length} schedules
+              </button>
+            </form>
+            <form action={startImportForAllSchedulesWithId}>
+              <input type="hidden" name="importType" value="MATCH_RESULTS" />
+              <button type="submit" className={secondaryButtonClass}>
+                Start Match Results import for all {event.schedules.length} schedules
+              </button>
+            </form>
+          </div>
+        )}
+
+        <p className="mb-2 text-sm font-medium">Start a single import</p>
+        <div className="mb-3 flex flex-wrap gap-3">
+          <form action={startImportForScheduleWithId} className="flex flex-wrap items-end gap-3">
             <input type="hidden" name="importType" value="TEAM_FINISHES" />
+            <label className="flex flex-col gap-1 text-sm">
+              Schedule
+              <select name="eventScheduleId" className={selectClass} defaultValue="">
+                <option value="">No schedule (manual CSV upload)</option>
+                {event.schedules.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.label ? `${s.label} — ` : ""}
+                    {s.source}
+                  </option>
+                ))}
+              </select>
+            </label>
             <button type="submit" className={primaryButtonClass}>
               Start Team Finishes import
             </button>
           </form>
-          <form action={startEventImportWithId}>
+          <form action={startImportForScheduleWithId} className="flex flex-wrap items-end gap-3">
             <input type="hidden" name="importType" value="MATCH_RESULTS" />
+            <label className="flex flex-col gap-1 text-sm">
+              Schedule
+              <select name="eventScheduleId" className={selectClass} defaultValue="">
+                <option value="">No schedule (manual CSV upload)</option>
+                {event.schedules.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.label ? `${s.label} — ` : ""}
+                    {s.source}
+                  </option>
+                ))}
+              </select>
+            </label>
             <button type="submit" className={secondaryButtonClass}>
               Start Match Results import
             </button>
@@ -282,32 +467,6 @@ export default async function EventDetailPage({
             <input name="isAnchor" type="checkbox" defaultChecked={event.isAnchor} />
             Anchor event
           </label>
-          <div className="flex gap-3">
-            <label className="flex flex-1 flex-col gap-1 text-sm">
-              Schedule URL
-              <input
-                name="scheduleUrl"
-                placeholder="https://results.advancedeventsystems.com/event/..."
-                defaultValue={event.scheduleUrl ?? ""}
-                className={inputClass}
-              />
-            </label>
-            <label className="flex flex-col gap-1 text-sm">
-              Platform
-              <select
-                name="scheduleSource"
-                className={selectClass}
-                defaultValue={event.scheduleSource ?? ""}
-              >
-                <option value="">Not set</option>
-                {SCHEDULE_SOURCES.map((s) => (
-                  <option key={s} value={s}>
-                    {s}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
           <button type="submit" className={`${primaryButtonClass} self-start`}>
             Save
           </button>

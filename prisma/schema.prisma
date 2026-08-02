@@ -184,11 +184,11 @@ model Event {
   isAnchor    Boolean  @default(false) // USAV Nationals / Triple Crown NIT -- exempt
   // from the future suggestion algorithm (Phase 4+); manually assigned max-value
   // templates always.
-  scheduleUrl    String? // results/schedule page URL for this event on whichever
-  // platform it runs on, e.g. "https://results.advancedeventsystems.com/event/PTAwMDAwMzg4Mzk90".
-  scheduleSource ImportSource? // which platform scheduleUrl points at. AES and
-  // Sportwrench have working fetch implementations; TM2/VBSchedule can still be
-  // recorded here for future adapters, they just don't have a "Fetch" button yet.
+  schedules     EventSchedule[] // one row per results/schedule page this event's
+  // divisions are spread across -- most events have exactly one, but some run one
+  // weekend split across several AES/Sportwrench schedule pages (e.g. separate pages
+  // per age group); each gets its own row here and its own import batch, all landing
+  // on this one Event.
   divisions     Division[]
   importBatches ImportBatch[]
   matches       Match[]
@@ -196,6 +196,21 @@ model Event {
   updatedAt     DateTime      @updatedAt
 
   @@index([seasonId])
+}
+
+model EventSchedule {
+  id        String       @id @default(cuid())
+  eventId   String
+  event     Event        @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  url       String // e.g. "https://results.advancedeventsystems.com/event/PTAwMDAwMzg4Mzk90".
+  source    ImportSource // which platform url points at. AES and Sportwrench have
+  // working fetch implementations; TM2/VBSchedule can still be recorded here for
+  // future adapters, they just don't have a "Fetch" button yet.
+  label     String? // optional, e.g. "15s/16s" -- distinguishes rows when an event
+  // has more than one schedule link.
+  createdAt DateTime     @default(now())
+
+  @@index([eventId])
 }
 
 enum DivisionTierLabel {
@@ -597,6 +612,12 @@ model ImportBatch {
   source      ImportSource      @default(AES)
   importType  ImportType        @default(TEAM_FINISHES)
   status      ImportBatchStatus @default(DRAFT)
+  scheduleUrl    String? // frozen copy of the EventSchedule (url/source) this batch
+  // was started from -- same frozen-copy pattern as DivisionPointBand (see
+  // prisma/CLAUDE.md): a batch keeps using the link it was created with even if the
+  // event's EventSchedule rows change later. Null for batches driven purely by
+  // manually-uploaded CSVs with no fetchable schedule.
+  scheduleSource ImportSource?
   summaryJson Json? // display cache of row-status + new-club/team/division counts,
   // refreshed after resolve/commit -- mirrors the Division.scoringStatus-coarse-field
   // / audit-trail-detail pattern used elsewhere; ImportRow is the real detail.
