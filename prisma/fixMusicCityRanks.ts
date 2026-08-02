@@ -16,11 +16,15 @@ import { recomputeRankingsForDivision } from "../src/lib/ranking/computeRanking"
  * explicit user request not to re-run the full import.
  */
 async function main() {
-  const event = await prisma.event.findFirst({ where: { name: { contains: "NIKE Music City" } } });
+  const event = await prisma.event.findFirst({
+    where: { name: { contains: "NIKE Music City" } },
+    include: { schedules: true },
+  });
   if (!event) throw new Error("Event not found.");
-  if (!event.scheduleUrl) throw new Error("Event has no scheduleUrl.");
-  const sportwrenchEventId = parseSportwrenchEventIdFromUrl(event.scheduleUrl);
-  if (!sportwrenchEventId) throw new Error(`Could not parse a Sportwrench event id from "${event.scheduleUrl}".`);
+  const schedule = event.schedules.find((s) => s.source === "SPORTWRENCH");
+  if (!schedule) throw new Error("Event has no Sportwrench schedule link.");
+  const sportwrenchEventId = parseSportwrenchEventIdFromUrl(schedule.url);
+  if (!sportwrenchEventId) throw new Error(`Could not parse a Sportwrench event id from "${schedule.url}".`);
 
   console.log(`Fetching live standings for "${event.name}" (${sportwrenchEventId})...`);
   const live = await fetchSportwrenchStandingsRows(sportwrenchEventId);
