@@ -661,6 +661,49 @@ dev data (1307 Combined rows): recompute completes and shows fresh data within
 seconds of the "started" redirect. Real prod verification still pending a redeploy
 at the time of this note.
 
+**Elo calibration — done (2026-08-03).** With real Match data at meaningful scale
+(~114k matches in prod), built `prisma/backtestElo.ts` (`npm run backtest:elo`, or
+`./run-prod-script.sh prisma/backtestElo.ts` against prod — see that script) and
+`src/lib/rating/predictionMetrics.ts`: replays every real completed match
+chronologically and scores each pre-match win probability (`EloStep.expectedA`,
+already computed pre-update — no new replay logic needed) against what actually
+happened, via accuracy/logLoss/Brier score. `elo.ts`'s tunable constants
+(`BASE_K`/`PROVISIONAL_K`/`PROVISIONAL_MATCH_THRESHOLD`/
+`OPEN_DIVISION_WIN_BONUS`/`LOSS_SOFTEN`) were threaded into a new `EloConfig`
+parameter (optional, defaults reproduce prior behavior exactly) so the backtest can
+grid-search candidate values without editing the file per candidate, plus a
+`marginStrength` knob (0 = no margin-of-victory adjustment, 1 = full effect) and a
+`divisionWeightEnabled` on/off toggle that didn't exist as separate levers before.
+Run twice against real data (dev ~57k matches, prod ~114k matches, both agreeing) with
+one dimension swept at a time; two dimensions (`provisionalK`, `marginStrength`) kept
+improving monotonically with no plateau even after the ranges were widened once, so —
+per explicit user decision, to avoid overfitting a single season's data with no
+held-out set to validate against — those two were set to a moderate step in the
+confirmed-helpful direction rather than the literal edge of the widened sweep; the
+other three constants showed genuine plateaus/interior optima and were set there
+directly. New calibrated defaults: `BASE_K` 24→32, `PROVISIONAL_K` 40→56,
+`PROVISIONAL_MATCH_THRESHOLD` 10→25, `OPEN_DIVISION_WIN_BONUS`/`LOSS_SOFTEN`
+1.15/0.87→1.30/0.74 (2x the original pair's offset from 1.0), `marginStrength`
+1(implicit)→1.5. Division-strength weighting was confirmed to help prediction accuracy
+(re-tested three times) and left unchanged. A 3-tier K schedule (provisional → a middle
+tier → a lower "veteran" tier for teams with a long track record this season, instead
+of one flat K past the provisional cutoff) was also hypothesized and built —
+`EloConfig` gained `midK`/`veteranMatchThreshold`, `elo.ts`'s `resolveK()` replaces the
+old two-branch ternary, purely additive (`veteranMatchThreshold ==
+provisionalMatchThreshold` by default collapses the mid tier to empty) — but the
+backtest's 3-tier grid search found the best 3-tier schedule ties rather than beats the
+best flat schedule on both dev and prod runs, so this shipped as a real capability that
+exists in `EloConfig` but is **not** activated by the new defaults (mid tier stays
+collapsed). Verified end-to-end: full test suite green after the refactor (two
+pre-existing tests that hardcoded the old `PROVISIONAL_MATCH_THRESHOLD`'s literal value
+in their match counts were fixed to derive it from `DEFAULT_ELO_CONFIG` instead, so
+they stay correct through future recalibration); baseline predictive accuracy with the
+new defaults improved from logLoss 0.632→0.625 (dev) confirming a real, not cosmetic,
+gain. `run-prod-script.sh` (new, repo root) generalizes the throwaway-container pattern
+`docker-compose.prod.yml`'s header comment already documented for seeding, so any
+`prisma/*.ts` one-off (this backtest, or the existing seed scripts) can run against
+prod without exposing Postgres or editing the compose file.
+
 ## Deviations from the original plan
 
 The plan below is preserved close to its original approved form for continuity, but
@@ -1385,7 +1428,10 @@ event can be large (e.g. the 352-row USAV Nationals sample spans 6 tiers).
    reliable `lineageKey` input. Not independently confirmed.
 10. Colley/Elo/Massey tuning constants (bucket weights, carryWeight, K-factor, ridge
     strength) are reasonable defaults from established practice, not calibrated to
-    this dataset — Phase 4/5 calibration passes are where these get tuned.
+    this dataset — Phase 4/5 calibration passes are where these get tuned. **Elo's own
+    constants were calibrated 2026-08-03, see the Status entry below — Colley (no real
+    tunable constants) and Massey (ridge strength, division-weight application) remain
+    open.**
 11. `aes-tourney-director`'s exact AES fetch pattern (`lib/aesFetch.ts` and
     `services/matchSync.ts` — endpoint shape, headers/UA spoofing, timeout/retry
     handling) should be reviewed before writing Phase 5's Match Results fetcher.

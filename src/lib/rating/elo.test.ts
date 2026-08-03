@@ -188,10 +188,13 @@ describe("computeEloRatings", () => {
   });
 
   it("uses a higher K for a team still under the provisional match threshold", () => {
-    // "a" plays 11 matches against fresh opponents each time -- by the 11th match,
-    // a's own count (10) is right at the provisional boundary, so the swing from that
-    // match reflects PROVISIONAL_K one more time before dropping to BASE_K on the 12th.
-    const opponents = Array.from({ length: 12 }, (_, i) => `opp${i}`);
+    // "a" plays fresh opponents each time -- derived from DEFAULT_ELO_CONFIG's actual
+    // threshold (not hardcoded) so this test stays correct if that constant is
+    // recalibrated. By the (threshold+1)th match, a's own count (== threshold) is
+    // right at the provisional boundary, so that match's swing reflects PROVISIONAL_K
+    // one more time before dropping to BASE_K on the (threshold+2)th.
+    const threshold = DEFAULT_ELO_CONFIG.provisionalMatchThreshold;
+    const opponents = Array.from({ length: threshold + 2 }, (_, i) => `opp${i}`);
     const matches = opponents.map((opp, i) => ({
       teamAId: "a",
       teamBId: opp,
@@ -200,11 +203,15 @@ describe("computeEloRatings", () => {
       setsA: 2,
       setsB: 0,
     }));
-    const after10 = computeEloRatings(matches.slice(0, 10)).find((r) => r.teamId === "a")!.rating;
-    const after11 = computeEloRatings(matches.slice(0, 11)).find((r) => r.teamId === "a")!.rating;
-    const after12 = computeEloRatings(matches.slice(0, 12)).find((r) => r.teamId === "a")!.rating;
-    const provisionalSwing = after11 - after10;
-    const baseSwing = after12 - after11;
+    const afterThreshold = computeEloRatings(matches.slice(0, threshold)).find((r) => r.teamId === "a")!.rating;
+    const afterThresholdPlus1 = computeEloRatings(matches.slice(0, threshold + 1)).find(
+      (r) => r.teamId === "a",
+    )!.rating;
+    const afterThresholdPlus2 = computeEloRatings(matches.slice(0, threshold + 2)).find(
+      (r) => r.teamId === "a",
+    )!.rating;
+    const provisionalSwing = afterThresholdPlus1 - afterThreshold;
+    const baseSwing = afterThresholdPlus2 - afterThresholdPlus1;
     expect(provisionalSwing).toBeGreaterThan(baseSwing);
   });
 
@@ -387,7 +394,10 @@ describe("marginMultiplier (via computeEloHistory)", () => {
   });
 
   it("falls back to the old set-fraction-only multiplier when no setScores are given", () => {
-    const withoutScores = computeEloHistory([base]);
+    // marginStrength: 1 pinned explicitly -- this test isolates the raw setComponent
+    // formula itself, independent of whatever marginStrength the current calibrated
+    // default happens to be (see DEFAULT_ELO_CONFIG in elo.ts).
+    const withoutScores = computeEloHistory([base], { ...DEFAULT_ELO_CONFIG, marginStrength: 1 });
     // Same as the pre-existing set-fraction formula: 0.8 + 0.4 * (2/3)
     expect(withoutScores[0].multiplier).toBeCloseTo(0.8 + 0.4 * (2 / 3), 10);
   });
@@ -618,9 +628,11 @@ describe("EloConfig", () => {
   });
 
   it("a baseK override changes the swing for a warmed-up (non-provisional) team", () => {
-    // Warm both teams up past the provisional threshold first, so the final match
-    // uses baseK, not provisionalK.
-    const warmup = Array.from({ length: 10 }, (_, i) => ({
+    // Warm both teams up past the provisional threshold first (derived from
+    // DEFAULT_ELO_CONFIG, not hardcoded, so this stays correct if that constant is
+    // recalibrated), so the final match uses baseK, not provisionalK.
+    const threshold = DEFAULT_ELO_CONFIG.provisionalMatchThreshold;
+    const warmup = Array.from({ length: threshold }, (_, i) => ({
       teamAId: "a",
       teamBId: `opp${i}`,
       winnerTeamId: "a",
@@ -628,7 +640,7 @@ describe("EloConfig", () => {
       setsA: 2,
       setsB: 0,
     })).concat(
-      Array.from({ length: 10 }, (_, i) => ({
+      Array.from({ length: threshold }, (_, i) => ({
         teamAId: "b",
         teamBId: `bopp${i}`,
         winnerTeamId: "b",
@@ -637,7 +649,7 @@ describe("EloConfig", () => {
         setsB: 0,
       })),
     );
-    const decisive = { ...base, matchDate: new Date(2026, 0, 20) };
+    const decisive = { ...base, matchDate: new Date(2026, 0, threshold + 10) };
 
     const defaultRating = computeEloRatings([...warmup, decisive]).find((r) => r.teamId === "a")!.rating;
     const highK = computeEloRatings(
@@ -667,21 +679,22 @@ describe("EloConfig", () => {
   });
 
   describe("3-tier K (provisional -> mid -> veteran/base)", () => {
-    // "a" plays 20 matches against fresh opponents, each a clean sweep so K is the
-    // only thing that varies the swing (multiplier pinned by set fraction, no
-    // divisionWeight/openBonus in play). Every match is scored via a single replay
-    // (not one computeEloRatings call per prefix) so each step's ratingABefore is
-    // exactly the running rating -- the same replay production itself does.
-    const opponents = Array.from({ length: 20 }, (_, i) => `opp${i}`);
-    const matches = opponents.map((opp, i) => ({
-      id: `m${i}`,
-      teamAId: "a",
-      teamBId: opp,
-      winnerTeamId: "a",
-      matchDate: new Date(2026, 0, i + 1),
-      setsA: 2,
-      setsB: 0,
-    }));
+    // "a" plays fresh opponents, each a clean sweep so K is the only thing that varies
+    // the swing (multiplier pinned by set fraction, no divisionWeight/openBonus in
+    // play). Every match is scored via a single replay (not one computeEloRatings call
+    // per prefix) so each step's ratingABefore is exactly the running rating -- the
+    // same replay production itself does.
+    function buildMatches(count: number) {
+      return Array.from({ length: count }, (_, i) => ({
+        id: `m${i}`,
+        teamAId: "a",
+        teamBId: `opp${i}`,
+        winnerTeamId: "a",
+        matchDate: new Date(2026, 0, i + 1),
+        setsA: 2,
+        setsB: 0,
+      }));
+    }
 
     it("a team past provisionalMatchThreshold but before veteranMatchThreshold uses midK, not baseK", () => {
       const config = {
@@ -691,7 +704,7 @@ describe("EloConfig", () => {
         veteranMatchThreshold: 15,
         baseK: 24,
       };
-      const steps = computeEloHistory(matches, config);
+      const steps = computeEloHistory(buildMatches(20), config);
       // a's 10th match (index 9): a has played 9 prior matches -- past the
       // provisional threshold (5), short of the veteran threshold (15) -- so this
       // step's kA should be midK, not provisionalK or baseK.
@@ -703,6 +716,9 @@ describe("EloConfig", () => {
     });
 
     it("defaults (veteranMatchThreshold == provisionalMatchThreshold) collapse the mid tier -- no team ever sees midK", () => {
+      // Derived from the real default threshold (not hardcoded) so this stays correct
+      // if that constant is recalibrated -- enough matches to cross it plus a margin.
+      const matches = buildMatches(DEFAULT_ELO_CONFIG.provisionalMatchThreshold + 10);
       const steps = computeEloHistory(matches, DEFAULT_ELO_CONFIG);
       const kValuesSeen = new Set(steps.map((s) => s.kA));
       expect(kValuesSeen).toEqual(new Set([DEFAULT_ELO_CONFIG.provisionalK, DEFAULT_ELO_CONFIG.baseK]));
