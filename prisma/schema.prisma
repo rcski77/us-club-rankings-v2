@@ -203,9 +203,9 @@ model EventSchedule {
   eventId   String
   event     Event        @relation(fields: [eventId], references: [id], onDelete: Cascade)
   url       String // e.g. "https://results.advancedeventsystems.com/event/PTAwMDAwMzg4Mzk90".
-  source    ImportSource // which platform url points at. AES and Sportwrench have
-  // working fetch implementations; TM2/VBSchedule can still be recorded here for
-  // future adapters, they just don't have a "Fetch" button yet.
+  source    ImportSource // which platform url points at. AES, Sportwrench, and
+  // VBSchedule have working fetch implementations; TM2 can still be recorded here for
+  // a future adapter, it just doesn't have a "Fetch" button yet.
   label     String? // optional, e.g. "15s/16s" -- distinguishes rows when an event
   // has more than one schedule link.
   createdAt DateTime     @default(now())

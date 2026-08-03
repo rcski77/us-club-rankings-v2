@@ -472,8 +472,41 @@ the "periodic/scheduled Massey cross-check re-run" gap this section used to note
 missing.
 
 Sportwrench match-level fetching is also done (`sportwrenchMatches.ts`, alongside the
-existing `sportwrenchStandings.ts`/TEAM_FINISHES coverage) — **not yet built**: TM2/
-VBSchedule match-level fetchers.
+existing `sportwrenchStandings.ts`/TEAM_FINISHES coverage).
+
+**VBSchedule adapter — done (2026-08-03).** Both TEAM_FINISHES and MATCH_RESULTS,
+following the exact AES/Sportwrench pattern. VBSchedule turned out to be an
+Inertia.js app: every page's initial HTML embeds the full server-rendered props as
+JSON in one `<script data-page="app" type="application/json">` tag, no separate JSON
+API and — unlike Sportwrench — no Cloudflare TLS-fingerprint block (confirmed a plain
+`fetch()` with a normal User-Agent gets a clean 200 directly against the real site),
+so `vbscheduleFetch.ts` uses `fetch()` like `aesFetch.ts` rather than shelling out to
+curl like `sportwrenchFetch.ts`. `vbscheduleStandings.ts` reads each division's
+`.../teams` page (`finalFinish`/`name`/`alternateIdentifier`/`clubName` per team) into
+the same `RawAesCsvRow`-shaped rows AES/Sportwrench standings already produce.
+VBSchedule's team code (`alternateIdentifier`, e.g. "G14MNSEL1NO") turned out to be
+the *same* fixed-width structure AES's `TeamCode` uses (gender+ageGroup+clubCode+
+teamNumber+region) — confirmed by resolving real fetched rows against the dev DB's
+existing AES-imported clubs and getting real matches — so this reuses
+`aesTeamCode.ts`'s decoder unchanged rather than writing a second parser.
+`vbscheduleMatches.ts` has no single "all matches" endpoint either (same shape of
+problem `aesMatches.ts`/`sportwrenchMatches.ts` already solved): walks each division's
+`.../division/{id}` page for its rounds' pool/bracket ids, then each `.../pool/{id}`
+page for that pool's match list (team ids, set-by-set scores, winner), reusing
+`AesFetchedMatch`/`resolveAesMatches()` as-is like Sportwrench's adapter does. New
+`importVbscheduleMatchResults()` (`commitMatches.ts`) and worker-process wiring
+(`commitMatchesInWorker.ts`/`commitMatchesWorkerEntry.ts`) mirror the AES/Sportwrench
+functions exactly. `/admin/imports` gained "Fetch standings from VBSchedule" and
+"Fetch match results from VBSchedule" buttons alongside the existing AES/Sportwrench
+ones, gated on `scheduleSource === "VBSCHEDULE"` the same way. Verified end-to-end
+against the real event `https://vbschedule.com/events/230` (2026 Mizuno Northern
+Lights Qualifier): standings fetch pulled all 365 rows across 12 divisions and
+resolved cleanly (22 flagged "needs attention" for ambiguous team matches — the
+expected review-queue behavior, not a bug); a standalone fetch+parse check against one
+division separately confirmed all 85 real completed matches across 14 pools/brackets
+came back with correct scores and winners. The verification event/import batch was
+deleted afterward, not left in the dev DB. **Still not built: a TM2 adapter** — TM2
+remains recordable as an `EventSchedule` source with no fetch button yet.
 
 **Non-anchor `PointTemplate` library — seeded.** `prisma/seedPointTemplates.ts` (new
 `db:seed-point-templates` script, idempotent — upserts by name, replaces bands
