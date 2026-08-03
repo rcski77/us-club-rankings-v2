@@ -13,7 +13,14 @@ export async function fetchVbscheduleEventInfo(eventId: string): Promise<Vbsched
   const page = await fetchVbschedulePage<ApiEventProps>(`${VBS_BASE}/events/${encodeURIComponent(eventId)}`);
   return {
     name: page.props.event.name,
-    divisions: page.props.divisions.map((d) => ({ divisionId: d.id, name: d.name })),
+    // An unpublished division (confirmed against a real event: e.g. "15 American"
+    // shown greyed out with a "Not published" label on the event page) has no
+    // reachable .../teams or .../division/{id} page -- fetching one 500s. Filtered
+    // out here, once, so every downstream consumer (standings AND match results,
+    // both of which start from this same divisions list) skips it automatically.
+    divisions: page.props.divisions
+      .filter((d) => d.is_published !== false)
+      .map((d) => ({ divisionId: d.id, name: d.name })),
   };
 }
 
