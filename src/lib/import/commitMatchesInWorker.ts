@@ -3,7 +3,8 @@ import type { ImportMatchResultsResult } from "./commitMatches";
 
 type CommitMatchesWorkerData =
   | { source: "AES"; batchId: string; externalEventId: string }
-  | { source: "SPORTWRENCH"; batchId: string; externalEventId: string };
+  | { source: "SPORTWRENCH"; batchId: string; externalEventId: string }
+  | { source: "VBSCHEDULE"; batchId: string; externalEventId: string };
 
 /**
  * Runs importAesMatchResults/importSportwrenchMatchResults in a separate process
@@ -36,4 +37,11 @@ export function importSportwrenchMatchResultsInWorker(
   sportwrenchEventId: string,
 ): Promise<ImportMatchResultsResult> {
   return importMatchResultsInWorker({ source: "SPORTWRENCH", batchId, externalEventId: sportwrenchEventId });
+}
+
+export function importVbscheduleMatchResultsInWorker(
+  batchId: string,
+  vbscheduleEventId: string,
+): Promise<ImportMatchResultsResult> {
+  return importMatchResultsInWorker({ source: "VBSCHEDULE", batchId, externalEventId: vbscheduleEventId });
 }

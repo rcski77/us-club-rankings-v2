@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { fetchAesMatchResults } from "./aesMatches";
 import { fetchSportwrenchMatchResults } from "./sportwrenchMatches";
+import { fetchVbscheduleMatchResults } from "./vbscheduleMatches";
 import { resolveAesMatches, type ResolvedMatch, type SkippedMatch } from "./resolveMatches";
 
 export type ImportMatchResultsResult =
@@ -171,6 +172,37 @@ export async function importSportwrenchMatchResults(
   let fetchResult;
   try {
     fetchResult = await fetchSportwrenchMatchResults(sportwrenchEventId);
+  } catch (err) {
+    return { ok: false, reason: err instanceof Error ? err.message : String(err) };
+  }
+
+  const { teamSeasonByExternalCode, divisionIdByTeamId } = await buildMatchResolutionContext(
+    batch.event.seasonId,
+    batch.eventId,
+  );
+  const { resolved, skipped } = resolveAesMatches(fetchResult.matches, teamSeasonByExternalCode, divisionIdByTeamId);
+
+  return commitResolvedMatches(batchId, batch.eventId, resolved, skipped, fetchResult.matches.length);
+}
+
+/**
+ * VBSchedule analog of importAesMatchResults -- same fetch-then-resolve-then-commit
+ * shape, reusing resolveAesMatches() (source-agnostic despite the name, see
+ * vbscheduleMatches.ts) and commitResolvedMatches() so all three sources can never
+ * drift apart on how a resolved match actually gets written.
+ */
+export async function importVbscheduleMatchResults(
+  batchId: string,
+  vbscheduleEventId: string,
+): Promise<ImportMatchResultsResult> {
+  const batch = await prisma.importBatch.findUniqueOrThrow({
+    where: { id: batchId },
+    include: { event: true },
+  });
+
+  let fetchResult;
+  try {
+    fetchResult = await fetchVbscheduleMatchResults(vbscheduleEventId);
   } catch (err) {
     return { ok: false, reason: err instanceof Error ? err.message : String(err) };
   }

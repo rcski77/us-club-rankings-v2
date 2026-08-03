@@ -7,9 +7,15 @@ import { parseAesEventIdFromUrl } from "@/lib/import/aesEventId";
 import { fetchAesStandingsRows } from "@/lib/import/aesStandings";
 import { parseSportwrenchEventIdFromUrl } from "@/lib/import/sportwrenchEventId";
 import { fetchSportwrenchStandingsRows } from "@/lib/import/sportwrenchStandings";
+import { parseVbscheduleEventIdFromUrl } from "@/lib/import/vbscheduleEventId";
+import { fetchVbscheduleStandingsRows } from "@/lib/import/vbscheduleStandings";
 import { resolveImportBatchInWorker } from "@/lib/import/resolveInWorker";
 import { commitImportBatch } from "@/lib/import/commit";
-import { importAesMatchResultsInWorker, importSportwrenchMatchResultsInWorker } from "@/lib/import/commitMatchesInWorker";
+import {
+  importAesMatchResultsInWorker,
+  importSportwrenchMatchResultsInWorker,
+  importVbscheduleMatchResultsInWorker,
+} from "@/lib/import/commitMatchesInWorker";
 import { suggestClubName } from "@/lib/import/clubNameSuggestion";
 
 function batchPath(batchId: string, params: Record<string, string | undefined> = {}) {
@@ -255,6 +261,87 @@ export async function fetchAndCommitSportwrenchMatches(batchId: string, formData
   }
 
   const result = await importSportwrenchMatchResultsInWorker(batchId, swEventId!);
+  if (!result.ok) {
+    redirect(batchPath(batchId, { filter, error: "fetch-failed", reason: result.reason }));
+  }
+
+  redirect(batchPath(batchId, { filter, success: "committed" }));
+}
+
+export async function fetchVbscheduleStandings(batchId: string, formData: FormData) {
+  const filter = currentFilter(formData);
+
+  const batch = await prisma.importBatch.findUniqueOrThrow({ where: { id: batchId } });
+
+  if (batch.scheduleSource !== "VBSCHEDULE" || !batch.scheduleUrl) {
+    redirect(batchPath(batchId, { filter, error: "no-schedule-url" }));
+  }
+
+  const vbsEventId = parseVbscheduleEventIdFromUrl(batch.scheduleUrl!);
+  if (!vbsEventId) {
+    redirect(batchPath(batchId, { filter, error: "bad-schedule-url" }));
+  }
+
+  let result;
+  try {
+    result = await fetchVbscheduleStandingsRows(vbsEventId!);
+  } catch (err) {
+    redirect(
+      batchPath(batchId, {
+        filter,
+        error: "fetch-failed",
+        reason: err instanceof Error ? err.message : String(err),
+      }),
+    );
+  }
+
+  const filename = `vbschedule-fetch-${Date.now()}.json`;
+  const importFile = await prisma.importFile.create({
+    data: {
+      importBatchId: batchId,
+      filename,
+      partNumber: null,
+      rawContent: JSON.stringify(result.raw),
+      status: "PARSED",
+      parseError: null,
+      rowCount: result.rows.length,
+    },
+  });
+
+  if (result.rows.length > 0) {
+    await prisma.importRow.createMany({
+      data: result.rows.map((r) => ({
+        importFileId: importFile.id,
+        rowNumber: r.rowNumber,
+        ageGroupLabelRaw: r.ageGroupLabel,
+        rankRaw: r.rank,
+        teamNameRaw: r.teamNameField,
+        teamCodeRaw: r.teamCode,
+        // VBSchedule's team-list response carries the club's real name directly,
+        // same as AES's/Sportwrench's -- see fetchAesStandings's identical comment.
+        overrideClubName: r.clubName,
+      })),
+    });
+  }
+
+  redirect(batchPath(batchId, { filter }));
+}
+
+export async function fetchAndCommitVbscheduleMatches(batchId: string, formData: FormData) {
+  const filter = currentFilter(formData);
+
+  const batch = await prisma.importBatch.findUniqueOrThrow({ where: { id: batchId } });
+
+  if (batch.scheduleSource !== "VBSCHEDULE" || !batch.scheduleUrl) {
+    redirect(batchPath(batchId, { filter, error: "no-schedule-url" }));
+  }
+
+  const vbsEventId = parseVbscheduleEventIdFromUrl(batch.scheduleUrl!);
+  if (!vbsEventId) {
+    redirect(batchPath(batchId, { filter, error: "bad-schedule-url" }));
+  }
+
+  const result = await importVbscheduleMatchResultsInWorker(batchId, vbsEventId!);
   if (!result.ok) {
     redirect(batchPath(batchId, { filter, error: "fetch-failed", reason: result.reason }));
   }
