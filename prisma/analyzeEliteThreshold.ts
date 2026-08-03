@@ -139,11 +139,48 @@ async function main() {
     );
   }
 
+  // Named-division sanity check: does a specific recommended candidate still put
+  // real, recognizable big-field/championship-tier divisions where you'd expect (high
+  // Elite Presence), and genuinely smaller/weaker regional fields meaningfully lower --
+  // not just a healthier-looking aggregate distribution. Change RECOMMENDED_CANDIDATE
+  // to try a different one before re-running.
+  const RECOMMENDED_CANDIDATE = 1633;
+  console.log(`\n--- Named divisions: current (${ELO_ELITE_THRESHOLD}) vs. candidate (${RECOMMENDED_CANDIDATE}) ---`);
+  const named = divisionRatings
+    .map((d) => ({
+      ...d,
+      eliteCurrent: computeIntrinsicElitePresence(d.ratings, ELO_ELITE_THRESHOLD),
+      eliteCandidate: computeIntrinsicElitePresence(d.ratings, RECOMMENDED_CANDIDATE),
+    }))
+    .sort((a, b) => b.eliteCandidate - a.eliteCandidate);
+
+  console.log(
+    "elite@current".padEnd(16) + "elite@candidate".padEnd(18) + "teams".padEnd(8) + "division",
+  );
+  console.log("Top 20 by candidate Elite Presence (expect known big/championship-tier events near the top):");
+  for (const d of named.slice(0, 20)) {
+    console.log(
+      `${d.eliteCurrent.toFixed(0)}%`.padEnd(16) +
+        `${d.eliteCandidate.toFixed(0)}%`.padEnd(18) +
+        `${d.ratedCount}/${d.teamCount}`.padEnd(8) +
+        d.label,
+    );
+  }
+  console.log("\nBottom 10 by candidate Elite Presence (expect genuinely smaller/weaker regional fields):");
+  for (const d of named.slice(-10)) {
+    console.log(
+      `${d.eliteCurrent.toFixed(0)}%`.padEnd(16) +
+        `${d.eliteCandidate.toFixed(0)}%`.padEnd(18) +
+        `${d.ratedCount}/${d.teamCount}`.padEnd(8) +
+        d.label,
+    );
+  }
+
   console.log(
     "\nReminder: this is descriptive, not a predictive-accuracy backtest like Elo's constants got -- " +
       "there's no scoreable ground truth for 'was this division correctly called elite,' so picking a new " +
-      "threshold from this table is a judgment call (same as how the original 1450 was picked), not an " +
-      "optimization result.",
+      "threshold from this table (or the named-division sanity check above) is a judgment call (same as how " +
+      "the original 1450 was picked), not an optimization result.",
   );
 
   await prisma.$disconnect();
