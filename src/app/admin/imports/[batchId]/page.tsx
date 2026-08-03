@@ -53,7 +53,10 @@ export default async function ImportBatchPage({
 }) {
   const { batchId } = await params;
   const { error, reason, success, filter } = await searchParams;
-  const showOnlyAttention = filter === "attention";
+  // Defaults to the attention-only view -- with real-sized data (1000+ rows) rendering
+  // every row's forms in one table was the other unaddressed half of the page-lockup
+  // bug, so "All" is now an explicit opt-in (?filter=all) rather than the default.
+  const showOnlyAttention = filter !== "all";
 
   const batch = await prisma.importBatch.findUnique({
     where: { id: batchId },
@@ -347,13 +350,13 @@ export default async function ImportBatchPage({
           <h2 className="mb-2 text-lg font-medium">Preview</h2>
           <div className="mb-3 flex gap-3 text-sm">
             <Link
-              href={`/admin/imports/${batchId}`}
+              href={`/admin/imports/${batchId}?filter=all`}
               className={!showOnlyAttention ? "font-medium underline" : "text-slate-500 hover:text-slate-900"}
             >
               All ({allRows.length})
             </Link>
             <Link
-              href={`/admin/imports/${batchId}?filter=attention`}
+              href={`/admin/imports/${batchId}`}
               className={showOnlyAttention ? "font-medium underline" : "text-slate-500 hover:text-slate-900"}
             >
               Needs attention ({needsAttentionRows.length})
@@ -436,7 +439,12 @@ export default async function ImportBatchPage({
                       ) : (
                         <span className="text-xs text-slate-400">(not yet resolved)</span>
                       )}
-                      {!isCommitted && (
+                      {/* Only render for rows flagged as a NEW division -- an admin may
+                          want to map it onto an existing division instead of letting
+                          commit auto-create a duplicate. Rendering this for every row
+                          (as before) was the other unaddressed half of the page-lockup
+                          bug the club/team selects below were already fixed for. */}
+                      {!isCommitted && row.divisionMatchType === "NEW" && (
                         <form action={overrideDivisionWithIds} className="mt-1 flex gap-1">
                           <input type="hidden" name="filter" value={filter ?? ""} />
                           <select
