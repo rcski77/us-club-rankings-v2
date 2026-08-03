@@ -76,22 +76,37 @@ export type EloStep = {
   effectiveWeightB: number;
 };
 
+/**
+ * Calibrated (2026-08-03) via prisma/backtestElo.ts's predictive-accuracy backtest --
+ * see docs/plan.md's Status entry for the full methodology and results. Every constant
+ * below was previously an uncalibrated placeholder "reasonable default from
+ * established practice" (docs/plan.md's Open Question 10); these values are each the
+ * result of a grid search against every real completed Match, run twice (dev ~57k
+ * matches, prod ~114k matches, both agreeing), widened once each range kept improving
+ * at its original edge, and picked as a moderate step in the confirmed-helpful
+ * direction rather than the literal edge of the widened sweep, for the two dimensions
+ * (provisionalK, marginStrength -- see below) that never fully plateaued even after
+ * widening, to avoid overfitting a single season's data with no held-out set to
+ * validate against. A 3-tier K schedule (provisional -> mid -> a lower veteran tier)
+ * was also tried and found to not beat this flat scheme -- see EloConfig's midK/
+ * veteranMatchThreshold fields, both left at their collapsed-to-no-op defaults.
+ */
 const DEFAULT_RATING = 1500;
-const BASE_K = 24;
-const PROVISIONAL_K = 40;
-const PROVISIONAL_MATCH_THRESHOLD = 10; // below this many season matches, a team uses PROVISIONAL_K
+const BASE_K = 32; // was 24 -- backtest showed diminishing but real returns up to ~40-48
+const PROVISIONAL_K = 56; // was 40 -- backtest never plateaued even out to 100; moderate step, not the edge
+const PROVISIONAL_MATCH_THRESHOLD = 25; // was 10 -- backtest showed a genuine plateau at 20-40
+const DEFAULT_MARGIN_STRENGTH = 1.5; // was the implicit 1 -- backtest never plateaued even out to 4; moderate step, not the edge
 
 /**
  * Extra flat multiplier for a match in an OPEN-tier division (see EloMatch.isOpenDivision),
- * on top of whatever divisionWeight already applies. Uncalibrated placeholder, same
- * status as every other constant in this rating system -- set per explicit user
- * direction (2026-07-30) after checking that stacking the original proposal (wins
- * 1.5x/losses 0.5x) on top of a 1.6 divisionWeight could swing a single provisional-K
- * match by ~58 rating points; this modest, roughly-inverse pair keeps that worst case
- * closer to ~44.
+ * on top of whatever divisionWeight already applies. Originally set per explicit user
+ * direction (2026-07-30, see the git history for the reasoning behind the original
+ * 1.15/0.87 pair); recalibrated (2026-08-03, see the DEFAULT_RATING block above) after
+ * the backtest showed a genuine plateau at 2x-3x this original pair's offset from 1.0 --
+ * picked 2x (not 3x) since the two were within 0.001 logLoss of each other.
  */
-export const OPEN_DIVISION_WIN_BONUS = 1.15;
-export const OPEN_DIVISION_LOSS_SOFTEN = 0.87;
+export const OPEN_DIVISION_WIN_BONUS = 1.3;
+export const OPEN_DIVISION_LOSS_SOFTEN = 0.74;
 
 /**
  * Every constant in this file that's a tuning knob rather than a structural fact of
@@ -139,7 +154,7 @@ export const DEFAULT_ELO_CONFIG: EloConfig = {
   veteranMatchThreshold: PROVISIONAL_MATCH_THRESHOLD, // == provisionalMatchThreshold -> mid tier is empty by default
   openDivisionWinBonus: OPEN_DIVISION_WIN_BONUS,
   openDivisionLossSoften: OPEN_DIVISION_LOSS_SOFTEN,
-  marginStrength: 1,
+  marginStrength: DEFAULT_MARGIN_STRENGTH,
   divisionWeightEnabled: true,
 };
 

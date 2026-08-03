@@ -175,7 +175,12 @@ async function main() {
   const winOffset = DEFAULT_ELO_CONFIG.openDivisionWinBonus - 1; // +0.15
   const lossOffset = 1 - DEFAULT_ELO_CONFIG.openDivisionLossSoften; // +0.13 (applied as -offset)
   const openBonusPairs = openBonusMultiples.map((m) => ({
-    label: m === 0 ? "off (1.0/1.0)" : m === 1 ? "current (1.15/0.87)" : `${m}x current`,
+    label:
+      m === 0
+        ? "off (1.0/1.0)"
+        : m === 1
+          ? `current (${DEFAULT_ELO_CONFIG.openDivisionWinBonus.toFixed(2)}/${DEFAULT_ELO_CONFIG.openDivisionLossSoften.toFixed(2)})`
+          : `${m}x current`,
     win: 1 + winOffset * m,
     loss: 1 - lossOffset * m,
   }));
