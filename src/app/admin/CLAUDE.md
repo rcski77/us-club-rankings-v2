@@ -59,14 +59,15 @@ separate `<table>` elements per group — independent tables each auto-size thei
 columns, so columns won't line up across groups. See `regions/page.tsx` for the
 pattern (and the bug it fixes).
 
-## Data fetching: sequential, not `Promise.all`
+## Data fetching: `Promise.all` for independent queries, sequential for dependent chains
 
-Every page that fetches multiple things awaits them one at a time. This is not a style
-preference — the local dev Postgres reliably drops connections under concurrent
-queries from the same pool. See
-[`../../../docs/dev-environment.md`](../../../docs/dev-environment.md). Keep doing
-this for new pages until that doc says otherwise (e.g. once running against a real
-persistent Postgres).
+Concurrent Prisma queries against the dev Postgres are verified safe (see
+[`../../../docs/dev-environment.md`](../../../docs/dev-environment.md)) — the old
+"always sequential `await`" rule was inherited from a flaky embedded dev database that
+no longer exists. When a page fetches several things that don't depend on each other's
+result, batch them with `Promise.all`. Only keep `await` sequential where query B
+genuinely needs a value read from query A (e.g. deriving an active season id from a
+team's matches before querying that season's rating history).
 
 ## Auth / session shape
 

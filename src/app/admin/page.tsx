@@ -1,16 +1,25 @@
 import { prisma } from "@/lib/prisma";
 
 async function getStats() {
-  const seasonCount = await prisma.season.count();
-  const clubCount = await prisma.club.count();
-  const teamCount = await prisma.team.count();
-  const eventCount = await prisma.event.count();
-  const divisionCount = await prisma.division.count();
-  const teamFinishCount = await prisma.teamFinish.count();
-  const matchCount = await prisma.match.count();
-  const confirmedDivisionCount = await prisma.division.count({
-    where: { scoringStatus: "CONFIRMED" },
-  });
+  const [
+    seasonCount,
+    clubCount,
+    teamCount,
+    eventCount,
+    divisionCount,
+    teamFinishCount,
+    matchCount,
+    confirmedDivisionCount,
+  ] = await Promise.all([
+    prisma.season.count(),
+    prisma.club.count(),
+    prisma.team.count(),
+    prisma.event.count(),
+    prisma.division.count(),
+    prisma.teamFinish.count(),
+    prisma.match.count(),
+    prisma.division.count({ where: { scoringStatus: "CONFIRMED" } }),
+  ]);
 
   return {
     seasonCount,

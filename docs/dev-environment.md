@@ -73,17 +73,20 @@ const prisma = new PrismaClient({ adapter });
 safe via a `globalThis` cache); one-off scripts under `prisma/*.ts` construct their
 own client the same way (see `prisma/seed.ts`, `seedRegions.ts`, `seedDemo.ts`).
 
-**Concurrent queries — sequential `await` convention, inherited from the old
-Prisma-dev database.** Every admin page in this codebase fetches multiple things with
-sequential `await` calls, not `Promise.all`, because the previous `npx prisma dev`
-database (whatever it was backed by under the hood — likely a lightweight/embedded
+**Concurrent queries — verified safe as of 2026-08-02.** Pages used to fetch multiple
+things with sequential `await` calls, not `Promise.all`, because the old `npx prisma
+dev` database (whatever it was backed by under the hood — likely a lightweight/embedded
 engine, not full standalone Postgres) reliably threw `Connection terminated
 unexpectedly` under concurrent queries from the same connection pool. Now that the
-project runs against a real Postgres container, this constraint likely no longer
-applies, but it hasn't been re-tested or the existing pages converted back to
-`Promise.all`. Keep writing new pages with sequential `await` to match the existing
-codebase until someone deliberately verifies concurrent queries are safe here and
-updates this convention project-wide.
+project runs against a real Postgres container, that failure mode is gone — a
+verification script fired 60 sequential bursts of 13 concurrent queries plus a burst
+of 10-way-concurrent bursts (780 total queries) against the dev DB with no dropped
+connections.
+
+Current convention: **independent queries → `Promise.all`; dependent chains (query B
+needs a value read from query A's result) → stay sequential `await`.** Don't
+restructure a genuine dependency chain into `Promise.all` just to parallelize
+everything — only batch queries that don't need each other's output.
 
 ## Regenerating the Prisma client after a schema change
 

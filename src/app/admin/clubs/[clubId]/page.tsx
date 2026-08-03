@@ -48,23 +48,23 @@ export default async function ClubDetailPage({
   const { clubId } = await params;
   const { error, success } = await searchParams;
 
-  // Sequential, not Promise.all: the local dev Postgres (via `prisma dev`) doesn't
-  // reliably handle concurrent queries from the same connection pool.
-  const club = await prisma.club.findUnique({
-    where: { id: clubId },
-    include: {
-      region: true,
-      contacts: true,
-      teams: {
-        include: { seasons: { include: { season: true }, orderBy: { season: { startDate: "desc" } } } },
-        orderBy: { name: "asc" },
+  // club, regions, and activeSeason don't depend on each other's results.
+  const [club, regions, activeSeason] = await Promise.all([
+    prisma.club.findUnique({
+      where: { id: clubId },
+      include: {
+        region: true,
+        contacts: true,
+        teams: {
+          include: { seasons: { include: { season: true }, orderBy: { season: { startDate: "desc" } } } },
+          orderBy: { name: "asc" },
+        },
       },
-    },
-  });
+    }),
+    prisma.region.findMany({ orderBy: { code: "asc" } }),
+    prisma.season.findFirst({ where: { isActive: true } }),
+  ]);
   if (!club) notFound();
-  const regions = await prisma.region.findMany({ orderBy: { code: "asc" } });
-
-  const activeSeason = await prisma.season.findFirst({ where: { isActive: true } });
 
   const updateClubWithId = updateClub.bind(null, clubId);
 
