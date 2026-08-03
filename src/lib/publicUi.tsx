@@ -47,3 +47,24 @@ export function RankBadge({ rank }: { rank: number | string | undefined }) {
     </span>
   );
 }
+
+// Thresholds are on the raw Elo scale (~1500 = average, per computeEloRatings.ts's
+// starting rating) -- not percentile-based, so the color bands stay stable over time
+// rather than shifting as the player pool's overall rating distribution drifts.
+export function EloBadge({ rating }: { rating: number | undefined }) {
+  if (rating === undefined) return <span className="text-slate-400">—</span>;
+  const n = Math.round(rating);
+  const style =
+    n >= 1700
+      ? "border border-green-600 bg-green-50 text-green-700"
+      : n >= 1500
+        ? "border border-blue-600 bg-blue-50 text-blue-700"
+        : "border border-yellow-600 bg-yellow-50 text-yellow-700";
+  return (
+    <span
+      className={`inline-flex h-7 min-w-7 items-center justify-center rounded-full px-2 text-xs font-bold ${style}`}
+    >
+      {n}
+    </span>
+  );
+}

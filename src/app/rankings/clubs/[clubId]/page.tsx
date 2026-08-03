@@ -2,7 +2,18 @@ import { prisma } from "@/lib/prisma";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { brand } from "@/lib/brand";
-import { tableWrapClass, thClass, tdClass, primaryTdClass, numThClass, numTdClass, tbodyClass } from "@/lib/publicUi";
+import {
+  tableWrapClass,
+  thClass,
+  tdClass,
+  primaryTdClass,
+  numThClass,
+  numTdClass,
+  tbodyClass,
+  RankBadge,
+  EloBadge,
+} from "@/lib/publicUi";
+import { getLatestPowerRatings, computeCombinedRankByTeam } from "@/lib/rating/powerRankings";
 
 export default async function PublicClubDetailPage({
   params,
@@ -35,6 +46,36 @@ export default async function PublicClubDetailPage({
     return aTs.teamNumber.localeCompare(bTs.teamNumber, undefined, { numeric: true });
   });
 
+  // Elo and Combined Rank are only meaningful scoped to one (season, ageGroup) --
+  // fetch each once per distinct age group this club fields active-season teams in,
+  // rather than once per team, since a club typically spans several age groups.
+  const activeAgeGroups = activeSeason
+    ? [
+        ...new Set(
+          sortedTeams
+            .map((t) => t.seasons.find((ts) => ts.seasonId === activeSeason.id)?.ageGroup)
+            .filter((a): a is number => a !== undefined),
+        ),
+      ]
+    : [];
+
+  const eloByTeamId = new Map<string, number>();
+  const combinedRankByTeamId = new Map<string, number>();
+  if (activeSeason) {
+    const perAgeGroup = await Promise.all(
+      activeAgeGroups.map((ageGroup) =>
+        Promise.all([
+          getLatestPowerRatings(activeSeason.id, ageGroup),
+          computeCombinedRankByTeam(activeSeason.id, ageGroup),
+        ]),
+      ),
+    );
+    for (const [powerData, combinedRanks] of perAgeGroup) {
+      for (const r of powerData.eloRatings) eloByTeamId.set(r.teamId, r.rating);
+      for (const [teamId, rank] of combinedRanks) combinedRankByTeamId.set(teamId, rank);
+    }
+  }
+
   return (
     <div>
       <div className="mb-2 text-sm text-slate-500">
@@ -60,6 +101,8 @@ export default async function PublicClubDetailPage({
               <th className={thClass}>Name</th>
               <th className={numThClass}>Age</th>
               <th className={numThClass}>Team #</th>
+              <th className={numThClass}>Elo</th>
+              <th className={numThClass}>Combined Rank</th>
               <th className={thClass}>Seasons</th>
             </tr>
           </thead>
@@ -77,6 +120,12 @@ export default async function PublicClubDetailPage({
                   </td>
                   <td className={numTdClass}>{activeTs ? `${activeTs.ageGroup}u` : ""}</td>
                   <td className={numTdClass}>{activeTs?.teamNumber ?? ""}</td>
+                  <td className={numTdClass}>
+                    <EloBadge rating={eloByTeamId.get(t.id)} />
+                  </td>
+                  <td className={numTdClass}>
+                    <RankBadge rank={combinedRankByTeamId.get(t.id)} />
+                  </td>
                   <td className={tdClass}>
                     {t.seasons.length === 0 && (
                       <span className="text-slate-400">Not enrolled in any season</span>
@@ -94,7 +143,7 @@ export default async function PublicClubDetailPage({
             })}
             {sortedTeams.length === 0 && (
               <tr>
-                <td className={tdClass} colSpan={4}>
+                <td className={tdClass} colSpan={6}>
                   No teams for this club yet.
                 </td>
               </tr>
