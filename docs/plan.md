@@ -728,6 +728,44 @@ also flagged as worth checking for the same drift, but are population-relative b
 construction (a live rank-transform, not a fixed absolute value) and don't have this
 specific failure mode — not re-checked this pass, lower risk.
 
+**`ELO_ELITE_THRESHOLD` made self-calibrating — done (2026-08-04, same day).** The
+1450→1633 recalibration above fixed the symptom but not the cause: a fixed absolute
+Elo rating will drift out of calibration again the next time Elo's own tuning
+constants change, exactly as 1450 just did. Per explicit user direction, replaced the
+fixed constant with a population-relative derivation instead: new `ELITE_PERCENTILE`
+(75) plus `computeEliteThreshold(populationRatings, percentile)` (`dci.ts`, pure —
+same "share of the population at or below" convention as
+`suggestPointTemplate.ts`'s `computeFssPercentile`, just inverted) turns that
+percentile into an actual rating value from whichever population is handed to it.
+`computeIntrinsicElitePresence`'s `threshold` parameter is no longer defaulted — every
+caller must now derive it explicitly, so a caller can't silently fall back to a stale
+implicit constant. `computeDivisionScoringSuggestion.ts` derives the threshold from
+the same per-`(season, ageGroup)` `eloPopulation` it already fetches for Strength of
+Field, so each division is compared against its own age group's current population,
+consistent with how every other per-partition signal in this rating system (Colley,
+Elo, Massey, `divisionWeight.ts`) is already scoped — not a single global number
+across all ages.
+
+This reopens a design question Phase 5 had explicitly settled the other way: a
+population-relative cutoff was rejected once before, on the reasoning that Elite
+Presence should be intrinsic to a division's own roster, and a real division (Triple
+Crown NIT 14 Open) had checked in at just 15% under a *top 8-13% nationally* cutoff at
+the time. Re-examined against current real data: 75 is a far less extreme percentile
+than the top 8-13% that was tried and rejected, and checked the identical way 1633
+was — division-level Elite Presence clustering at the 0%/100% extremes across a
+candidate-percentile sweep, plus a named-division sanity check against real prod
+data — Triple Crown NIT / USAV Girls Junior National Championship divisions land
+89-100% at p75, explicitly lower-tier ("Club"/"Classic") named divisions land 0-2%.
+The per-age-group thresholds this actually produces (real prod data, 2026-08-04) land
+in a tight 1614-1665 range, close to but not identical to the single global 1633 the
+prior entry validated — reassuring, not surprising: age groups have similar but not
+identical Elo distributions, and per-age-group scoping is the more correct design
+regardless of how close the numbers happen to land. `ELITE_PERCENTILE` still needs
+occasional revisiting (same `analyzeEliteThreshold.ts` report, now sweeping candidate
+*percentiles* instead of raw rating values) if the gap between elite and weak fields
+ever looks wrong again, but no longer needs it every time Elo's own constants change —
+that specific failure mode is closed.
+
 ## Deviations from the original plan
 
 The plan below is preserved close to its original approved form for continuity, but
