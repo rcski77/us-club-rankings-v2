@@ -16,6 +16,7 @@ import {
   tdClass,
 } from "@/lib/ui";
 import { uniqueSlug } from "@/lib/slug";
+import DeleteEventButton from "./DeleteEventButton";
 import type { DivisionTierLabel, ImportSource } from "@/generated/prisma/enums";
 
 const IMPORT_TYPE_LABELS: Record<string, string> = {
@@ -162,6 +163,36 @@ async function startImportForAllSchedules(eventId: string, formData: FormData) {
   redirect(`/admin/events/${eventId}?success=imports-started`);
 }
 
+// Cleans up the two relations Prisma doesn't cascade automatically (AuditFlag and
+// Match both point at ImportBatch without onDelete: Cascade -- see prisma/CLAUDE.md
+// on why event.delete() alone throws an FK violation once an event has real import
+// data) before deleting the event itself, which cascades everything else
+// (Division -> TeamFinish/DivisionPointBand/DivisionScoringSnapshot, EventSchedule,
+// Match, remaining ImportBatch rows).
+async function deleteEvent(eventId: string) {
+  "use server";
+
+  await prisma.$transaction(async (tx) => {
+    const batches = await tx.importBatch.findMany({ where: { eventId }, select: { id: true } });
+    const divisions = await tx.division.findMany({ where: { eventId }, select: { id: true } });
+
+    await tx.auditFlag.deleteMany({
+      where: {
+        OR: [
+          { importBatchId: { in: batches.map((b) => b.id) } },
+          { divisionId: { in: divisions.map((d) => d.id) } },
+        ],
+      },
+    });
+    await tx.match.deleteMany({ where: { eventId } });
+    await tx.importBatch.deleteMany({ where: { eventId } });
+    await tx.event.delete({ where: { id: eventId } });
+  });
+
+  revalidatePath("/admin/events");
+  redirect("/admin/events?success=event-deleted");
+}
+
 async function createDivision(eventId: string, formData: FormData) {
   "use server";
 
@@ -222,6 +253,8 @@ export default async function EventDetailPage({
   const addEventScheduleWithId = addEventSchedule.bind(null, eventId);
   const startImportForAllSchedulesWithId = startImportForAllSchedules.bind(null, eventId);
   const startImportForScheduleWithId = startImportForSchedule.bind(null, eventId);
+  const deleteEventWithId = deleteEvent.bind(null, eventId);
+  const finishCount = event.divisions.reduce((sum, d) => sum + d._count.finishes, 0);
 
   return (
     <div>
@@ -551,6 +584,21 @@ export default async function EventDetailPage({
           Add division
         </button>
       </form>
+
+      <section className="mt-10 border-t border-slate-200 pt-6">
+        <h2 className="mb-2 text-lg font-medium text-red-700">Danger zone</h2>
+        <p className="mb-3 text-xs text-slate-500">
+          Permanently deletes this event and everything under it: divisions, team
+          finishes, point bands, schedule links, and import batches. Use this to clean
+          up a duplicate or mistakenly-created event. This cannot be undone.
+        </p>
+        <DeleteEventButton
+          action={deleteEventWithId}
+          eventName={event.name}
+          divisionCount={event.divisions.length}
+          finishCount={finishCount}
+        />
+      </section>
     </div>
   );
 }

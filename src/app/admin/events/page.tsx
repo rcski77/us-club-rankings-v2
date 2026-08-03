@@ -1,8 +1,13 @@
 import { prisma } from "@/lib/prisma";
 import Link from "next/link";
-import { tableClass, thClass, tdClass, primaryButtonClass } from "@/lib/ui";
+import { tableClass, thClass, tdClass, primaryButtonClass, successBannerClass } from "@/lib/ui";
 
-export default async function EventsPage() {
+export default async function EventsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ success?: string }>;
+}) {
+  const { success } = await searchParams;
   const events = await prisma.event.findMany({
     include: { season: true, _count: { select: { divisions: true } } },
     orderBy: { startDate: "desc" },
@@ -16,6 +21,10 @@ export default async function EventsPage() {
           New event
         </Link>
       </div>
+
+      {success === "event-deleted" && (
+        <p className={successBannerClass}>Event deleted.</p>
+      )}
 
       <table className={tableClass}>
         <thead>
