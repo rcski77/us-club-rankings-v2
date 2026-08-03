@@ -1,6 +1,8 @@
 // Shared table chrome for public-facing pages (rankings, team detail, etc.) --
 // deliberately fancier than the plain admin tables (src/lib/ui.ts): rounded card,
 // dark brand-purple header, zebra striping, and a colored badge for rank columns.
+import type { ReactNode } from "react";
+
 export const tableWrapClass = "overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm";
 export const thClass =
   "px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-white/85 whitespace-nowrap";
@@ -51,6 +53,61 @@ export function RankBadge({ rank }: { rank: number | string | undefined }) {
 // Thresholds are on the raw Elo scale (~1500 = average, per computeEloRatings.ts's
 // starting rating) -- not percentile-based, so the color bands stay stable over time
 // rather than shifting as the player pool's overall rating distribution drifts.
+// Small stat tiles for a team's public detail page header (age-group rank, current
+// Elo, overall record) -- distinct from RankBadge/EloBadge, which decorate a cell
+// inside a table row rather than standing alone as a summary card.
+export function StatTile({
+  icon,
+  label,
+  value,
+  valueClassName = "text-slate-900",
+}: {
+  icon: ReactNode;
+  label: string;
+  value: ReactNode;
+  valueClassName?: string;
+}) {
+  return (
+    <div className="flex min-w-[7rem] flex-1 flex-col gap-1 rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm sm:flex-none">
+      <span className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-slate-400">
+        {icon}
+        {label}
+      </span>
+      <span className={`text-xl font-bold ${valueClassName}`}>{value}</span>
+    </div>
+  );
+}
+
+export function TrophyIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-3.5 w-3.5">
+      <path d="M8 21h8M12 17v4M7 4h10v4a5 5 0 0 1-10 0V4Z" strokeLinecap="round" strokeLinejoin="round" />
+      <path
+        d="M7 5H4a1 1 0 0 0-1 1v1a4 4 0 0 0 4 4M17 5h3a1 1 0 0 1 1 1v1a4 4 0 0 1-4 4"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+export function TrendUpIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-3.5 w-3.5">
+      <path d="M3 17l6-6 4 4 8-8M15 7h6v6" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+export function RecordIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-3.5 w-3.5">
+      <circle cx="9" cy="7" r="3" />
+      <path d="M2 20c0-3.3 3.1-6 7-6s7 2.7 7 6M16 4.3a3 3 0 0 1 0 5.4M21 20c0-2.8-2-5.1-5-5.8" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 export function EloBadge({ rating }: { rating: number | undefined }) {
   if (rating === undefined) return <span className="text-slate-400">—</span>;
   const n = Math.round(rating);

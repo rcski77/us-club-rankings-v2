@@ -11,6 +11,10 @@ import {
   numTdClass,
   tbodyClass,
   rowListClass,
+  StatTile,
+  TrophyIcon,
+  TrendUpIcon,
+  RecordIcon,
 } from "@/lib/publicUi";
 import { getTeamEloHistory } from "@/lib/rating/computeEloRatings";
 
@@ -86,6 +90,23 @@ export default async function PublicTeamDetailPage({
   const eloHistory = activeSeasonId ? await getTeamEloHistory(teamId, activeSeasonId) : [];
   const eloByMatchId = new Map(eloHistory.map((h) => [h.matchId, h]));
 
+  const activeAgeGroup = team.seasons.find((ts) => ts.season.id === activeSeasonId)?.ageGroup;
+
+  // Sequential, not Promise.all -- see docs/dev-environment.md.
+  const npsResult =
+    activeSeasonId && activeAgeGroup !== undefined
+      ? await prisma.rankingResult.findUnique({
+          where: { seasonId_ageGroup_teamId: { seasonId: activeSeasonId, ageGroup: activeAgeGroup, teamId } },
+        })
+      : null;
+  const latestElo =
+    activeSeasonId && activeAgeGroup !== undefined
+      ? await prisma.teamRatingHistory.findFirst({
+          where: { teamId, seasonId: activeSeasonId, ageGroup: activeAgeGroup, ratingEngine: "ELO" },
+          orderBy: { weekEndingDate: "desc" },
+        })
+      : null;
+
   type MatchRow = (typeof matchesForSeason)[number];
   type EventGroup = {
     event: MatchRow["event"];
@@ -141,11 +162,34 @@ export default async function PublicTeamDetailPage({
       </div>
       <h1 className="mb-1 text-2xl font-semibold">{team.name}</h1>
       {team.club && (
-        <p className="mb-6 text-sm text-slate-500">
+        <p className="mb-4 text-sm text-slate-500">
           <Link href={`/rankings/clubs/${team.club.id}`} className="underline">
             {team.club.name}
           </Link>
         </p>
+      )}
+
+      {activeAgeGroup !== undefined && (
+        <div className="mb-6 flex flex-wrap gap-3">
+          <StatTile
+            icon={<TrophyIcon />}
+            label={`U${activeAgeGroup}`}
+            value={npsResult ? `#${npsResult.rank}` : "—"}
+            valueClassName="text-amber-500"
+          />
+          <StatTile
+            icon={<TrendUpIcon />}
+            label="Elo"
+            value={latestElo ? Math.round(latestElo.rating) : "—"}
+            valueClassName="text-blue-600"
+          />
+          <StatTile
+            icon={<RecordIcon />}
+            label="Record"
+            value={`${seasonWins}-${seasonLosses}`}
+            valueClassName={seasonLosses === 0 && seasonWins > 0 ? "text-green-600" : "text-slate-900"}
+          />
+        </div>
       )}
 
       <section className="mb-8">
