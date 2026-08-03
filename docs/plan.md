@@ -704,6 +704,30 @@ gain. `run-prod-script.sh` (new, repo root) generalizes the throwaway-container 
 `prisma/*.ts` one-off (this backtest, or the existing seed scripts) can run against
 prod without exposing Postgres or editing the compose file.
 
+**`ELO_ELITE_THRESHOLD` recalibrated — done (2026-08-04).** The Elo calibration above
+had a knock-on effect the same session's original scope didn't cover: `dci.ts`'s
+`ELO_ELITE_THRESHOLD` (1450, itself a one-time real-data calibration from Phase 5 — see
+above) is an *absolute* Elo cutoff, and widening Elo's spread moved the whole rated
+population upward relative to it. New `prisma/analyzeEliteThreshold.ts` (`npm run
+analyze:elite-threshold`, read-only — assumes ratings are already fresh, doesn't
+recompute or write anything) confirmed the drift against real prod data: population
+median landing almost exactly on 1450, 18% of Elo-eligible divisions pinned at exactly
+100% Elite Presence (Triple Crown NIT and a routine regional Open bracket both maxing
+out identically — the discriminating power the original calibration was built for had
+collapsed). A candidate-threshold sweep (division-level Elite Presence clustering at
+the 0%/100% extremes, per candidate) plus a named-division sanity check (real events,
+not just aggregate stats — the same style of check 1450 was originally picked with)
+both pointed to the same number from two different angles: 1633 balances the
+clustering (2% pinned at each extreme, vs. 1450's 0%/18%) and, checked by name against
+real prod data, restores the original gap — Triple Crown NIT / USAV Girls Junior
+National Championship divisions land 91-100%, explicitly lower-tier ("Club"/"Classic")
+named divisions land 0-3%. `ELO_ELITE_THRESHOLD` updated 1450→1633 accordingly (see
+`dci.ts`'s own comment for the full reasoning). `WEIGHT_MIN`/`WEIGHT_MAX`
+(`divisionWeight.ts`) and the percentile→band mapping (`suggestPointTemplate.ts`) were
+also flagged as worth checking for the same drift, but are population-relative by
+construction (a live rank-transform, not a fixed absolute value) and don't have this
+specific failure mode — not re-checked this pass, lower risk.
+
 ## Deviations from the original plan
 
 The plan below is preserved close to its original approved form for continuity, but
