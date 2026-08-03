@@ -106,9 +106,12 @@ async function main() {
     name: "baseK",
     // Widened after two runs (dev 56k matches, prod 113k matches) both showed the
     // original [16,32] range still improving toward its upper edge -- see
-    // docs/plan.md's Status entry for this backtest tool.
+    // docs/plan.md's Status entry for this backtest tool. This sweep holds midK ==
+    // baseK and veteranMatchThreshold == provisionalMatchThreshold (DEFAULT_ELO_CONFIG's
+    // collapsed-mid-tier shape), so it's really "the post-provisional K, flat" -- see
+    // the 3-tier experiment below for whether splitting that into two steps helps.
     ...printSweep(
-      "baseK sweep",
+      "baseK sweep (flat post-provisional K, no mid tier)",
       partitions,
       [16, 20, 24, 28, 32, 40, 48].map((v) => ({
         label: String(v),
@@ -211,6 +214,80 @@ async function main() {
     combined.logLoss < baseline.logLoss
       ? "  -> improves on baseline logLoss (per-dimension winners still help combined)."
       : "  -> does NOT improve on baseline logLoss (dimensions likely interact; not a real joint optimum).",
+  );
+
+  // --- 3-tier K schedule experiment ---
+  // Does splitting the post-provisional K into two steps (mid, then a lower veteran
+  // tier once a team has a long track record this season) beat a single flat K past
+  // the provisional cutoff? Compares two flat baselines (today's untouched defaults,
+  // and this run's own best flat combination from the dimension sweeps above) against
+  // a grid of 3-tier schedules built around that same tuned provisionalK/
+  // provisionalMatchThreshold, so the comparison isn't confounded by re-litigating
+  // constants the sweeps above already settled.
+  console.log("\n--- 3-tier K schedule experiment ---");
+
+  type KSchedule = { label: string; overrides: Partial<EloConfig> };
+
+  const flatToday: KSchedule = { label: "today (flat, untouched defaults)", overrides: {} };
+  const flatTuned: KSchedule = {
+    label: "flat tuned (this run's best flat provisional/base K)",
+    overrides: {
+      provisionalK: combinedConfig.provisionalK,
+      provisionalMatchThreshold: combinedConfig.provisionalMatchThreshold,
+      baseK: combinedConfig.baseK,
+      midK: combinedConfig.baseK,
+      veteranMatchThreshold: combinedConfig.provisionalMatchThreshold,
+    },
+  };
+
+  const midKCandidates = [24, 28, 32, 36];
+  const veteranThresholdCandidates = [15, 20, 25, 30, 40];
+  const veteranKCandidates = [12, 16, 20, 24];
+
+  const threeTierSchedules: KSchedule[] = [];
+  for (const midK of midKCandidates) {
+    for (const veteranMatchThreshold of veteranThresholdCandidates) {
+      for (const veteranK of veteranKCandidates) {
+        threeTierSchedules.push({
+          label:
+            `provisional=${combinedConfig.provisionalK}@<${combinedConfig.provisionalMatchThreshold}  ` +
+            `mid=${midK}@<${veteranMatchThreshold}  veteran=${veteranK}`,
+          overrides: {
+            provisionalK: combinedConfig.provisionalK,
+            provisionalMatchThreshold: combinedConfig.provisionalMatchThreshold,
+            midK,
+            veteranMatchThreshold,
+            baseK: veteranK,
+          },
+        });
+      }
+    }
+  }
+
+  const scoredSchedules = [flatToday, flatTuned, ...threeTierSchedules].map((schedule) => ({
+    schedule,
+    metrics: runConfig(partitions, { ...DEFAULT_ELO_CONFIG, ...schedule.overrides }),
+  }));
+  scoredSchedules.sort((a, b) => a.metrics.logLoss - b.metrics.logLoss);
+
+  console.log(`Top 15 of ${scoredSchedules.length} schedules tested (by logLoss):`);
+  for (const { schedule, metrics } of scoredSchedules.slice(0, 15)) {
+    console.log(`  ${schedule.label.padEnd(70)}${fmtMetrics(metrics)}`);
+  }
+
+  const flatTunedMetrics = scoredSchedules.find((s) => s.schedule === flatTuned)!.metrics;
+  const bestThreeTier = scoredSchedules
+    .filter((s) => threeTierSchedules.includes(s.schedule))
+    .sort((a, b) => a.metrics.logLoss - b.metrics.logLoss)[0];
+  console.log(
+    `\nBest 3-tier schedule vs. this run's best flat schedule: ` +
+      `${bestThreeTier.metrics.logLoss.toFixed(4)} vs ${flatTunedMetrics.logLoss.toFixed(4)}`,
+  );
+  console.log(`  best 3-tier config: ${bestThreeTier.schedule.label}`);
+  console.log(
+    bestThreeTier.metrics.logLoss < flatTunedMetrics.logLoss
+      ? "  -> the 3-tier schedule beats a flat K past the provisional stage -- the extra tier is earning its keep."
+      : "  -> the 3-tier schedule does NOT beat a flat K -- the added complexity isn't earning its keep here.",
   );
 
   const elapsedSec = ((Date.now() - startedAt) / 1000).toFixed(1);

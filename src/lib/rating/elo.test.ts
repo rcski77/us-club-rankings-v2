@@ -665,4 +665,47 @@ describe("EloConfig", () => {
     );
     expect(steps[0].multiplier).toBe(1);
   });
+
+  describe("3-tier K (provisional -> mid -> veteran/base)", () => {
+    // "a" plays 20 matches against fresh opponents, each a clean sweep so K is the
+    // only thing that varies the swing (multiplier pinned by set fraction, no
+    // divisionWeight/openBonus in play). Every match is scored via a single replay
+    // (not one computeEloRatings call per prefix) so each step's ratingABefore is
+    // exactly the running rating -- the same replay production itself does.
+    const opponents = Array.from({ length: 20 }, (_, i) => `opp${i}`);
+    const matches = opponents.map((opp, i) => ({
+      id: `m${i}`,
+      teamAId: "a",
+      teamBId: opp,
+      winnerTeamId: "a",
+      matchDate: new Date(2026, 0, i + 1),
+      setsA: 2,
+      setsB: 0,
+    }));
+
+    it("a team past provisionalMatchThreshold but before veteranMatchThreshold uses midK, not baseK", () => {
+      const config = {
+        ...DEFAULT_ELO_CONFIG,
+        provisionalMatchThreshold: 5,
+        midK: 32,
+        veteranMatchThreshold: 15,
+        baseK: 24,
+      };
+      const steps = computeEloHistory(matches, config);
+      // a's 10th match (index 9): a has played 9 prior matches -- past the
+      // provisional threshold (5), short of the veteran threshold (15) -- so this
+      // step's kA should be midK, not provisionalK or baseK.
+      expect(steps[9].kA).toBe(32);
+      // a's 3rd match (index 2): a has played 2 prior matches, still provisional.
+      expect(steps[2].kA).toBe(config.provisionalK);
+      // a's 18th match (index 17): a has played 17 prior matches, past veteran threshold.
+      expect(steps[17].kA).toBe(24);
+    });
+
+    it("defaults (veteranMatchThreshold == provisionalMatchThreshold) collapse the mid tier -- no team ever sees midK", () => {
+      const steps = computeEloHistory(matches, DEFAULT_ELO_CONFIG);
+      const kValuesSeen = new Set(steps.map((s) => s.kA));
+      expect(kValuesSeen).toEqual(new Set([DEFAULT_ELO_CONFIG.provisionalK, DEFAULT_ELO_CONFIG.baseK]));
+    });
+  });
 });
