@@ -3,13 +3,16 @@ import { computeColleyRatingsForSeason } from "@/lib/rating/computeColleyRatings
 import { computeEloRatingsForSeason } from "@/lib/rating/computeEloRatings";
 import { computeMasseyRatingsForSeason } from "@/lib/rating/computeMasseyRatings";
 import { computeDivisionScoringSuggestion } from "@/lib/rating/computeDivisionScoringSuggestion";
+import { computeClubRankingForSeason } from "@/lib/ranking/computeClubRanking";
 
 /**
- * Nightly refresh: recomputes Colley/Elo/Massey power ratings and every division's
- * scoring-suggestion snapshot (the Analysis view), for every active Season. This is
- * the same work staff can already trigger by hand ("Recompute ratings" on
- * /admin/team-rankings, "Run analysis for all divisions" on /admin/analysis) -- see
- * ../../instrumentation.ts for what schedules this to run automatically overnight.
+ * Nightly refresh: recomputes Colley/Elo/Massey power ratings, every division's
+ * scoring-suggestion snapshot (the Analysis view), and both NPS/COMBINED club
+ * rankings, for every active Season. This is the same work staff can already trigger
+ * by hand ("Recompute ratings" on /admin/team-rankings, "Run analysis for all
+ * divisions" on /admin/analysis, "Recompute ... club rankings" on
+ * /admin/club-rankings) -- see ../../instrumentation.ts for what schedules this to run
+ * automatically overnight.
  *
  * Runs in-process, not via the execFile worker pattern the request-triggered actions
  * use (recomputeRatingsInWorker.ts) -- that workaround exists to dodge Cloudflare's
@@ -40,5 +43,11 @@ export async function runNightlyRecompute(): Promise<void> {
         preserveStatus: division.scoringStatus === "CONFIRMED",
       });
     }
+
+    // NPS first, then COMBINED -- COMBINED re-derives the Colley/Elo/Massey power
+    // ratings just recomputed above (see computeClubRankingForSeason's own comment),
+    // so both sources are safe to roll up here without a separate NPS-recompute step.
+    await computeClubRankingForSeason(season.id, "NPS");
+    await computeClubRankingForSeason(season.id, "COMBINED");
   }
 }
