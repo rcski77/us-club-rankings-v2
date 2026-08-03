@@ -102,9 +102,23 @@ export const OPEN_DIVISION_LOSS_SOFTEN = 0.87;
  * elo.test.ts) omits `config` and gets this, so this refactor is purely additive.
  */
 export type EloConfig = {
-  baseK: number;
+  /** K for a team's first `provisionalMatchThreshold` matches this season -- least
+   * reliable prior, so most reactive. */
   provisionalK: number;
   provisionalMatchThreshold: number;
+  /** K for a team with at least `provisionalMatchThreshold` but fewer than
+   * `veteranMatchThreshold` matches -- a middle tier between "brand new" and
+   * "long track record this season," on the theory that those two shouldn't share a
+   * K just because both are past the provisional cutoff. Defaults to `baseK` with
+   * `veteranMatchThreshold` equal to `provisionalMatchThreshold`, which collapses this
+   * tier to empty and reproduces the original two-tier (provisional/base) behavior
+   * exactly -- see DEFAULT_ELO_CONFIG. */
+  midK: number;
+  /** K for a team with at least this many matches -- the most-established, least
+   * reactive tier. Named `baseK` (not `veteranK`) for backwards compatibility with
+   * every existing caller of this config. */
+  baseK: number;
+  veteranMatchThreshold: number;
   openDivisionWinBonus: number;
   openDivisionLossSoften: number;
   /** Interpolates marginMultiplier()'s effect: 0 = no margin adjustment (multiplier
@@ -118,14 +132,24 @@ export type EloConfig = {
 };
 
 export const DEFAULT_ELO_CONFIG: EloConfig = {
-  baseK: BASE_K,
   provisionalK: PROVISIONAL_K,
   provisionalMatchThreshold: PROVISIONAL_MATCH_THRESHOLD,
+  midK: BASE_K,
+  baseK: BASE_K,
+  veteranMatchThreshold: PROVISIONAL_MATCH_THRESHOLD, // == provisionalMatchThreshold -> mid tier is empty by default
   openDivisionWinBonus: OPEN_DIVISION_WIN_BONUS,
   openDivisionLossSoften: OPEN_DIVISION_LOSS_SOFTEN,
   marginStrength: 1,
   divisionWeightEnabled: true,
 };
+
+/** provisional -> mid -> base(veteran), by matches played so far this season. See
+ * EloConfig's field comments for what each tier represents. */
+function resolveK(matchesPlayed: number, config: EloConfig): number {
+  if (matchesPlayed < config.provisionalMatchThreshold) return config.provisionalK;
+  if (matchesPlayed < config.veteranMatchThreshold) return config.midK;
+  return config.baseK;
+}
 
 /**
  * divisionWeight (see divisionWeight.ts) used to apply symmetrically to both a win
@@ -244,8 +268,8 @@ function replay(matches: EloMatchWithId[], config: EloConfig = DEFAULT_ELO_CONFI
     const winnerSets = aWon ? setsA : setsB;
     const multiplier = marginMultiplier(winnerSets, setsA + setsB, setScores, config.marginStrength);
 
-    const kA = getCount(teamAId) < config.provisionalMatchThreshold ? config.provisionalK : config.baseK;
-    const kB = getCount(teamBId) < config.provisionalMatchThreshold ? config.provisionalK : config.baseK;
+    const kA = resolveK(getCount(teamAId), config);
+    const kB = resolveK(getCount(teamBId), config);
 
     const openBonus = (won: boolean) =>
       isOpenDivision ? (won ? config.openDivisionWinBonus : config.openDivisionLossSoften) : 1;
