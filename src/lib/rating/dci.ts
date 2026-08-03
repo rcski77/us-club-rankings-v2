@@ -16,19 +16,32 @@
 /**
  * Absolute Elo cutoff for "elite." VolleyLens uses 1700, but that's calibrated against
  * their own (much larger, multi-season) Elo history. A population-relative cutoff
- * (e.g. this project's own top 8-13%, ~1600 today) looks appealing but is the wrong
- * idea entirely: Elite Presence is intrinsic to a *division's own* teams, not the
+ * (e.g. this project's own top percentile) looks appealing but is the wrong idea
+ * entirely: Elite Presence is intrinsic to a *division's own* teams, not the
  * population, so a threshold that only a small national percentile clears will make
- * even the single strongest field in the country look weak (a real division, Triple
- * Crown NIT 14 Open, checked in at just 15% Elite Presence with a 1600 cutoff -- see
- * docs/plan.md/session notes). 1450 was picked instead by checking real 14u data: it
- * puts NIT and USAV Nationals 14 Open both around 80-82%, while a genuinely weaker
- * regional field (Nike Classic 14 Open) sits at 68% -- a real gap, not a coincidence
- * of everything clustering near 100%. Still nowhere near VolleyLens' 98%, which
- * likely reflects a far more mature (multi-season) Elo spread than this project has
- * after one season -- revisit as more seasons of match data accumulate.
+ * even the single strongest field in the country look weak.
+ *
+ * Recalibrated 2026-08-04 via `prisma/analyzeEliteThreshold.ts` (`npm run
+ * analyze:elite-threshold`, or against prod via `run-prod-script.sh`) after the
+ * original 1450 was checked and found stale, one session after Elo's own tuning
+ * constants were recalibrated (see this file's header comment and docs/plan.md's
+ * Status entry, both 2026-08-03): that recalibration widened Elo's spread from the
+ * 1500 default, which silently moved the whole rated population upward relative to
+ * this constant -- prod data showed the population median landing almost exactly on
+ * 1450, with 18% of Elo-eligible divisions pinned at exactly 100% Elite Presence
+ * (Triple Crown NIT and a routine regional Open bracket both maxing out identically).
+ * 1633 restores the original design's real gap: Triple Crown NIT / USAV Girls Junior
+ * National Championship divisions land 91-100%, explicitly lower-tier ("Club"/
+ * "Classic") named divisions land 0-3%, checked against real prod data both in
+ * aggregate (division-level Elite Presence clustering at the 0%/100% extremes) and by
+ * name (see the report's named-division sanity check). Not a population-relative
+ * percentile -- it happens to land near the current population's ~75th percentile, but
+ * that's incidental to the calibration, not the design (see the paragraph above for
+ * why a percentile cutoff is the wrong idea for this specific metric). Revisit with
+ * `analyzeEliteThreshold.ts` any time Elo's own tuning constants change again, since
+ * that's exactly the failure mode that made 1450 go stale.
  */
-export const ELO_ELITE_THRESHOLD = 1450;
+export const ELO_ELITE_THRESHOLD = 1633;
 
 export const DCI_WEIGHTS = { elitePresence: 0.4, strengthOfField: 0.25, scaleFactor: 0.35 } as const;
 
