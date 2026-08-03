@@ -4,16 +4,20 @@ import Link from "next/link";
 import { BUCKET_THRESHOLDS } from "@/lib/rating/fieldStrength";
 import { computeDivisionWeightsForPartition } from "@/lib/rating/computeMatchDivisionWeights";
 import { computeDivisionScoringSuggestion } from "@/lib/rating/computeDivisionScoringSuggestion";
+import { computeAnalysisForSeasonInWorker } from "@/lib/rating/computeAnalysisForSeasonInWorker";
 import type { ScoreBand } from "@/lib/rating/suggestPointTemplate";
 import {
   tableClass,
   thClass,
   tdClass,
   primaryButtonClass,
+  secondaryButtonClass,
+  successBannerClass,
   stripedTbodyClass,
   scoringStatusBadgeClass,
   scoreBandBadgeClass,
 } from "@/lib/ui";
+import { SubmitButton } from "@/components/SubmitButton";
 
 async function runAnalysisForAll(seasonId: string, ageGroup: number) {
   "use server";
@@ -33,6 +37,26 @@ async function runAnalysisForAll(seasonId: string, ageGroup: number) {
   }
 
   redirect(`/admin/analysis/${seasonId}/${ageGroup}`);
+}
+
+/**
+ * Runs analysis across every age group in the season at once -- staff previously had
+ * to visit each age group's page and click "Run analysis for all divisions"
+ * separately. Fire-and-forget via computeAnalysisForSeasonInWorker (not awaited here)
+ * for the same reason team-rankings' "Recompute ratings" and club-rankings' recompute
+ * buttons are: a whole-season loop over every division can run long enough to risk
+ * Cloudflare's ~100s proxy timeout on the homelab host. Redirects immediately with an
+ * "started," not "complete," banner -- see recomputeAll in team-rankings/page.tsx for
+ * the same pattern and its own comment on why that's the honest thing to show.
+ */
+async function runAnalysisForSeason(seasonId: string, ageGroup: number) {
+  "use server";
+
+  computeAnalysisForSeasonInWorker(seasonId).catch((err) => {
+    console.error(`Background season-wide analysis run failed for season ${seasonId}:`, err);
+  });
+
+  redirect(`/admin/analysis/${seasonId}/${ageGroup}?analysisStarted=1`);
 }
 
 /**
@@ -72,11 +96,11 @@ export default async function AnalysisPage({
   searchParams,
 }: {
   params: Promise<{ seasonId: string; ageGroup: string }>;
-  searchParams: Promise<{ sort?: string; dir?: string }>;
+  searchParams: Promise<{ sort?: string; dir?: string; analysisStarted?: string }>;
 }) {
   const { seasonId, ageGroup: ageGroupParam } = await params;
   const ageGroup = Number(ageGroupParam);
-  const { sort, dir } = await searchParams;
+  const { sort, dir, analysisStarted } = await searchParams;
 
   const season = await prisma.season.findUnique({ where: { id: seasonId } });
   if (!season || !ageGroup) notFound();
@@ -140,6 +164,7 @@ export default async function AnalysisPage({
   }
 
   const runAnalysisForAllWithParams = runAnalysisForAll.bind(null, seasonId, ageGroup);
+  const runAnalysisForSeasonWithParams = runAnalysisForSeason.bind(null, seasonId, ageGroup);
 
   return (
     <div>
@@ -152,12 +177,27 @@ export default async function AnalysisPage({
         <h1 className="text-2xl font-semibold">
           {season.label} · {ageGroup}u Analysis
         </h1>
-        <form action={runAnalysisForAllWithParams}>
-          <button type="submit" className={primaryButtonClass}>
-            Run analysis for all divisions
-          </button>
-        </form>
+        <div className="flex items-center gap-3">
+          <form action={runAnalysisForAllWithParams}>
+            <SubmitButton className={primaryButtonClass} pendingText="Running…">
+              Run analysis for all divisions
+            </SubmitButton>
+          </form>
+          <form action={runAnalysisForSeasonWithParams}>
+            <SubmitButton className={secondaryButtonClass} pendingText="Starting…">
+              Run analysis for all age groups
+            </SubmitButton>
+          </form>
+        </div>
       </div>
+
+      {analysisStarted === "1" && (
+        <p className={successBannerClass}>
+          Analysis started for every age group in {season.label} — it runs in the
+          background and can take a minute or two. Reload this page in a bit to see
+          fresh results.
+        </p>
+      )}
 
       <div className="overflow-x-auto">
         <table className={tableClass}>
