@@ -8,10 +8,14 @@ export const primaryButtonClass =
   "rounded bg-slate-900 px-3 py-2 text-sm text-white transition-colors hover:bg-slate-700 disabled:opacity-50 disabled:hover:bg-slate-900";
 export const secondaryButtonClass =
   "rounded border px-3 py-2 text-sm transition-colors hover:border-slate-400 hover:bg-slate-100 disabled:opacity-50 disabled:hover:border-inherit disabled:hover:bg-transparent";
+export const dangerButtonClass =
+  "rounded border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700 transition-colors hover:border-red-400 hover:bg-red-100 disabled:opacity-50 disabled:hover:border-red-300 disabled:hover:bg-red-50";
 export const smallPrimaryButtonClass =
   "rounded bg-slate-900 px-2 py-1 text-xs text-white transition-colors hover:bg-slate-700 disabled:opacity-50 disabled:hover:bg-slate-900";
 export const smallSecondaryButtonClass =
   "rounded border px-2 py-1 text-xs transition-colors hover:border-slate-400 hover:bg-slate-100 disabled:opacity-50 disabled:hover:border-inherit disabled:hover:bg-transparent";
+export const smallDangerButtonClass =
+  "rounded border border-red-300 bg-red-50 px-2 py-1 text-xs text-red-700 transition-colors hover:border-red-400 hover:bg-red-100 disabled:opacity-50 disabled:hover:border-red-300 disabled:hover:bg-red-50";
 export const errorBannerClass = "mb-4 rounded bg-red-50 p-3 text-sm text-red-700";
 export const successBannerClass = "mb-4 rounded bg-green-50 p-3 text-sm text-green-700";
 export const tableClass = "w-full border-collapse text-sm";
