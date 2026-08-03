@@ -11,6 +11,7 @@ import {
   numTdClass,
   tbodyClass,
   RankBadge,
+  EloBadge,
 } from "@/lib/publicUi";
 import { getLatestPowerRatings, computeCombinedRankByTeam } from "@/lib/rating/powerRankings";
 
@@ -120,7 +121,7 @@ export default async function PublicClubDetailPage({
                   <td className={numTdClass}>{activeTs ? `${activeTs.ageGroup}u` : ""}</td>
                   <td className={numTdClass}>{activeTs?.teamNumber ?? ""}</td>
                   <td className={numTdClass}>
-                    {eloByTeamId.has(t.id) ? Math.round(eloByTeamId.get(t.id)!) : <span className="text-slate-400">—</span>}
+                    <EloBadge rating={eloByTeamId.get(t.id)} />
                   </td>
                   <td className={numTdClass}>
                     <RankBadge rank={combinedRankByTeamId.get(t.id)} />
