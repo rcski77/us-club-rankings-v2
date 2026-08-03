@@ -16,7 +16,8 @@
     "db:seed": "tsx prisma/seed.ts",
     "db:seed-regions": "tsx prisma/seedRegions.ts",
     "db:seed-demo": "tsx prisma/seedDemo.ts",
-    "db:seed-point-templates": "tsx prisma/seedPointTemplates.ts"
+    "db:seed-point-templates": "tsx prisma/seedPointTemplates.ts",
+    "backtest:elo": "tsx prisma/backtestElo.ts"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.8.0",

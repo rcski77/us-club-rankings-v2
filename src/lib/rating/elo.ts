@@ -94,6 +94,40 @@ export const OPEN_DIVISION_WIN_BONUS = 1.15;
 export const OPEN_DIVISION_LOSS_SOFTEN = 0.87;
 
 /**
+ * Every constant in this file that's a tuning knob rather than a structural fact of
+ * Elo, gathered so a backtest (see prisma/backtestElo.ts) can replay the same match
+ * graph under different values without editing this file per candidate.
+ * DEFAULT_ELO_CONFIG reproduces today's exact behavior -- every existing call site
+ * (computeEloRatings.ts, getTeamEloHistory, and every pre-existing test in
+ * elo.test.ts) omits `config` and gets this, so this refactor is purely additive.
+ */
+export type EloConfig = {
+  baseK: number;
+  provisionalK: number;
+  provisionalMatchThreshold: number;
+  openDivisionWinBonus: number;
+  openDivisionLossSoften: number;
+  /** Interpolates marginMultiplier()'s effect: 0 = no margin adjustment (multiplier
+   * always 1, i.e. plain win/loss Elo), 1 = today's full effect. A single knob for
+   * "does the margin-of-victory signal even help prediction accuracy," not just where
+   * to set it. */
+  marginStrength: number;
+  /** false forces every match's divisionWeight to 1 (neutral), isolating whether
+   * division-strength weighting helps prediction accuracy at all. */
+  divisionWeightEnabled: boolean;
+};
+
+export const DEFAULT_ELO_CONFIG: EloConfig = {
+  baseK: BASE_K,
+  provisionalK: PROVISIONAL_K,
+  provisionalMatchThreshold: PROVISIONAL_MATCH_THRESHOLD,
+  openDivisionWinBonus: OPEN_DIVISION_WIN_BONUS,
+  openDivisionLossSoften: OPEN_DIVISION_LOSS_SOFTEN,
+  marginStrength: 1,
+  divisionWeightEnabled: true,
+};
+
+/**
  * divisionWeight (see divisionWeight.ts) used to apply symmetrically to both a win
  * and a loss in a division -- so the season's strongest-known division amplified
  * losses just as hard as it rewarded wins. Per explicit user direction (2026-07-30),
@@ -144,15 +178,24 @@ export function computeMatchPointDiffRatio(setScores: { a: number; b: number }[]
  * the whole multiplier off the rails.
  * Blended 50/50. Falls back to setComponent alone (the old behavior) when no
  * per-set scores are available.
+ *
+ * `strength` interpolates the result toward 1 (no adjustment) -- 1 reproduces the raw
+ * blend above unchanged, 0 collapses to a flat 1 regardless of margin. See
+ * EloConfig.marginStrength.
  */
-function marginMultiplier(winnerSets: number, totalSets: number, setScores: { a: number; b: number }[] = []): number {
+function marginMultiplier(
+  winnerSets: number,
+  totalSets: number,
+  setScores: { a: number; b: number }[] = [],
+  strength = 1,
+): number {
   if (totalSets <= 0) return 1;
   const setComponent = 0.8 + 0.4 * (winnerSets / totalSets);
-  if (setScores.length === 0) return setComponent;
-
-  const pointDiffRatio = Math.min(computeMatchPointDiffRatio(setScores), 0.5);
-  const pointComponent = 0.8 + pointDiffRatio * 0.8;
-  return 0.5 * setComponent + 0.5 * pointComponent;
+  const raw =
+    setScores.length === 0
+      ? setComponent
+      : 0.5 * setComponent + 0.5 * (0.8 + Math.min(computeMatchPointDiffRatio(setScores), 0.5) * 0.8);
+  return 1 + strength * (raw - 1);
 }
 
 /** Dominant/moderate/narrow classification from the margin multiplier -- shared by
@@ -169,7 +212,7 @@ function classifyMargin(multiplier: number): "dominant" | "moderate" | "narrow" 
  * implementation here means the two callers can never drift out of sync on the
  * actual Elo math.
  */
-function replay(matches: EloMatchWithId[]): EloStep[] {
+function replay(matches: EloMatchWithId[], config: EloConfig = DEFAULT_ELO_CONFIG): EloStep[] {
   const ratings = new Map<string, number>();
   const matchesPlayed = new Map<string, number>();
   const getRating = (id: string) => ratings.get(id) ?? DEFAULT_RATING;
@@ -187,10 +230,11 @@ function replay(matches: EloMatchWithId[]): EloStep[] {
       setsA,
       setsB,
       matchDate,
-      divisionWeight = 1,
+      divisionWeight: rawDivisionWeight = 1,
       isOpenDivision = false,
       setScores = [],
     } = m;
+    const divisionWeight = config.divisionWeightEnabled ? rawDivisionWeight : 1;
     const ratingABefore = getRating(teamAId);
     const ratingBBefore = getRating(teamBId);
     const expectedA = expectedScore(ratingABefore, ratingBBefore);
@@ -198,13 +242,13 @@ function replay(matches: EloMatchWithId[]): EloStep[] {
     const aWon = winnerTeamId === teamAId;
 
     const winnerSets = aWon ? setsA : setsB;
-    const multiplier = marginMultiplier(winnerSets, setsA + setsB, setScores);
+    const multiplier = marginMultiplier(winnerSets, setsA + setsB, setScores, config.marginStrength);
 
-    const kA = getCount(teamAId) < PROVISIONAL_MATCH_THRESHOLD ? PROVISIONAL_K : BASE_K;
-    const kB = getCount(teamBId) < PROVISIONAL_MATCH_THRESHOLD ? PROVISIONAL_K : BASE_K;
+    const kA = getCount(teamAId) < config.provisionalMatchThreshold ? config.provisionalK : config.baseK;
+    const kB = getCount(teamBId) < config.provisionalMatchThreshold ? config.provisionalK : config.baseK;
 
     const openBonus = (won: boolean) =>
-      isOpenDivision ? (won ? OPEN_DIVISION_WIN_BONUS : OPEN_DIVISION_LOSS_SOFTEN) : 1;
+      isOpenDivision ? (won ? config.openDivisionWinBonus : config.openDivisionLossSoften) : 1;
     const effectiveWeightA = directionalDivisionWeight(divisionWeight, aWon) * openBonus(aWon);
     const effectiveWeightB = directionalDivisionWeight(divisionWeight, !aWon) * openBonus(!aWon);
 
@@ -248,9 +292,9 @@ function replay(matches: EloMatchWithId[]): EloStep[] {
  * Returns one row per team that appeared in at least one match -- order is
  * unspecified, callers rank/sort as needed (mirrors solveColley's contract).
  */
-export function computeEloRatings(matches: EloMatch[]): EloRating[] {
+export function computeEloRatings(matches: EloMatch[], config: EloConfig = DEFAULT_ELO_CONFIG): EloRating[] {
   const withIds: EloMatchWithId[] = matches.map((m, i) => ({ ...m, id: String(i) }));
-  const steps = replay(withIds);
+  const steps = replay(withIds, config);
 
   const ratings = new Map<string, number>();
   const matchesPlayed = new Map<string, number>();
@@ -272,8 +316,8 @@ export function computeEloRatings(matches: EloMatch[]): EloRating[] {
  * Same replay, but returns the full per-match trace rather than just final ratings --
  * powers a team's Elo history view ("why did my rating change on this match").
  */
-export function computeEloHistory(matches: EloMatchWithId[]): EloStep[] {
-  return replay(matches);
+export function computeEloHistory(matches: EloMatchWithId[], config: EloConfig = DEFAULT_ELO_CONFIG): EloStep[] {
+  return replay(matches, config);
 }
 
 /**
