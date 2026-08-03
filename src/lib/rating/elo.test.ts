@@ -6,6 +6,7 @@ import {
   computeEloHistory,
   computeEloRatings,
   computeMatchPointDiffRatio,
+  DEFAULT_ELO_CONFIG,
   explainDivisionEffect,
   explainEloChange,
   OPEN_DIVISION_LOSS_SOFTEN,
@@ -594,5 +595,74 @@ describe("explainDivisionEffect", () => {
     const lossText = explainDivisionEffect({ won: false, divisionWeight: 0.7, isOpenDivision: false });
     expect(winText).toMatch(/counted for less either way/);
     expect(lossText).toMatch(/counted for less either way/);
+  });
+});
+
+describe("EloConfig", () => {
+  const base = {
+    teamAId: "a",
+    teamBId: "b",
+    winnerTeamId: "a",
+    matchDate: new Date("2026-01-01"),
+    setsA: 2,
+    setsB: 1,
+  };
+
+  it("omitting config reproduces DEFAULT_ELO_CONFIG's exact output", () => {
+    const omitted = computeEloRatings([base]);
+    const explicit = computeEloRatings([base], DEFAULT_ELO_CONFIG);
+    expect(omitted.find((r) => r.teamId === "a")!.rating).toBeCloseTo(
+      explicit.find((r) => r.teamId === "a")!.rating,
+      10,
+    );
+  });
+
+  it("a baseK override changes the swing for a warmed-up (non-provisional) team", () => {
+    // Warm both teams up past the provisional threshold first, so the final match
+    // uses baseK, not provisionalK.
+    const warmup = Array.from({ length: 10 }, (_, i) => ({
+      teamAId: "a",
+      teamBId: `opp${i}`,
+      winnerTeamId: "a",
+      matchDate: new Date(2026, 0, i + 1),
+      setsA: 2,
+      setsB: 0,
+    })).concat(
+      Array.from({ length: 10 }, (_, i) => ({
+        teamAId: "b",
+        teamBId: `bopp${i}`,
+        winnerTeamId: "b",
+        matchDate: new Date(2026, 0, i + 1),
+        setsA: 2,
+        setsB: 0,
+      })),
+    );
+    const decisive = { ...base, matchDate: new Date(2026, 0, 20) };
+
+    const defaultRating = computeEloRatings([...warmup, decisive]).find((r) => r.teamId === "a")!.rating;
+    const highK = computeEloRatings(
+      [...warmup, decisive],
+      { ...DEFAULT_ELO_CONFIG, baseK: DEFAULT_ELO_CONFIG.baseK * 2 },
+    ).find((r) => r.teamId === "a")!.rating;
+    const priorRating = computeEloRatings(warmup).find((r) => r.teamId === "a")!.rating;
+
+    expect(Math.abs(highK - priorRating)).toBeCloseTo(2 * Math.abs(defaultRating - priorRating), 6);
+  });
+
+  it("marginStrength: 0 makes the multiplier always 1 regardless of set/point scores", () => {
+    const steps = computeEloHistory(
+      [
+        {
+          id: "m1",
+          ...base,
+          setScores: [
+            { a: 25, b: 5 },
+            { a: 25, b: 3 },
+          ],
+        },
+      ],
+      { ...DEFAULT_ELO_CONFIG, marginStrength: 0 },
+    );
+    expect(steps[0].multiplier).toBe(1);
   });
 });
