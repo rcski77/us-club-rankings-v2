@@ -53,7 +53,6 @@ export default async function ImportBatchPage({
   const { error, reason, success, filter } = await searchParams;
   const showOnlyAttention = filter === "attention";
 
-  // Sequential, not Promise.all -- see docs/dev-environment.md.
   const batch = await prisma.importBatch.findUnique({
     where: { id: batchId },
     include: {
@@ -67,19 +66,38 @@ export default async function ImportBatchPage({
     return <MatchResultsBatchView batch={batch} error={error} reason={reason} success={success} />;
   }
 
-  const divisions = await prisma.division.findMany({
-    where: { eventId: batch.eventId },
-    orderBy: [{ ageGroup: "desc" }, { name: "asc" }],
-  });
-  const clubs = await prisma.club.findMany({ orderBy: { name: "asc" } });
-  const teams = await prisma.team.findMany({ orderBy: { name: "asc" }, include: { club: true } });
+  const allRows = batch.files.flatMap((f) =>
+    f.rows.map((r) => ({ ...r, filename: f.filename, partNumber: f.partNumber })),
+  );
+  // Scopes the team-override dropdown to the clubs this batch's rows actually
+  // reference instead of dumping every team in the system into it -- with real-sized
+  // data (1000+ teams) that unscoped fetch was the other half of the page-lockup bug
+  // the club-override fix below addresses.
+  const clubIdsInBatch = [
+    ...new Set(allRows.flatMap((r) => [r.matchedClubId, r.overrideClubId].filter((id): id is string => !!id))),
+  ];
+  // matchedTeamId is looked up directly (row.matchedTeamId below) and can in theory
+  // belong to a club outside clubIdsInBatch (e.g. lineage-matched across a club
+  // change), so it's included explicitly rather than relying on the club scoping.
+  const matchedTeamIdsInBatch = [...new Set(allRows.map((r) => r.matchedTeamId).filter((id): id is string => !!id))];
+
+  // divisions, clubs, and teams don't depend on each other's results.
+  const [divisions, clubs, teams] = await Promise.all([
+    prisma.division.findMany({
+      where: { eventId: batch.eventId },
+      orderBy: [{ ageGroup: "desc" }, { name: "asc" }],
+    }),
+    prisma.club.findMany({ orderBy: { name: "asc" } }),
+    prisma.team.findMany({
+      where: { OR: [{ clubId: { in: clubIdsInBatch } }, { id: { in: matchedTeamIdsInBatch } }] },
+      orderBy: { name: "asc" },
+      include: { club: true },
+    }),
+  ]);
 
   const divisionById = new Map(divisions.map((d) => [d.id, d]));
   const clubById = new Map(clubs.map((c) => [c.id, c]));
   const teamById = new Map(teams.map((t) => [t.id, t]));
-  // Scopes the team-override dropdown to the row's own club instead of dumping every
-  // team in the system into it -- with real-sized data (1000+ teams) that select was
-  // the other half of the page-lockup bug the club-override fix above addresses.
   const teamsByClubId = new Map<string, typeof teams>();
   for (const t of teams) {
     if (!t.clubId) continue;
@@ -87,10 +105,6 @@ export default async function ImportBatchPage({
     list.push(t);
     teamsByClubId.set(t.clubId, list);
   }
-
-  const allRows = batch.files.flatMap((f) =>
-    f.rows.map((r) => ({ ...r, filename: f.filename, partNumber: f.partNumber })),
-  );
   const isDraft = batch.status === "DRAFT";
   const isCommitted = batch.status === "COMMITTED";
 

@@ -66,42 +66,49 @@ export default async function TeamDetailPage({
   const { teamId } = await params;
   const { error, season: seasonParam } = await searchParams;
 
-  // Sequential, not Promise.all: the local dev Postgres (via `prisma dev`) doesn't
-  // reliably handle concurrent queries from the same connection pool.
-  const team = await prisma.team.findUnique({
-    where: { id: teamId },
-    include: {
-      club: true,
-      seasons: { include: { season: true }, orderBy: { season: { startDate: "desc" } } },
-      finishes: {
-        include: {
-          division: { include: { event: { include: { season: true } }, pointBands: true } },
+  // team, matchesAsA/B, clubs, and seasons don't depend on each other's results, so
+  // they run as one batch instead of five sequential round trips.
+  // matchesAsA/B are capped at 500 as a stopgap -- a team with more matches than that
+  // in its full history would need the season-tab derivation below reworked to filter
+  // in the DB instead of in JS; not attempted in this pass.
+  const [team, matchesAsA, matchesAsB, clubs, seasons] = await Promise.all([
+    prisma.team.findUnique({
+      where: { id: teamId },
+      include: {
+        club: true,
+        seasons: { include: { season: true }, orderBy: { season: { startDate: "desc" } } },
+        finishes: {
+          include: {
+            division: { include: { event: { include: { season: true } }, pointBands: true } },
+          },
+          orderBy: { division: { event: { startDate: "desc" } } },
         },
-        orderBy: { division: { event: { startDate: "desc" } } },
       },
-    },
-  });
+    }),
+    prisma.match.findMany({
+      where: { teamAId: teamId },
+      include: {
+        event: { include: { season: true } },
+        division: true,
+        teamB: true,
+      },
+      orderBy: { matchDate: "desc" },
+      take: 500,
+    }),
+    prisma.match.findMany({
+      where: { teamBId: teamId },
+      include: {
+        event: { include: { season: true } },
+        division: true,
+        teamA: true,
+      },
+      orderBy: { matchDate: "desc" },
+      take: 500,
+    }),
+    prisma.club.findMany({ orderBy: { name: "asc" } }),
+    prisma.season.findMany({ orderBy: { startDate: "desc" } }),
+  ]);
   if (!team) notFound();
-
-  // Sequential, not Promise.all -- see docs/dev-environment.md.
-  const matchesAsA = await prisma.match.findMany({
-    where: { teamAId: teamId },
-    include: {
-      event: { include: { season: true } },
-      division: true,
-      teamB: true,
-    },
-    orderBy: { matchDate: "desc" },
-  });
-  const matchesAsB = await prisma.match.findMany({
-    where: { teamBId: teamId },
-    include: {
-      event: { include: { season: true } },
-      division: true,
-      teamA: true,
-    },
-    orderBy: { matchDate: "desc" },
-  });
   // Normalize both sides into "this team" vs. "opponent" so the table doesn't need to
   // care which side of the match this team happened to be on. thisTeamIsA also lets
   // the per-set score display (setScores is stored as {a, b} = teamA/teamB points,
@@ -125,8 +132,6 @@ export default async function TeamDetailPage({
       thisTeamIsA: false,
     })),
   ].sort((a, b) => (b.matchDate?.getTime() ?? 0) - (a.matchDate?.getTime() ?? 0));
-  const clubs = await prisma.club.findMany({ orderBy: { name: "asc" } });
-  const seasons = await prisma.season.findMany({ orderBy: { startDate: "desc" } });
 
   const enrolledSeasonIds = new Set(team.seasons.map((ts) => ts.seasonId));
   const availableSeasons = seasons.filter((s) => !enrolledSeasonIds.has(s.id));
@@ -148,11 +153,11 @@ export default async function TeamDetailPage({
   const finishesForSeason = team.finishes.filter((f) => f.division.event.season.id === activeSeasonId);
   const matchesForSeason = matches.filter((m) => m.event.season.id === activeSeasonId);
 
-  // Sequential, not Promise.all -- see docs/dev-environment.md. [] when the team has
-  // no TeamSeason row for activeSeasonId (no natural age group to resolve from) or no
-  // rated matches yet. Keyed by matchId so the Match Results table below can look up
-  // "does this match have Elo data" per row rather than rendering two separate,
-  // largely-duplicate match lists.
+  // Depends on activeSeasonId (derived above from team/matches), so stays sequential.
+  // [] when the team has no TeamSeason row for activeSeasonId (no natural age group to
+  // resolve from) or no rated matches yet. Keyed by matchId so the Match Results table
+  // below can look up "does this match have Elo data" per row rather than rendering
+  // two separate, largely-duplicate match lists.
   const eloHistory = activeSeasonId ? await getTeamEloHistory(teamId, activeSeasonId) : [];
   const eloByMatchId = new Map(eloHistory.map((h) => [h.matchId, h]));
 
