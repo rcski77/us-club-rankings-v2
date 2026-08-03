@@ -135,8 +135,21 @@ async function ClubRankingTable({ seasonId, source }: { seasonId: string; source
     { label: "Under-qualified (still ranked, sorted after qualified clubs)", rows: underQualified },
   ];
 
+  // Every row in one (season, source) recompute shares the same computedAt -- see
+  // computeClubRankingForSeason -- so the first row's timestamp represents the whole
+  // batch, same convention as Power Rankings' own "as of" line (team-rankings/page.tsx).
+  const computedAt = results[0]?.computedAt;
+
   return (
-    <table className={tableClass}>
+    <>
+      {computedAt && (
+        <p className="mb-4 text-sm text-slate-500">
+          {source === "NPS" ? "NPS" : "Combined"} club rankings as of{" "}
+          {computedAt.toLocaleString("en-US", { timeZone: "America/New_York", timeZoneName: "short" })}
+        </p>
+      )}
+
+      <table className={tableClass}>
       <thead>
         <tr>
           <th className={thClass}>Rank</th>
@@ -217,5 +230,6 @@ async function ClubRankingTable({ seasonId, source }: { seasonId: string; source
         )}
       </tbody>
     </table>
+    </>
   );
 }
