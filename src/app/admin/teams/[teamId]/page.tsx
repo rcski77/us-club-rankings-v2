@@ -14,6 +14,7 @@ import {
   errorBannerClass,
 } from "@/lib/ui";
 import { getTeamEloHistory } from "@/lib/rating/computeEloRatings";
+import { ClubCombobox } from "@/components/ClubCombobox";
 
 async function updateTeam(teamId: string, formData: FormData) {
   "use server";
@@ -105,7 +106,7 @@ export default async function TeamDetailPage({
       orderBy: { matchDate: "desc" },
       take: 500,
     }),
-    prisma.club.findMany({ orderBy: { name: "asc" } }),
+    prisma.club.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
     prisma.season.findMany({ orderBy: { startDate: "desc" } }),
   ]);
   if (!team) notFound();
@@ -245,14 +246,7 @@ export default async function TeamDetailPage({
           </label>
           <label className="flex flex-col gap-1 text-sm">
             Club
-            <select name="clubId" className={selectClass} defaultValue={team.clubId ?? ""}>
-              <option value="">(unlinked)</option>
-              {clubs.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
+            <ClubCombobox clubs={clubs} name="clubId" defaultClubId={team.clubId} />
           </label>
           <button type="submit" className={`${primaryButtonClass} self-start`}>
             Save

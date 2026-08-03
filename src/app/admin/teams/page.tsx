@@ -11,6 +11,7 @@ import {
   thClass,
   tdClass,
 } from "@/lib/ui";
+import { ClubCombobox } from "@/components/ClubCombobox";
 
 async function createTeam(formData: FormData) {
   "use server";
@@ -43,10 +44,11 @@ export default async function TeamsPage({
   searchParams: Promise<{ error?: string; seasonId?: string }>;
 }) {
   const { error, seasonId: seasonIdParam } = await searchParams;
-  // Sequential, not Promise.all: the local dev Postgres (via `prisma dev`) doesn't
-  // reliably handle concurrent queries from the same connection pool.
-  const clubs = await prisma.club.findMany({ orderBy: { name: "asc" } });
-  const seasons = await prisma.season.findMany({ orderBy: { startDate: "desc" } });
+  // clubs and seasons don't depend on each other's results.
+  const [clubs, seasons] = await Promise.all([
+    prisma.club.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
+    prisma.season.findMany({ orderBy: { startDate: "desc" } }),
+  ]);
   const activeSeason = seasons.find((s) => s.isActive) ?? seasons[0];
   const selectedSeasonId = seasonIdParam || activeSeason?.id;
 
@@ -142,14 +144,7 @@ export default async function TeamsPage({
             </label>
             <label className="flex flex-col gap-1 text-sm">
               Club
-              <select name="clubId" className={selectClass} defaultValue="">
-                <option value="">(unlinked)</option>
-                {clubs.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
+              <ClubCombobox clubs={clubs} name="clubId" />
             </label>
             <label className="flex flex-col gap-1 text-sm">
               Age group
