@@ -104,10 +104,13 @@ async function main() {
 
   results.push({
     name: "baseK",
+    // Widened after two runs (dev 56k matches, prod 113k matches) both showed the
+    // original [16,32] range still improving toward its upper edge -- see
+    // docs/plan.md's Status entry for this backtest tool.
     ...printSweep(
       "baseK sweep",
       partitions,
-      [16, 20, 24, 28, 32].map((v) => ({
+      [16, 20, 24, 28, 32, 40, 48].map((v) => ({
         label: String(v),
         overrides: { baseK: v },
         isDefault: v === DEFAULT_ELO_CONFIG.baseK,
@@ -117,10 +120,12 @@ async function main() {
 
   results.push({
     name: "provisionalK",
+    // Widened -- both dev and prod runs kept improving monotonically all the way to
+    // the old ceiling of 56.
     ...printSweep(
       "provisionalK sweep",
       partitions,
-      [24, 32, 40, 48, 56].map((v) => ({
+      [24, 32, 40, 48, 56, 64, 80, 100].map((v) => ({
         label: String(v),
         overrides: { provisionalK: v },
         isDefault: v === DEFAULT_ELO_CONFIG.provisionalK,
@@ -130,10 +135,14 @@ async function main() {
 
   results.push({
     name: "provisionalMatchThreshold",
+    // Widened -- both runs showed the *lower* values (5, 8) consistently worse than
+    // the default, and monotonic improvement continuing past the old ceiling of 15, so
+    // this drops the low end and extends the high end instead of spreading points
+    // evenly across the old range.
     ...printSweep(
       "provisionalMatchThreshold sweep",
       partitions,
-      [5, 8, 10, 12, 15].map((v) => ({
+      [10, 15, 20, 25, 30, 40].map((v) => ({
         label: String(v),
         overrides: { provisionalMatchThreshold: v },
         isDefault: v === DEFAULT_ELO_CONFIG.provisionalMatchThreshold,
@@ -143,10 +152,11 @@ async function main() {
 
   results.push({
     name: "marginStrength",
+    // Widened -- both runs kept improving monotonically past the old ceiling of 2.
     ...printSweep(
       "marginStrength sweep (0 = no margin-of-victory adjustment, 1 = today's full effect)",
       partitions,
-      [0, 0.5, 1, 1.5, 2].map((v) => ({
+      [0, 0.5, 1, 1.5, 2, 2.5, 3, 4].map((v) => ({
         label: String(v),
         overrides: { marginStrength: v },
         isDefault: v === DEFAULT_ELO_CONFIG.marginStrength,
@@ -154,13 +164,18 @@ async function main() {
     ),
   });
 
-  const openBonusPairs: { label: string; win: number; loss: number }[] = [
-    { label: "off (1.0/1.0)", win: 1, loss: 1 },
-    { label: "0.5x current", win: 1.075, loss: 0.93 },
-    { label: "current (1.15/0.87)", win: 1.15, loss: 0.87 },
-    { label: "1.5x current", win: 1.225, loss: 0.815 },
-    { label: "2x current", win: 1.3, loss: 0.75 },
-  ];
+  // Widened -- both runs kept improving monotonically past the old ceiling (2x
+  // current). Generalized as a multiplier on how far win/loss are pushed from 1.0 (the
+  // same direction OPEN_DIVISION_WIN_BONUS/LOSS_SOFTEN already push, just further),
+  // rather than hardcoding more pairs by hand.
+  const openBonusMultiples = [0, 0.5, 1, 1.5, 2, 2.5, 3];
+  const winOffset = DEFAULT_ELO_CONFIG.openDivisionWinBonus - 1; // +0.15
+  const lossOffset = 1 - DEFAULT_ELO_CONFIG.openDivisionLossSoften; // +0.13 (applied as -offset)
+  const openBonusPairs = openBonusMultiples.map((m) => ({
+    label: m === 0 ? "off (1.0/1.0)" : m === 1 ? "current (1.15/0.87)" : `${m}x current`,
+    win: 1 + winOffset * m,
+    loss: 1 - lossOffset * m,
+  }));
   results.push({
     name: "openDivisionBonus",
     ...printSweep(
