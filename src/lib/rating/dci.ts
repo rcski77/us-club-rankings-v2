@@ -7,41 +7,12 @@
  * for the per-division fallback to the Colley path when they don't (Elo has no
  * standings-inferred fallback of its own, per elo.ts).
  *
- * All three placeholder constants below are explicitly uncalibrated -- picked from a
- * one-time look at this project's actual current Elo distribution (see the ELO_ELITE_THRESHOLD
- * comment), not from any established formula, and expected to need revisiting as more
- * seasons of match data accumulate and ratings spread further from the 1500 default.
+ * The scale-factor reference points below are explicitly uncalibrated -- picked from a
+ * one-time look at this project's actual current data, not from any established
+ * formula, and expected to need revisiting as more seasons of match data accumulate.
+ * The elite threshold (see computeEliteThreshold() below) is not a fixed placeholder
+ * of that kind -- see its own comment for why.
  */
-
-/**
- * Absolute Elo cutoff for "elite." VolleyLens uses 1700, but that's calibrated against
- * their own (much larger, multi-season) Elo history. A population-relative cutoff
- * (e.g. this project's own top percentile) looks appealing but is the wrong idea
- * entirely: Elite Presence is intrinsic to a *division's own* teams, not the
- * population, so a threshold that only a small national percentile clears will make
- * even the single strongest field in the country look weak.
- *
- * Recalibrated 2026-08-04 via `prisma/analyzeEliteThreshold.ts` (`npm run
- * analyze:elite-threshold`, or against prod via `run-prod-script.sh`) after the
- * original 1450 was checked and found stale, one session after Elo's own tuning
- * constants were recalibrated (see this file's header comment and docs/plan.md's
- * Status entry, both 2026-08-03): that recalibration widened Elo's spread from the
- * 1500 default, which silently moved the whole rated population upward relative to
- * this constant -- prod data showed the population median landing almost exactly on
- * 1450, with 18% of Elo-eligible divisions pinned at exactly 100% Elite Presence
- * (Triple Crown NIT and a routine regional Open bracket both maxing out identically).
- * 1633 restores the original design's real gap: Triple Crown NIT / USAV Girls Junior
- * National Championship divisions land 91-100%, explicitly lower-tier ("Club"/
- * "Classic") named divisions land 0-3%, checked against real prod data both in
- * aggregate (division-level Elite Presence clustering at the 0%/100% extremes) and by
- * name (see the report's named-division sanity check). Not a population-relative
- * percentile -- it happens to land near the current population's ~75th percentile, but
- * that's incidental to the calibration, not the design (see the paragraph above for
- * why a percentile cutoff is the wrong idea for this specific metric). Revisit with
- * `analyzeEliteThreshold.ts` any time Elo's own tuning constants change again, since
- * that's exactly the failure mode that made 1450 go stale.
- */
-export const ELO_ELITE_THRESHOLD = 1633;
 
 export const DCI_WEIGHTS = { elitePresence: 0.4, strengthOfField: 0.25, scaleFactor: 0.35 } as const;
 
@@ -56,15 +27,69 @@ export const DCI_WEIGHTS = { elitePresence: 0.4, strengthOfField: 0.25, scaleFac
 export const ELO_COVERAGE_THRESHOLD = 0.5;
 
 /**
- * % of this division's own Elo-rated teams at or above the elite threshold --
- * deliberately intrinsic to the division (no external population denominator, unlike
- * the Colley elitePresence metric), so it doesn't depend on how much of the season's
- * data existed the moment this division's snapshot happened to be generated.
+ * The percentile (within the current Elo population) that "elite" tracks -- see
+ * computeEliteThreshold() below for how this becomes an actual rating value.
+ *
+ * History: originally a fixed absolute rating (1450, picked 2026-07-30 from a one-time
+ * look at real 14u data; see git history for that reasoning). That went stale one
+ * session after Elo's own tuning constants were recalibrated (2026-08-03, see
+ * docs/plan.md's Status entries): recalibration widened Elo's spread from the 1500
+ * default, silently moving the whole rated population upward relative to the fixed
+ * number -- prod data (2026-08-04) showed the population median landing almost
+ * exactly on 1450, with 18% of Elo-eligible divisions pinned at exactly 100% Elite
+ * Presence. Re-picking a new fixed number (1633, checked the same way 1450 was) fixed
+ * the symptom but not the underlying fragility -- the same drift would recur the next
+ * time Elo's constants change. This constant is the fix for the actual cause: instead
+ * of a fixed rating, track a fixed *percentile* of the live population, so the
+ * resulting rating value moves automatically as the population's own scale shifts.
+ *
+ * A population-relative cutoff was explicitly rejected once before (Phase 5) on the
+ * reasoning that Elite Presence is intrinsic to a division's own roster, not the
+ * population, and a threshold only a small percentile clears would make even the
+ * single strongest field in the country look weak -- real data at the time showed
+ * Triple Crown NIT 14 Open at just 15% Elite Presence under a *top 8-13% nationally*
+ * cutoff. That data point doesn't actually contradict this constant: 75 is a much less
+ * extreme percentile than the top 8-13% that was tried and rejected, and this exact
+ * value was checked the same way 1633 was (division-level clustering at the 0%/100%
+ * extremes, plus a named-division sanity check against real prod data) -- Triple Crown
+ * NIT / USAV Girls Junior National Championship divisions land 91-100%, explicitly
+ * lower-tier ("Club"/"Classic") named divisions land 0-3%. The earlier rejection holds
+ * as a caution against picking too strict a percentile, not against this approach in
+ * general. Revisit with `prisma/analyzeEliteThreshold.ts` (`npm run
+ * analyze:elite-threshold`) if that gap ever looks wrong again -- the script's sweep is
+ * now over candidate percentiles, not raw rating values, matching this constant.
  */
-export function computeIntrinsicElitePresence(
-  ratings: number[],
-  threshold: number = ELO_ELITE_THRESHOLD,
-): number {
+export const ELITE_PERCENTILE = 75;
+
+/**
+ * The Elo rating at ELITE_PERCENTILE within `populationRatings` -- turns the
+ * population-relative knob above into the actual absolute rating value
+ * computeIntrinsicElitePresence() needs. Null for an empty population (nothing to
+ * derive a threshold from). Same "share of the population at or below" percentile
+ * convention as suggestPointTemplate.ts's computeFssPercentile(), just inverted
+ * (rating-from-percentile here, vs. percentile-from-rating there).
+ */
+export function computeEliteThreshold(
+  populationRatings: number[],
+  percentile: number = ELITE_PERCENTILE,
+): number | null {
+  if (populationRatings.length === 0) return null;
+  const sorted = [...populationRatings].sort((a, b) => a - b);
+  const index = Math.min(sorted.length - 1, Math.floor((percentile / 100) * sorted.length));
+  return sorted[index];
+}
+
+/**
+ * % of this division's own Elo-rated teams at or above `threshold` -- deliberately
+ * intrinsic to the division (no external population denominator, unlike the Colley
+ * elitePresence metric), so it doesn't depend on how much of the season's data existed
+ * the moment this division's snapshot happened to be generated. `threshold` is
+ * required, not defaulted: callers should derive it from the current population via
+ * computeEliteThreshold() (see computeDivisionScoringSuggestion.ts) rather than rely on
+ * an implicit constant that can silently drift out of calibration -- exactly what
+ * happened to the fixed threshold this replaced (see ELITE_PERCENTILE's comment).
+ */
+export function computeIntrinsicElitePresence(ratings: number[], threshold: number): number {
   if (ratings.length === 0) return 0;
   const eliteCount = ratings.filter((r) => r >= threshold).length;
   return (eliteCount / ratings.length) * 100;

@@ -3,6 +3,7 @@ import { computeDivisionFieldStrength } from "./computeDivisionFieldStrength";
 import { getDivisionEloRatings, getEloPopulationRatings } from "./computeDivisionEloStrength";
 import {
   computeDci,
+  computeEliteThreshold,
   computeIntrinsicElitePresence,
   computeScaleFactor,
   computeTopQuartileMean,
@@ -64,7 +65,11 @@ export async function computeDivisionScoringSuggestion(
     const eloPopulation = await getEloPopulationRatings(division.event.seasonId, division.ageGroup);
 
     fss = computeTopQuartileMean(ratings);
-    elitePresence = computeIntrinsicElitePresence(ratings);
+    // eloPopulation always includes this division's own rated teams (same
+    // season+ageGroup query), so it's never empty here -- the `?? 1500` fallback is
+    // pure type-safety, not expected to ever actually apply.
+    const eliteThreshold = computeEliteThreshold(eloPopulation) ?? 1500;
+    elitePresence = computeIntrinsicElitePresence(ratings, eliteThreshold);
     const strengthOfFieldPercentile = fss === null ? null : computeFssPercentile(fss, eloPopulation);
     const scaleFactor = computeScaleFactor(fieldStrength.teamCount, eloMatchVolume);
     percentile =

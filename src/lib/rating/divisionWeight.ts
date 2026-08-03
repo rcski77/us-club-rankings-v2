@@ -29,7 +29,12 @@
 /**
  * Weight range -- same rough magnitude as elo.ts's existing marginMultiplier
  * ([0.8, 1.2]), not derived from any formula. Uncalibrated placeholder, same status
- * as every other constant in this rating system (dci.ts's ELO_ELITE_THRESHOLD etc.)
+ * as every other uncalibrated constant in this rating system (dci.ts's
+ * SCALE_REFERENCE_* etc. -- ELO_ELITE_THRESHOLD used to be one of these too, but was
+ * replaced 2026-08-04 by a population-relative percentile for exactly the reason noted
+ * here: a fixed absolute constant drifts out of calibration as the underlying rating
+ * distribution shifts, which this WEIGHT_MIN/MAX pair already avoids by being
+ * rank-transform-based rather than a fixed value -- see this file's header comment)
  * -- revisit once more seasons of data exist to check it against.
  */
 export const WEIGHT_MIN = 0.7;

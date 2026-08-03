@@ -1,23 +1,45 @@
 import { describe, expect, it } from "vitest";
 import {
   computeDci,
+  computeEliteThreshold,
   computeIntrinsicElitePresence,
   computeScaleFactor,
   computeTopQuartileMean,
-  ELO_ELITE_THRESHOLD,
+  ELITE_PERCENTILE,
 } from "./dci";
 
 describe("computeIntrinsicElitePresence", () => {
   it("returns 0 for an empty division", () => {
-    expect(computeIntrinsicElitePresence([])).toBe(0);
+    expect(computeIntrinsicElitePresence([], 1600)).toBe(0);
   });
 
   it("computes the share of the division's own teams at or above the threshold", () => {
     expect(computeIntrinsicElitePresence([1650, 1600, 1500, 1400], 1600)).toBe(50);
   });
+});
 
-  it("uses ELO_ELITE_THRESHOLD by default", () => {
-    expect(computeIntrinsicElitePresence([ELO_ELITE_THRESHOLD, 1000])).toBe(50);
+describe("computeEliteThreshold", () => {
+  it("returns null for an empty population", () => {
+    expect(computeEliteThreshold([])).toBeNull();
+  });
+
+  it("returns the rating at the given percentile", () => {
+    // 10 sorted values, p50 -> index 5 (0-indexed) -> the 6th value
+    const population = [100, 200, 300, 400, 500, 600, 700, 800, 900, 1000];
+    expect(computeEliteThreshold(population, 50)).toBe(600);
+    expect(computeEliteThreshold(population, 0)).toBe(100);
+    expect(computeEliteThreshold(population, 90)).toBe(1000);
+  });
+
+  it("defaults to ELITE_PERCENTILE", () => {
+    const population = [100, 200, 300, 400, 500, 600, 700, 800, 900, 1000];
+    expect(computeEliteThreshold(population)).toBe(computeEliteThreshold(population, ELITE_PERCENTILE));
+  });
+
+  it("is order-independent", () => {
+    const sorted = [100, 200, 300, 400, 500];
+    const shuffled = [400, 100, 500, 200, 300];
+    expect(computeEliteThreshold(shuffled, 50)).toBe(computeEliteThreshold(sorted, 50));
   });
 });
 
