@@ -127,9 +127,37 @@ export function computeScaleFactor(teamCount: number, matchVolume: number): numb
 }
 
 /**
- * Blends the three 0-100 DCI components at DCI_WEIGHTS into the effective score that
- * drives scoreBandForPercentile()/suggestTemplate() -- the Elo-path equivalent of
+ * Elite presence + strength of field, renormalized to 0-100 with scale factor's weight
+ * excluded -- the "quality" half of DCI that computeDci() below scales rather than adds
+ * to. Splitting this out is what lets computeDci() gate scale factor's effect on that
+ * quality score instead of letting it contribute independently (see computeDci()'s
+ * comment for why that additive design was a bug).
+ */
+export function computeQualityScore(
+  elitePresence: number,
+  strengthOfFieldPercentile: number,
+  weights: { elitePresence: number; strengthOfField: number } = DCI_WEIGHTS,
+): number {
+  const qualityWeight = weights.elitePresence + weights.strengthOfField;
+  return (weights.elitePresence * elitePresence + weights.strengthOfField * strengthOfFieldPercentile) / qualityWeight;
+}
+
+/**
+ * Blends the three 0-100 DCI components into the effective score that drives
+ * scoreBandForPercentile()/suggestTemplate() -- the Elo-path equivalent of
  * suggestPointTemplate.ts's blendPercentileWithElitePresence().
+ *
+ * Scale factor is a bounded *multiplier* on the quality score (computeQualityScore()
+ * above), not a fourth additive term -- real data exposed the additive design (DCI_WEIGHTS
+ * applied directly to all three) as a bug: a division's biggest bracket at a national
+ * event is also its weakest (lowest tiers draw the most entries), so a division with 0%
+ * Elite Presence and 0 nationally-ranked teams could still reach a maxed-out scale
+ * factor (35% of the additive score) purely from team/match count and land in "Solid
+ * regional" alongside genuinely competitive fields. Multiplying instead means a huge
+ * field with no quality signal still scores 0 -- scale factor can only modulate a
+ * division's own quality score within `weights.scaleFactor`'s range (e.g. at the
+ * default 0.35, a scale factor of 0 shrinks quality by up to 35%; a maxed-out scale
+ * factor leaves quality unscaled), never substitute for it.
  */
 export function computeDci(
   elitePresence: number,
@@ -137,9 +165,7 @@ export function computeDci(
   scaleFactor: number,
   weights: { elitePresence: number; strengthOfField: number; scaleFactor: number } = DCI_WEIGHTS,
 ): number {
-  return (
-    weights.elitePresence * elitePresence +
-    weights.strengthOfField * strengthOfFieldPercentile +
-    weights.scaleFactor * scaleFactor
-  );
+  const quality = computeQualityScore(elitePresence, strengthOfFieldPercentile, weights);
+  const scaleMultiplier = 1 - weights.scaleFactor + weights.scaleFactor * (scaleFactor / 100);
+  return quality * scaleMultiplier;
 }

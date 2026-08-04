@@ -766,6 +766,38 @@ occasional revisiting (same `analyzeEliteThreshold.ts` report, now sweeping cand
 ever looks wrong again, but no longer needs it every time Elo's own constants change —
 that specific failure mode is closed.
 
+**DCI's scale factor made multiplicative, not additive — done (2026-08-04, same
+day).** Real prod data surfaced a bug in the original additive `computeDci()` (§weights
+`DCI_WEIGHTS`): a national event's lowest-tier bracket draws the *most* entries (lowest
+divisions are always the biggest), so a division with 0% Elite Presence and 0
+nationally-ranked (Colley) teams could still max out `computeScaleFactor()` on team
+count/match volume alone — worth 35% of the additive score — and land in "Solid
+regional" indistinguishably from a genuinely competitive field of the same size. Two
+real examples from the same event (26 AAU Girls National Volleyball Championships, 17u)
+confirmed it: "17 Classic" (0 teams in the Colley top 250, 129 teams/3360 matches)
+scored a 57th percentile "Solid regional," barely behind "17 Aspire" (3-4 top-150/200
+teams, 127 teams/5323 matches) at 61st. `computeDci()` now derives a `computeQualityScore()`
+(Elite Presence + Strength of Field, renormalized to 0-100 with scale factor's weight
+excluded) and applies scale factor as a bounded *multiplier* on that quality score —
+`weights.scaleFactor` still controls how much a thin/small field's score can shrink
+(default 0.35, so scale factor 0 shrinks quality by up to 35%), but a maxed-out scale
+factor can no longer substitute for quality it doesn't have. Re-run against the same two
+real examples: 17 Classic now scores 33.8 (Developmental, below the 40 cutoff), 17
+Aspire 40.0 (right at the Solid-regional boundary instead of comfortably inside it).
+`suggestPointTemplate.ts`'s `SCORE_BAND_CUTOFFS`/linear percentile→template mapping are
+unchanged and still flagged uncalibrated (Open Question 5) — this fix only corrects how
+the *input* percentile is computed for Elo-path divisions, not the band thresholds
+themselves.
+
+**New "National" score band — done (2026-08-04, same day).** Per explicit user
+request, added a fifth `ScoreBand` between "Strong regional" (>=70) and "Elite field"
+(>=90) for national-caliber events (e.g. a Triple Crown NIT bracket, a USAV Open
+Nationals division) that aren't quite top-of-field. `SCORE_BAND_CUTOFFS`
+(`suggestPointTemplate.ts`) now reads Elite field >=90, National >=80, Strong regional
+>=70, Solid regional >=40, Developmental >=0 — like the other cutoffs, an uncalibrated
+placeholder (Open Question 5), picked as a round-number midpoint rather than from real
+data. `scoreBandBadgeClass()` (`ui.ts`) has a matching indigo badge.
+
 ## Deviations from the original plan
 
 The plan below is preserved close to its original approved form for continuity, but

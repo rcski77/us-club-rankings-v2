@@ -40,10 +40,14 @@ export function scoringStatusBadgeClass(status: "DRAFT" | "SUGGESTED" | "CONFIRM
 }
 
 // ScoreBand (src/lib/rating/suggestPointTemplate.ts) -- field-strength tier.
-export function scoreBandBadgeClass(band: "Elite field" | "Strong regional" | "Solid regional" | "Developmental") {
+export function scoreBandBadgeClass(
+  band: "Elite field" | "National" | "Strong regional" | "Solid regional" | "Developmental",
+) {
   switch (band) {
     case "Elite field":
       return `${badgeBaseClass} bg-purple-100 text-purple-800`;
+    case "National":
+      return `${badgeBaseClass} bg-indigo-100 text-indigo-800`;
     case "Strong regional":
       return `${badgeBaseClass} bg-blue-100 text-blue-800`;
     case "Solid regional":

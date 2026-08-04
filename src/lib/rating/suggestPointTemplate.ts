@@ -6,14 +6,20 @@
  * computeDivisionScoringSuggestion.ts.
  */
 
-export type ScoreBand = "Elite field" | "Strong regional" | "Solid regional" | "Developmental";
+export type ScoreBand = "Elite field" | "National" | "Strong regional" | "Solid regional" | "Developmental";
 
 /**
  * Placeholder band cutoffs -- not calibrated against real historical data (see
  * docs/plan.md Open Question 5). Revisit during Phase 4 calibration.
+ *
+ * "National" sits between "Strong regional" and "Elite field": a good national-caliber
+ * event (e.g. a Triple Crown NIT bracket or a USAV Open Nationals division that isn't
+ * quite top-of-field) rather than a merely strong regional one, but reserved for actual
+ * marquee national events -- not the every-bracket ceiling "Elite field" is meant to be.
  */
 const SCORE_BAND_CUTOFFS: { min: number; band: ScoreBand }[] = [
   { min: 90, band: "Elite field" },
+  { min: 80, band: "National" },
   { min: 70, band: "Strong regional" },
   { min: 40, band: "Solid regional" },
   { min: 0, band: "Developmental" },

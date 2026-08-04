@@ -33,6 +33,13 @@ describe("scoreBandForPercentile", () => {
   it("bands exactly at a cutoff into the higher band", () => {
     expect(scoreBandForPercentile(70)).toBe("Strong regional");
   });
+
+  it("bands a national-caliber percentile as National, between Strong regional and Elite field", () => {
+    expect(scoreBandForPercentile(85)).toBe("National");
+    expect(scoreBandForPercentile(80)).toBe("National");
+    expect(scoreBandForPercentile(79)).toBe("Strong regional");
+    expect(scoreBandForPercentile(90)).toBe("Elite field");
+  });
 });
 
 describe("blendPercentileWithElitePresence", () => {

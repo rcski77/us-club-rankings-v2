@@ -3,6 +3,7 @@ import {
   computeDci,
   computeEliteThreshold,
   computeIntrinsicElitePresence,
+  computeQualityScore,
   computeScaleFactor,
   computeTopQuartileMean,
   ELITE_PERCENTILE,
@@ -76,20 +77,47 @@ describe("computeScaleFactor", () => {
   });
 });
 
+describe("computeQualityScore", () => {
+  it("renormalizes elite presence + strength of field to 0-100, ignoring scale factor's weight", () => {
+    // (0.4*100 + 0.25*100) / 0.65 = 100
+    expect(computeQualityScore(100, 100)).toBeCloseTo(100, 10);
+  });
+
+  it("weighs elite presence and strength of field at their relative shares", () => {
+    // (0.4*80 + 0.25*60) / 0.65 = (32 + 15) / 0.65 = 72.307...
+    expect(computeQualityScore(80, 60)).toBeCloseTo(72.3076923, 5);
+  });
+
+  it("is 0 when both quality inputs are 0, regardless of weights", () => {
+    expect(computeQualityScore(0, 0)).toBe(0);
+  });
+});
+
 describe("computeDci", () => {
-  it("blends the three components at the default 40/25/35 weights", () => {
-    // 0.4*100 + 0.25*100 + 0.35*100 = 100
+  it("blends to 100 when all three components are maxed", () => {
+    // quality = (0.4*100 + 0.25*100) / 0.65 = 100; scaleMultiplier = 0.65 + 0.35*1 = 1
     expect(computeDci(100, 100, 100)).toBeCloseTo(100, 10);
   });
 
-  it("weighs elite presence, strength of field, and scale factor independently", () => {
-    // 0.4*80 + 0.25*60 + 0.35*40 = 32 + 15 + 14 = 61
-    expect(computeDci(80, 60, 40)).toBeCloseTo(61, 10);
+  it("scale factor cannot lift a zero-quality division above 0", () => {
+    // quality = 0 regardless of a maxed-out scale factor -- the bug this design fixes:
+    // a huge but weak field (e.g. a national event's lowest bracket) can no longer
+    // reach a competitive score purely from team/match count.
+    expect(computeDci(0, 0, 100)).toBe(0);
+  });
+
+  it("scale factor only modulates quality within weights.scaleFactor's range", () => {
+    // quality = (0.4*80 + 0.25*60) / 0.65 = 72.3076923...
+    // scaleFactor=100 -> multiplier=1 -> unscaled quality
+    expect(computeDci(80, 60, 100)).toBeCloseTo(72.3076923, 5);
+    // scaleFactor=0 -> multiplier = 1 - 0.35 = 0.65 -> quality shrunk by 35%
+    expect(computeDci(80, 60, 0)).toBeCloseTo(72.3076923 * 0.65, 5);
   });
 
   it("supports custom weights", () => {
     const weights = { elitePresence: 0.5, strengthOfField: 0.3, scaleFactor: 0.2 };
-    // 0.5*80 + 0.3*60 + 0.2*40 = 40 + 18 + 8 = 66
-    expect(computeDci(80, 60, 40, weights)).toBeCloseTo(66, 10);
+    // quality = (0.5*80 + 0.3*60) / 0.8 = (40 + 18) / 0.8 = 72.5
+    // scaleMultiplier = 0.8 + 0.2*(40/100) = 0.88
+    expect(computeDci(80, 60, 40, weights)).toBeCloseTo(72.5 * 0.88, 10);
   });
 });
