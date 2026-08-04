@@ -12,6 +12,8 @@ import {
   fetchAndCommitSportwrenchMatches,
   fetchVbscheduleStandings,
   fetchAndCommitVbscheduleMatches,
+  fetchTm2Standings,
+  fetchAndCommitTm2Matches,
   resolveBatch,
   updateBatchSchedule,
   overrideRowDivision,
@@ -134,6 +136,7 @@ export default async function ImportBatchPage({
   const fetchAesStandingsWithId = fetchAesStandings.bind(null, batchId);
   const fetchSportwrenchStandingsWithId = fetchSportwrenchStandings.bind(null, batchId);
   const fetchVbscheduleStandingsWithId = fetchVbscheduleStandings.bind(null, batchId);
+  const fetchTm2StandingsWithId = fetchTm2Standings.bind(null, batchId);
   const resolveWithId = resolveBatch.bind(null, batchId);
   const commitWithId = commitBatch.bind(null, batchId);
   const deleteWithId = deleteBatch.bind(null, batchId);
@@ -315,6 +318,13 @@ export default async function ImportBatchPage({
                     <input type="hidden" name="filter" value={filter ?? ""} />
                     <SubmitButton className={secondaryButtonClass} pendingText="Fetching…">
                       Fetch standings from VBSchedule
+                    </SubmitButton>
+                  </form>
+                ) : batch.scheduleSource === "TM2" ? (
+                  <form action={fetchTm2StandingsWithId}>
+                    <input type="hidden" name="filter" value={filter ?? ""} />
+                    <SubmitButton className={secondaryButtonClass} pendingText="Fetching…">
+                      Fetch standings from TM2
                     </SubmitButton>
                   </form>
                 ) : (
@@ -656,6 +666,7 @@ async function MatchResultsBatchView({
   const fetchAndCommitAesWithId = fetchAndCommitAesMatches.bind(null, batch.id);
   const fetchAndCommitSportwrenchWithId = fetchAndCommitSportwrenchMatches.bind(null, batch.id);
   const fetchAndCommitVbscheduleWithId = fetchAndCommitVbscheduleMatches.bind(null, batch.id);
+  const fetchAndCommitTm2WithId = fetchAndCommitTm2Matches.bind(null, batch.id);
   const deleteWithId = deleteBatch.bind(null, batch.id);
   const updateBatchScheduleWithId = updateBatchSchedule.bind(null, batch.id);
   const currentEventScheduleId = batch.event.schedules.find(
@@ -803,6 +814,23 @@ async function MatchResultsBatchView({
               matches are skipped, not created as new records — re-running after
               importing more Team Finishes for this event can pick up
               previously-skipped ones.
+            </p>
+            <p className="mt-2 truncate text-xs text-slate-400">{batch.scheduleUrl}</p>
+          </>
+        ) : batch.scheduleSource === "TM2" && batch.scheduleUrl ? (
+          <>
+            <form action={fetchAndCommitTm2WithId}>
+              <SubmitButton className={primaryButtonClass} pendingText="Fetching & importing…">
+                {isCommitted ? "Re-fetch match results from TM2" : "Fetch match results from TM2"}
+              </SubmitButton>
+            </form>
+            <p className="mt-2 text-xs text-slate-500">
+              Pulls every completed match for this event from TM2 and imports it
+              immediately (re-running is safe — matches are matched and updated by
+              TM2&apos;s own match id, not duplicated). Teams/divisions must already
+              exist from a Team Finishes import of this same event; unmatched matches
+              are skipped, not created as new records — re-running after importing
+              more Team Finishes for this event can pick up previously-skipped ones.
             </p>
             <p className="mt-2 truncate text-xs text-slate-400">{batch.scheduleUrl}</p>
           </>

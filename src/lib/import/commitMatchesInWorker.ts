@@ -4,7 +4,8 @@ import type { ImportMatchResultsResult } from "./commitMatches";
 type CommitMatchesWorkerData =
   | { source: "AES"; batchId: string; externalEventId: string }
   | { source: "SPORTWRENCH"; batchId: string; externalEventId: string }
-  | { source: "VBSCHEDULE"; batchId: string; externalEventId: string };
+  | { source: "VBSCHEDULE"; batchId: string; externalEventId: string }
+  | { source: "TM2"; batchId: string; externalEventId: string };
 
 /**
  * Runs importAesMatchResults/importSportwrenchMatchResults in a separate process
@@ -44,4 +45,11 @@ export function importVbscheduleMatchResultsInWorker(
   vbscheduleEventId: string,
 ): Promise<ImportMatchResultsResult> {
   return importMatchResultsInWorker({ source: "VBSCHEDULE", batchId, externalEventId: vbscheduleEventId });
+}
+
+export function importTm2MatchResultsInWorker(
+  batchId: string,
+  tm2EventId: string,
+): Promise<ImportMatchResultsResult> {
+  return importMatchResultsInWorker({ source: "TM2", batchId, externalEventId: tm2EventId });
 }
