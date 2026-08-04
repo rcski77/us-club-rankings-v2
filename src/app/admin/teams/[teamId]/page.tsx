@@ -67,12 +67,14 @@ export default async function TeamDetailPage({
   const { teamId } = await params;
   const { error, season: seasonParam } = await searchParams;
 
-  // team, matchesAsA/B, clubs, and seasons don't depend on each other's results, so
-  // they run as one batch instead of five sequential round trips.
-  // matchesAsA/B are capped at 500 as a stopgap -- a team with more matches than that
-  // in its full history would need the season-tab derivation below reworked to filter
-  // in the DB instead of in JS; not attempted in this pass.
-  const [team, matchesAsA, matchesAsB, clubs, seasons] = await Promise.all([
+  // team, clubs, seasons, and matchSeasonRows don't depend on each other's results, so
+  // they run as one batch instead of several sequential round trips. matchSeasonRows
+  // is a cheap distinct-seasonId probe (via Event, whose seasonId is indexed) used only
+  // to populate the season tab list -- the actual match rows are fetched below, scoped
+  // to activeSeasonId, once we know which season is active. This replaced an earlier
+  // version that fetched up to 500 of the team's matches *across all seasons* just to
+  // derive the tab list and then filtered down to one season in JS.
+  const [team, clubs, seasons, matchSeasonRows] = await Promise.all([
     prisma.team.findUnique({
       where: { id: teamId },
       include: {
@@ -86,36 +88,67 @@ export default async function TeamDetailPage({
         },
       },
     }),
-    prisma.match.findMany({
-      where: { teamAId: teamId },
-      include: {
-        event: { include: { season: true } },
-        division: true,
-        teamB: true,
-      },
-      orderBy: { matchDate: "desc" },
-      take: 500,
-    }),
-    prisma.match.findMany({
-      where: { teamBId: teamId },
-      include: {
-        event: { include: { season: true } },
-        division: true,
-        teamA: true,
-      },
-      orderBy: { matchDate: "desc" },
-      take: 500,
-    }),
     prisma.club.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
     prisma.season.findMany({ orderBy: { startDate: "desc" } }),
+    prisma.event.findMany({
+      where: { matches: { some: { OR: [{ teamAId: teamId }, { teamBId: teamId }] } } },
+      select: { seasonId: true },
+      distinct: ["seasonId"],
+    }),
   ]);
   if (!team) notFound();
+
+  const enrolledSeasonIds = new Set(team.seasons.map((ts) => ts.seasonId));
+  const availableSeasons = seasons.filter((s) => !enrolledSeasonIds.has(s.id));
+
+  // Season tabs: any season the team is enrolled in, plus any season it has a finish
+  // or match result in (a team can have results recorded before/without an explicit
+  // TeamSeason row).
+  const seasonById = new Map(seasons.map((s) => [s.id, s]));
+  const finishSeasons = new Map(team.finishes.map((f) => [f.division.event.season.id, f.division.event.season]));
+  const matchSeasons = matchSeasonRows
+    .map((e) => seasonById.get(e.seasonId))
+    .filter((s): s is NonNullable<typeof s> => s !== undefined);
+  const tabSeasons = [...team.seasons.map((ts) => ts.season), ...finishSeasons.values(), ...matchSeasons]
+    .filter((s, i, arr) => arr.findIndex((x) => x.id === s.id) === i)
+    .sort((a, b) => b.startDate.getTime() - a.startDate.getTime());
+
+  const activeSeasonId =
+    (seasonParam && tabSeasons.some((s) => s.id === seasonParam) ? seasonParam : undefined) ??
+    tabSeasons.find((s) => s.isActive)?.id ??
+    tabSeasons[0]?.id;
+
+  const finishesForSeason = team.finishes.filter((f) => f.division.event.season.id === activeSeasonId);
+
+  // Depends on activeSeasonId (derived above), so stays sequential. Elo history and
+  // the season's matches are independent of each other, so those two run together.
+  // [] eloHistory when the team has no TeamSeason row for activeSeasonId (no natural
+  // age group to resolve from) or no rated matches yet. Keyed by matchId so the Match
+  // Results table below can look up "does this match have Elo data" per row rather
+  // than rendering two separate, largely-duplicate match lists.
+  const [eloHistory, matchesAsA, matchesAsB] = activeSeasonId
+    ? await Promise.all([
+        getTeamEloHistory(teamId, activeSeasonId),
+        prisma.match.findMany({
+          where: { teamAId: teamId, event: { seasonId: activeSeasonId } },
+          include: { event: true, division: true, teamB: true },
+          orderBy: { matchDate: "desc" },
+        }),
+        prisma.match.findMany({
+          where: { teamBId: teamId, event: { seasonId: activeSeasonId } },
+          include: { event: true, division: true, teamA: true },
+          orderBy: { matchDate: "desc" },
+        }),
+      ])
+    : [[], [], []];
+  const eloByMatchId = new Map(eloHistory.map((h) => [h.matchId, h]));
+
   // Normalize both sides into "this team" vs. "opponent" so the table doesn't need to
   // care which side of the match this team happened to be on. thisTeamIsA also lets
   // the per-set score display (setScores is stored as {a, b} = teamA/teamB points,
   // regardless of which side "this team" was on) reorient into "this team's points"
   // vs. "opponent's points" per set.
-  const matches = [
+  const matchesForSeason = [
     ...matchesAsA.map((m) => ({
       ...m,
       opponent: m.teamB,
@@ -133,34 +166,6 @@ export default async function TeamDetailPage({
       thisTeamIsA: false,
     })),
   ].sort((a, b) => (b.matchDate?.getTime() ?? 0) - (a.matchDate?.getTime() ?? 0));
-
-  const enrolledSeasonIds = new Set(team.seasons.map((ts) => ts.seasonId));
-  const availableSeasons = seasons.filter((s) => !enrolledSeasonIds.has(s.id));
-
-  // Season tabs: any season the team is enrolled in, plus any season it has a finish
-  // or match result in (a team can have results recorded before/without an explicit
-  // TeamSeason row).
-  const finishSeasons = new Map(team.finishes.map((f) => [f.division.event.season.id, f.division.event.season]));
-  const matchSeasons = new Map(matches.map((m) => [m.event.season.id, m.event.season]));
-  const tabSeasons = [...team.seasons.map((ts) => ts.season), ...finishSeasons.values(), ...matchSeasons.values()]
-    .filter((s, i, arr) => arr.findIndex((x) => x.id === s.id) === i)
-    .sort((a, b) => b.startDate.getTime() - a.startDate.getTime());
-
-  const activeSeasonId =
-    (seasonParam && tabSeasons.some((s) => s.id === seasonParam) ? seasonParam : undefined) ??
-    tabSeasons.find((s) => s.isActive)?.id ??
-    tabSeasons[0]?.id;
-
-  const finishesForSeason = team.finishes.filter((f) => f.division.event.season.id === activeSeasonId);
-  const matchesForSeason = matches.filter((m) => m.event.season.id === activeSeasonId);
-
-  // Depends on activeSeasonId (derived above from team/matches), so stays sequential.
-  // [] when the team has no TeamSeason row for activeSeasonId (no natural age group to
-  // resolve from) or no rated matches yet. Keyed by matchId so the Match Results table
-  // below can look up "does this match have Elo data" per row rather than rendering
-  // two separate, largely-duplicate match lists.
-  const eloHistory = activeSeasonId ? await getTeamEloHistory(teamId, activeSeasonId) : [];
-  const eloByMatchId = new Map(eloHistory.map((h) => [h.matchId, h]));
 
   // Group matches by event for display -- staff think in terms of "how did we do at
   // this tournament," not one long flat match list (mirrors a pattern seen on a
@@ -446,7 +451,7 @@ export default async function TeamDetailPage({
           </div>
         )}
 
-        {tabSeasons.length === 0 || matches.length === 0 ? (
+        {tabSeasons.length === 0 || matchSeasonRows.length === 0 ? (
           <p className="text-sm text-slate-500">
             No match results imported for this team yet — see{" "}
             <Link href="/admin/imports" className="underline">

@@ -34,13 +34,21 @@ export async function computeDivisionWeightsForPartition(
     where: { ageGroup, event: { seasonId }, finishes: { some: {} } },
   });
 
+  // Independent per-division lookups (each is its own 2-query round trip) -- see
+  // ../../app/admin/CLAUDE.md's Promise.all convention. Previously sequential, which
+  // turned a partition with N divisions into N sequential DB round trips on every
+  // caller of this function, including getTeamEloHistory on every team-page view.
+  const fieldStrengths = await Promise.all(
+    divisions.map((division) => computeDivisionFieldStrength(division.id)),
+  );
+
   const percentileByDivision = new Map<string, number>();
-  for (const division of divisions) {
-    const fieldStrength = await computeDivisionFieldStrength(division.id);
-    if (fieldStrength.fss === null || fieldStrength.warnings.includes("LOW_PERCENT_RATED")) continue;
+  divisions.forEach((division, i) => {
+    const fieldStrength = fieldStrengths[i];
+    if (fieldStrength.fss === null || fieldStrength.warnings.includes("LOW_PERCENT_RATED")) return;
     const percentile = computeFssPercentile(fieldStrength.fss, colleyPopulation);
     if (percentile !== null) percentileByDivision.set(division.id, percentile);
-  }
+  });
 
   const allPercentiles = [...percentileByDivision.values()];
   const weights = new Map<string, number>();

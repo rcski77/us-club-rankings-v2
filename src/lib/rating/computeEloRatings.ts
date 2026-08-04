@@ -4,7 +4,6 @@ import {
   classifyOpponentStrength,
   classifyResult,
   computeEloHistory,
-  computeEloRatings as solveElo,
   explainDivisionEffect,
   explainEloChange,
 } from "./elo";
@@ -125,10 +124,19 @@ export async function withDivisionWeights(matches: PartitionMatch[]) {
  * from scratch up to asOfDate rather than applying an incremental delta on top of a
  * prior snapshot.
  *
- * solveElo() returns a rating for every team in the match graph, which includes any
- * team playing up from another age group (see getPartitionMatches's own comment) --
- * those are filtered out via relevantTeamIds before ranking/persisting, so a team only
- * ever gets a TeamRatingHistory row under its own natural ageGroup.
+ * Final ratings are derived from computeEloHistory()'s own per-match steps (rather
+ * than calling computeEloRatings() separately, which would replay the same graph a
+ * second time) -- every team that appears in the match graph gets a final rating,
+ * which includes any team playing up from another age group (see
+ * getPartitionMatches's own comment); those are filtered out via relevantTeamIds
+ * before ranking/persisting, so a team only ever gets a TeamRatingHistory row under
+ * its own natural ageGroup.
+ *
+ * Also persists a TeamEloMatchStep row per (match, relevant team) -- the same steps
+ * this function already computed, kept so getTeamEloHistory() can read a team's
+ * match-by-match trace directly instead of re-replaying the whole partition on every
+ * team-page view (see that model's schema comment). Delete-and-replace by
+ * (seasonId, ageGroup), same pattern as the TeamRatingHistory snapshot below.
  */
 export async function computeEloRatingsForPartition(
   seasonId: string,
@@ -142,7 +150,20 @@ export async function computeEloRatingsForPartition(
 
   const { matches, relevantTeamIds } = await getPartitionMatches(seasonId, ageGroup, asOfDate);
   const eloMatches = buildEloMatches(await withDivisionWeights(matches));
-  const ratings = solveElo(eloMatches).filter((r) => relevantTeamIds.has(r.teamId));
+  const steps = computeEloHistory(eloMatches);
+
+  const finalRating = new Map<string, number>();
+  const matchesPlayed = new Map<string, number>();
+  for (const step of steps) {
+    finalRating.set(step.teamAId, step.ratingAAfter);
+    finalRating.set(step.teamBId, step.ratingBAfter);
+    matchesPlayed.set(step.teamAId, (matchesPlayed.get(step.teamAId) ?? 0) + 1);
+    matchesPlayed.set(step.teamBId, (matchesPlayed.get(step.teamBId) ?? 0) + 1);
+  }
+
+  const ratings = Array.from(finalRating.entries())
+    .map(([teamId, rating]) => ({ teamId, rating, matchesPlayed: matchesPlayed.get(teamId) ?? 0 }))
+    .filter((r) => relevantTeamIds.has(r.teamId));
 
   ratings.sort((a, b) => b.rating - a.rating);
   let rank = 0;
@@ -154,6 +175,67 @@ export async function computeEloRatingsForPartition(
     }
     return { ...r, rank };
   });
+
+  // One row per side of a step whose team is relevant to this partition -- a team's
+  // home partition is always its own natural age group (see getTeamEloHistory), so a
+  // team can only ever be relevant in exactly one (seasonId, ageGroup) run per season.
+  const stepRows: {
+    matchId: string;
+    teamId: string;
+    opponentTeamId: string;
+    won: boolean;
+    thisTeamSets: number;
+    opponentSets: number;
+    ratingBefore: number;
+    ratingAfter: number;
+    opponentRatingBefore: number;
+    expected: number;
+    k: number;
+    effectiveWeight: number;
+    multiplier: number;
+    divisionWeight: number;
+    isOpenDivision: boolean;
+  }[] = [];
+  for (const step of steps) {
+    if (relevantTeamIds.has(step.teamAId)) {
+      stepRows.push({
+        matchId: step.matchId,
+        teamId: step.teamAId,
+        opponentTeamId: step.teamBId,
+        won: step.winnerTeamId === step.teamAId,
+        thisTeamSets: step.setsA,
+        opponentSets: step.setsB,
+        ratingBefore: step.ratingABefore,
+        ratingAfter: step.ratingAAfter,
+        opponentRatingBefore: step.ratingBBefore,
+        expected: step.expectedA,
+        k: step.kA,
+        effectiveWeight: step.effectiveWeightA,
+        multiplier: step.multiplier,
+        divisionWeight: step.divisionWeight,
+        isOpenDivision: step.isOpenDivision,
+      });
+    }
+    if (relevantTeamIds.has(step.teamBId)) {
+      stepRows.push({
+        matchId: step.matchId,
+        teamId: step.teamBId,
+        opponentTeamId: step.teamAId,
+        won: step.winnerTeamId === step.teamBId,
+        thisTeamSets: step.setsB,
+        opponentSets: step.setsA,
+        ratingBefore: step.ratingBBefore,
+        ratingAfter: step.ratingBAfter,
+        opponentRatingBefore: step.ratingABefore,
+        expected: 1 - step.expectedA,
+        k: step.kB,
+        effectiveWeight: step.effectiveWeightB,
+        multiplier: step.multiplier,
+        divisionWeight: step.divisionWeight,
+        isOpenDivision: step.isOpenDivision,
+      });
+    }
+  }
 
   await prisma.$transaction(async (tx) => {
     await tx.teamRatingHistory.deleteMany({
@@ -171,6 +253,13 @@ export async function computeEloRatingsForPartition(
           rank: r.rank,
           comparisons: r.matchesPlayed,
         })),
+      });
+    }
+
+    await tx.teamEloMatchStep.deleteMany({ where: { seasonId, ageGroup } });
+    if (stepRows.length > 0) {
+      await tx.teamEloMatchStep.createMany({
+        data: stepRows.map((s) => ({ ...s, seasonId, ageGroup })),
       });
     }
   });
@@ -296,12 +385,15 @@ export type TeamEloHistoryEntry = {
 };
 
 /**
- * A team's full Elo match history within one season, most recent first -- replays the
- * same match graph its current rating came from (see getPartitionMatches above), then
- * slices out just the steps involving this team and reorients each one from "team
- * A/B" into "this team vs. opponent". Returns [] for a team with no TeamSeason row
- * for the season (no natural age group to resolve the partition from) or no rated
- * matches yet.
+ * A team's full Elo match history within one season, most recent first -- reads the
+ * TeamEloMatchStep rows computeEloRatingsForPartition() already persisted for this
+ * team's (season, natural ageGroup) partition, rather than re-replaying the whole
+ * partition's match graph on every call (see that model's schema comment; this used
+ * to be the dominant cost on the team-detail page). Elo's replay is strictly
+ * chronological, so a stored step's before/after values are already correct for any
+ * asOfDate -- only the set of *which* steps are visible as of that date changes.
+ * Returns [] for a team with no TeamSeason row for the season (no natural age group
+ * to resolve the partition from) or no rated matches yet.
  */
 export async function getTeamEloHistory(
   teamId: string,
@@ -313,58 +405,52 @@ export async function getTeamEloHistory(
   });
   if (!teamSeason) return [];
 
-  const { matches } = await getPartitionMatches(seasonId, teamSeason.ageGroup, asOfDate);
-  const byId = new Map(matches.map((m) => [m.id, m]));
+  const steps = await prisma.teamEloMatchStep.findMany({
+    where: {
+      teamId,
+      seasonId,
+      ageGroup: teamSeason.ageGroup,
+      match: { matchDate: { lte: asOfDate } },
+    },
+    include: {
+      match: { include: { event: true, division: true } },
+      opponent: { include: { club: true } },
+    },
+    orderBy: { match: { matchDate: "desc" } },
+  });
 
-  const steps = computeEloHistory(buildEloMatches(await withDivisionWeights(matches)));
-  const teamSteps = steps.filter((s) => s.teamAId === teamId || s.teamBId === teamId);
-
-  const entries: TeamEloHistoryEntry[] = teamSteps.map((s) => {
-    const match = byId.get(s.matchId)!;
-    const isA = s.teamAId === teamId;
-    const opponent = isA ? match.teamB : match.teamA;
-
-    const ratingBefore = isA ? s.ratingABefore : s.ratingBBefore;
-    const ratingAfter = isA ? s.ratingAAfter : s.ratingBAfter;
-    const opponentRatingBefore = isA ? s.ratingBBefore : s.ratingABefore;
-    const expected = isA ? s.expectedA : 1 - s.expectedA;
-    const k = isA ? s.kA : s.kB;
-    const effectiveWeight = isA ? s.effectiveWeightA : s.effectiveWeightB;
-    const won = s.winnerTeamId === teamId;
-    const delta = ratingAfter - ratingBefore;
-
+  return steps.map((s) => {
+    const delta = s.ratingAfter - s.ratingBefore;
     return {
       matchId: s.matchId,
-      matchDate: s.matchDate,
-      eventId: match.eventId,
-      eventName: match.event.name,
-      divisionTierLabel: match.division?.tierLabel ?? null,
-      opponentTeamId: opponent?.id ?? "",
-      opponentName: opponent?.name ?? "(unresolved)",
-      opponentClubName: opponent?.club?.name ?? null,
-      won,
-      thisTeamSets: isA ? s.setsA : s.setsB,
-      opponentSets: isA ? s.setsB : s.setsA,
-      ratingBefore,
-      ratingAfter,
+      matchDate: s.match.matchDate!,
+      eventId: s.match.eventId,
+      eventName: s.match.event.name,
+      divisionTierLabel: s.match.division?.tierLabel ?? null,
+      opponentTeamId: s.opponentTeamId,
+      opponentName: s.opponent.name,
+      opponentClubName: s.opponent.club?.name ?? null,
+      won: s.won,
+      thisTeamSets: s.thisTeamSets,
+      opponentSets: s.opponentSets,
+      ratingBefore: s.ratingBefore,
+      ratingAfter: s.ratingAfter,
       delta,
-      opponentRatingBefore,
-      opponentStrength: classifyOpponentStrength(expected),
-      expected,
-      k,
-      effectiveWeight,
+      opponentRatingBefore: s.opponentRatingBefore,
+      opponentStrength: classifyOpponentStrength(s.expected),
+      expected: s.expected,
+      k: s.k,
+      effectiveWeight: s.effectiveWeight,
       multiplier: s.multiplier,
-      resultLabel: classifyResult({ won, multiplier: s.multiplier, delta }),
+      resultLabel: classifyResult({ won: s.won, multiplier: s.multiplier, delta }),
       divisionWeight: s.divisionWeight,
       isOpenDivision: s.isOpenDivision,
       divisionEffectExplanation: explainDivisionEffect({
-        won,
+        won: s.won,
         divisionWeight: s.divisionWeight,
         isOpenDivision: s.isOpenDivision,
       }),
-      explanation: explainEloChange({ won, expected, multiplier: s.multiplier }),
+      explanation: explainEloChange({ won: s.won, expected: s.expected, multiplier: s.multiplier }),
     };
   });
-
-  return entries.sort((a, b) => b.matchDate.getTime() - a.matchDate.getTime());
 }
