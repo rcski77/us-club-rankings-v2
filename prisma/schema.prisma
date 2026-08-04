@@ -40,6 +40,7 @@ model Season {
   events      Event[]
   ratingHistory TeamRatingHistory[]
   clubRankingResults ClubRankingResult[]
+  eloMatchSteps TeamEloMatchStep[]
   createdAt   DateTime     @default(now())
 }
 
@@ -135,6 +136,8 @@ model Team {
   matchesAsTeamB   Match[]             @relation("MatchTeamB")
   matchesWon       Match[]             @relation("MatchWinner")
   clubRankingContributions ClubRankingResultContribution[]
+  eloMatchSteps        TeamEloMatchStep[] @relation("TeamEloMatchStepTeam")
+  eloMatchStepsAsOpponent TeamEloMatchStep[] @relation("TeamEloMatchStepOpponent")
 
   @@index([lineageKey])
   @@index([clubId])
@@ -361,10 +364,53 @@ model Match {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  eloMatchSteps TeamEloMatchStep[]
+
   @@unique([eventId, externalMatchId])
   @@index([divisionId])
   @@index([teamAId])
   @@index([teamBId])
+}
+
+// Persisted per-team, per-match trace of computeEloRatingsForPartition()'s replay --
+// written by that function (delete-and-replace by (seasonId, ageGroup), same pattern
+// as TeamRatingHistory) so getTeamEloHistory() can read a team's match-by-match Elo
+// history directly instead of re-replaying the entire (season, ageGroup) partition's
+// match graph on every team-detail page view (that replay -- fetching every division/
+// match in the partition, then computeMatchDivisionWeights()'s per-division N+1 --
+// was the dominant cost on that page; see docs/plan.md). Elo's replay is strictly
+// chronological, so a match's before/after values here are already final regardless
+// of which later matches get added -- only a *future* recompute changes past rows,
+// not a caller's asOfDate.
+model TeamEloMatchStep {
+  id             String @id @default(cuid())
+  matchId        String
+  match          Match  @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  teamId         String
+  team           Team   @relation("TeamEloMatchStepTeam", fields: [teamId], references: [id])
+  opponentTeamId String
+  opponent       Team   @relation("TeamEloMatchStepOpponent", fields: [opponentTeamId], references: [id])
+  seasonId       String
+  season         Season @relation(fields: [seasonId], references: [id])
+  ageGroup       Int // the team's own natural age-group partition this step belongs to
+
+  won                  Boolean
+  thisTeamSets         Int
+  opponentSets         Int
+  ratingBefore         Float
+  ratingAfter          Float
+  opponentRatingBefore Float
+  expected             Float // this team's win probability going into the match
+  k                    Int
+  effectiveWeight      Float
+  multiplier           Float
+  divisionWeight       Float
+  isOpenDivision       Boolean
+
+  createdAt DateTime @default(now())
+
+  @@unique([matchId, teamId])
+  @@index([teamId, seasonId, ageGroup])
 }
 
 model RankingResult {
