@@ -91,22 +91,28 @@ export async function computeRanking(seasonId: string, ageGroup: number) {
   await prisma.$transaction(async (tx) => {
     await tx.rankingResult.deleteMany({ where: { seasonId, ageGroup } });
 
-    for (const t of ranked) {
-      const result = await tx.rankingResult.create({
-        data: {
-          seasonId,
-          ageGroup,
-          teamId: t.teamId,
-          totalPoints: t.totalPoints,
-          rank: t.rank,
-          weightedRank: t.rank, // phase 1: no NPS/CPI/Ballot blending yet
-          algorithmVersion: ALGORITHM_VERSION,
-        },
-      });
-      await tx.rankingResultContribution.createMany({
-        data: t.contributions.map((c) => ({ ...c, rankingResultId: result.id })),
-      });
-    }
+    // Bulk-insert every team's result in one round trip (createManyAndReturn hands
+    // back the generated ids), then bulk-insert every contribution row in another --
+    // a per-team create+createMany loop here was hundreds of sequential round trips
+    // for a single age group (600+ teams), which is what made confirm/unlock slow.
+    const results = await tx.rankingResult.createManyAndReturn({
+      data: ranked.map((t) => ({
+        seasonId,
+        ageGroup,
+        teamId: t.teamId,
+        totalPoints: t.totalPoints,
+        rank: t.rank,
+        weightedRank: t.rank, // phase 1: no NPS/CPI/Ballot blending yet
+        algorithmVersion: ALGORITHM_VERSION,
+      })),
+    });
+    const resultIdByTeam = new Map(results.map((r) => [r.teamId, r.id]));
+
+    await tx.rankingResultContribution.createMany({
+      data: ranked.flatMap((t) =>
+        t.contributions.map((c) => ({ ...c, rankingResultId: resultIdByTeam.get(t.teamId)! })),
+      ),
+    });
   });
 }
 
