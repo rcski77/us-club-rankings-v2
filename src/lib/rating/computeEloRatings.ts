@@ -237,32 +237,40 @@ export async function computeEloRatingsForPartition(
     }
   }
 
-  await prisma.$transaction(async (tx) => {
-    await tx.teamRatingHistory.deleteMany({
-      where: { seasonId, ageGroup, weekEndingDate, ratingEngine: "ELO" },
-    });
-    if (ranked.length > 0) {
-      await tx.teamRatingHistory.createMany({
-        data: ranked.map((r) => ({
-          teamId: r.teamId,
-          seasonId,
-          ageGroup,
-          weekEndingDate,
-          ratingEngine: "ELO" as const,
-          rating: r.rating,
-          rank: r.rank,
-          comparisons: r.matchesPlayed,
-        })),
+  await prisma.$transaction(
+    async (tx) => {
+      await tx.teamRatingHistory.deleteMany({
+        where: { seasonId, ageGroup, weekEndingDate, ratingEngine: "ELO" },
       });
-    }
+      if (ranked.length > 0) {
+        await tx.teamRatingHistory.createMany({
+          data: ranked.map((r) => ({
+            teamId: r.teamId,
+            seasonId,
+            ageGroup,
+            weekEndingDate,
+            ratingEngine: "ELO" as const,
+            rating: r.rating,
+            rank: r.rank,
+            comparisons: r.matchesPlayed,
+          })),
+        });
+      }
 
-    await tx.teamEloMatchStep.deleteMany({ where: { seasonId, ageGroup } });
-    if (stepRows.length > 0) {
-      await tx.teamEloMatchStep.createMany({
-        data: stepRows.map((s) => ({ ...s, seasonId, ageGroup })),
-      });
-    }
-  });
+      await tx.teamEloMatchStep.deleteMany({ where: { seasonId, ageGroup } });
+      if (stepRows.length > 0) {
+        await tx.teamEloMatchStep.createMany({
+          data: stepRows.map((s) => ({ ...s, seasonId, ageGroup })),
+        });
+      }
+    },
+    // Default interactive-transaction timeout (5s) was tuned for the TeamRatingHistory-only
+    // write this transaction used to do -- the TeamEloMatchStep delete-and-replace added
+    // alongside it (one row per team per match in the partition) pushed a full season's worth
+    // of matches past that default intermittently, silently killing this and every downstream
+    // engine (see recomputeRatingsWorkerEntry.ts's sequential Colley -> Elo -> Massey order).
+    { timeout: 60_000 },
+  );
 
   return ranked;
 }
