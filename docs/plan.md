@@ -505,8 +505,46 @@ resolved cleanly (22 flagged "needs attention" for ambiguous team matches — th
 expected review-queue behavior, not a bug); a standalone fetch+parse check against one
 division separately confirmed all 85 real completed matches across 14 pools/brackets
 came back with correct scores and winners. The verification event/import batch was
-deleted afterward, not left in the dev DB. **Still not built: a TM2 adapter** — TM2
-remains recordable as an `EventSchedule` source with no fetch button yet.
+deleted afterward, not left in the dev DB.
+
+**TM2 adapter, standings (TEAM_FINISHES) — done (2026-08-04).** Unlike Sportwrench/
+VBSchedule, TM2 (tm2sign.com) turned out to be a plain public JSON REST API under
+`/api/public/*` -- confirmed via the app's own network requests against a real event
+(`https://tm2sign.com/app/event/2169`), no auth/session required and no
+Cloudflare TLS-fingerprint block observed, so `tm2Fetch.ts` uses `fetch()` directly
+like `aesFetch.ts`/`vbscheduleFetch.ts` rather than shelling out to curl like
+`sportwrenchFetch.ts` -- confirmed with a standalone plain server-side `fetch()`
+script outside the app, not just the browser session used to discover the API shape.
+`tm2Standings.ts` fetches `/api/public/events/{id}` (event name) and
+`/api/public/event-divisions?filter[event_id]={id}` (division list) once, then per
+division `/api/public/scheduler-teams?filter[event_division_id]={id}&filter[not_null]=
+final_finish_position_number` (server-side-filtered to teams that actually have a
+final finish) into the same `RawAesCsvRow`-shaped rows AES/Sportwrench/VBSchedule
+standings already produce. TM2's team code (`alternate_identifier`, e.g.
+"G16AJVBA1LS") turned out to be the *same* fixed-width structure AES's `TeamCode`
+uses (gender+ageGroup+clubCode+teamNumber+region) -- confirmed by resolving real
+fetched rows against the dev DB's existing AES-imported clubs and getting real
+matches (e.g. a TM2-fetched "RAGE 16 TOA" row resolved to the same existing "RAGE"
+club an earlier AES import had already created) -- so this reuses `aesTeamCode.ts`'s
+decoder unchanged rather than writing a second parser, same precedent as
+VBSchedule's adapter. `tm2EventId.ts` parses the id from either the `/app/event/{id}`
+browser URL or a bare id. `/admin/imports` gained a "Fetch standings from TM2"
+button alongside the existing AES/Sportwrench/VBSchedule ones, gated on
+`scheduleSource === "TM2"` the same way (TM2 was already a recordable `EventSchedule`
+source with no fetch button -- this closes that gap). Verified end-to-end against the
+real event `https://tm2sign.com/app/event/2169` (2026 No Dinx/NCVA Girls Far Western
+National Qualifier - Wk 1): fetch pulled 527 rows across 12 divisions; Resolve
+correctly parsed every division label (e.g. "16 American Blue" -> age 16, tier
+AMERICAN), matched 354 rows to existing clubs/teams and flagged 153 new clubs/19
+ambiguous clubs/20 region-mismatch errors -- the same shape of review queue AES/
+VBSchedule already produce, not a TM2-specific bug. The verification event/import
+batch was deleted afterward, not left in the dev DB. **Not yet built: TM2 match
+results (MATCH_RESULTS)** -- standings/TEAM_FINISHES only for now, following the same
+staged rollout AES/Sportwrench/VBSchedule each went through (standings first, match
+results as a later slice); TM2's schedule/pool-bracket endpoints observed during
+discovery (`scheduler-rounds`, `scheduler-groups`, `scheduler-pool-brackets`) look
+like plausible building blocks for that but weren't explored for match-level detail
+this pass.
 
 **Non-anchor `PointTemplate` library — seeded.** `prisma/seedPointTemplates.ts` (new
 `db:seed-point-templates` script, idempotent — upserts by name, replaces bands

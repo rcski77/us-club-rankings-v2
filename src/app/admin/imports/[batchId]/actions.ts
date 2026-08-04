@@ -9,6 +9,8 @@ import { parseSportwrenchEventIdFromUrl } from "@/lib/import/sportwrenchEventId"
 import { fetchSportwrenchStandingsRows } from "@/lib/import/sportwrenchStandings";
 import { parseVbscheduleEventIdFromUrl } from "@/lib/import/vbscheduleEventId";
 import { fetchVbscheduleStandingsRows } from "@/lib/import/vbscheduleStandings";
+import { parseTm2EventIdFromUrl } from "@/lib/import/tm2EventId";
+import { fetchTm2StandingsRows } from "@/lib/import/tm2Standings";
 import { resolveImportBatchInWorker } from "@/lib/import/resolveInWorker";
 import { commitImportBatch } from "@/lib/import/commit";
 import {
@@ -347,6 +349,68 @@ export async function fetchAndCommitVbscheduleMatches(batchId: string, formData:
   }
 
   redirect(batchPath(batchId, { filter, success: "committed" }));
+}
+
+export async function fetchTm2Standings(batchId: string, formData: FormData) {
+  const filter = currentFilter(formData);
+
+  const batch = await prisma.importBatch.findUniqueOrThrow({ where: { id: batchId } });
+
+  if (batch.scheduleSource !== "TM2" || !batch.scheduleUrl) {
+    redirect(batchPath(batchId, { filter, error: "no-schedule-url" }));
+  }
+
+  const tm2EventId = parseTm2EventIdFromUrl(batch.scheduleUrl!);
+  if (!tm2EventId) {
+    redirect(batchPath(batchId, { filter, error: "bad-schedule-url" }));
+  }
+
+  let result;
+  try {
+    result = await fetchTm2StandingsRows(tm2EventId!);
+  } catch (err) {
+    redirect(
+      batchPath(batchId, {
+        filter,
+        error: "fetch-failed",
+        reason: err instanceof Error ? err.message : String(err),
+      }),
+    );
+  }
+
+  const filename = `tm2-fetch-${Date.now()}.json`;
+  const importFile = await prisma.importFile.create({
+    data: {
+      importBatchId: batchId,
+      filename,
+      partNumber: null,
+      rawContent: JSON.stringify(result.raw),
+      status: "PARSED",
+      parseError: null,
+      rowCount: result.rows.length,
+    },
+  });
+
+  if (result.rows.length > 0) {
+    await prisma.importRow.createMany({
+      data: result.rows.map((r) => ({
+        importFileId: importFile.id,
+        rowNumber: r.rowNumber,
+        ageGroupLabelRaw: r.ageGroupLabel,
+        rankRaw: r.rank,
+        teamNameRaw: r.teamNameField,
+        teamCodeRaw: r.teamCode,
+        // TM2's team-list response carries a club_name field, but it's consistently
+        // blank on real data (confirmed against event 2169) -- clubName ends up null
+        // for every row here, same as if the field didn't exist, but kept for parity
+        // with the AES/Sportwrench/VBSchedule fetchers in case TM2 populates it
+        // elsewhere.
+        overrideClubName: r.clubName,
+      })),
+    });
+  }
+
+  redirect(batchPath(batchId, { filter }));
 }
 
 // Points this batch at one of its event's saved EventSchedule links (or clears it,

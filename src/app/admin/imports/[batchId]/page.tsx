@@ -12,6 +12,7 @@ import {
   fetchAndCommitSportwrenchMatches,
   fetchVbscheduleStandings,
   fetchAndCommitVbscheduleMatches,
+  fetchTm2Standings,
   resolveBatch,
   updateBatchSchedule,
   overrideRowDivision,
@@ -134,6 +135,7 @@ export default async function ImportBatchPage({
   const fetchAesStandingsWithId = fetchAesStandings.bind(null, batchId);
   const fetchSportwrenchStandingsWithId = fetchSportwrenchStandings.bind(null, batchId);
   const fetchVbscheduleStandingsWithId = fetchVbscheduleStandings.bind(null, batchId);
+  const fetchTm2StandingsWithId = fetchTm2Standings.bind(null, batchId);
   const resolveWithId = resolveBatch.bind(null, batchId);
   const commitWithId = commitBatch.bind(null, batchId);
   const deleteWithId = deleteBatch.bind(null, batchId);
@@ -315,6 +317,13 @@ export default async function ImportBatchPage({
                     <input type="hidden" name="filter" value={filter ?? ""} />
                     <SubmitButton className={secondaryButtonClass} pendingText="Fetching…">
                       Fetch standings from VBSchedule
+                    </SubmitButton>
+                  </form>
+                ) : batch.scheduleSource === "TM2" ? (
+                  <form action={fetchTm2StandingsWithId}>
+                    <input type="hidden" name="filter" value={filter ?? ""} />
+                    <SubmitButton className={secondaryButtonClass} pendingText="Fetching…">
+                      Fetch standings from TM2
                     </SubmitButton>
                   </form>
                 ) : (
