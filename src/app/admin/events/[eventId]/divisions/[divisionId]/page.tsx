@@ -13,7 +13,9 @@ import {
   removeTeamFinish,
   updateTeamFinishRank,
   adjustDivisionBandPoints,
+  searchAvailableTeams,
 } from "./actions";
+import { TeamCombobox } from "./TeamCombobox";
 import {
   inputClass,
   selectClass,
@@ -36,17 +38,18 @@ export default async function DivisionDetailPage({
   const { eventId, divisionId } = await params;
   const { error } = await searchParams;
 
-  // Sequential, not Promise.all: the local dev Postgres (via `prisma dev`) doesn't
-  // reliably handle concurrent queries from the same connection pool.
-  const division = await prisma.division.findUnique({
-    where: { id: divisionId },
-    include: {
-      event: true,
-      pointBands: { orderBy: { fromRank: "asc" } },
-    },
-  });
+  // `templates` doesn't depend on `division`, so fetch them concurrently.
+  const [division, templates] = await Promise.all([
+    prisma.division.findUnique({
+      where: { id: divisionId },
+      include: {
+        event: true,
+        pointBands: { orderBy: { fromRank: "asc" } },
+      },
+    }),
+    prisma.pointTemplate.findMany({ orderBy: { maxPoints: "desc" } }),
+  ]);
   if (!division || division.eventId !== eventId) notFound();
-  const templates = await prisma.pointTemplate.findMany({ orderBy: { maxPoints: "desc" } });
 
   const seasonId = division.event.seasonId;
   const seasonScopedTeam = { seasons: { where: { seasonId } } } as const;
@@ -56,14 +59,6 @@ export default async function DivisionDetailPage({
     include: { team: { include: seasonScopedTeam } },
     orderBy: { rank: "asc" },
   });
-  const finishedTeamIds = finishes.map((f) => f.teamId);
-  const availableTeams = await prisma.team.findMany({
-    where: { id: { notIn: finishedTeamIds }, seasons: { some: { seasonId } } },
-    select: { id: true, name: true, seasons: { where: { seasonId }, select: { ageGroup: true } } },
-    orderBy: { name: "asc" },
-  });
-  availableTeams.sort((a, b) => (b.seasons[0]?.ageGroup ?? 0) - (a.seasons[0]?.ageGroup ?? 0));
-
   const isConfirmed = division.scoringStatus === "CONFIRMED";
   const updateDetailsWithIds = updateDivisionDetails.bind(null, eventId, divisionId);
   const applyTemplateWithIds = applyTemplate.bind(null, eventId, divisionId);
@@ -401,19 +396,7 @@ export default async function DivisionDetailPage({
 
         {!isConfirmed && (
           <form action={addFinishWithIds} className="flex flex-wrap items-end gap-3">
-            <label className="flex flex-col gap-1 text-sm">
-              Team
-              <select name="teamId" className={selectClass} defaultValue="" required>
-                <option value="" disabled>
-                  Select a team…
-                </option>
-                {availableTeams.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.name} ({t.seasons[0]?.ageGroup}u)
-                  </option>
-                ))}
-              </select>
-            </label>
+            <TeamCombobox divisionId={divisionId} fieldName="teamId" searchAction={searchAvailableTeams} />
             <label className="flex flex-col gap-1 text-sm">
               Rank
               <input name="rank" type="number" min={1} required className={`${inputClass} w-16`} />

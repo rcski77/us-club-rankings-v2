@@ -178,6 +178,34 @@ export async function addTeamFinish(eventId: string, divisionId: string, formDat
   redirect(divisionPath(eventId, divisionId));
 }
 
+// Called directly from the client TeamCombobox (not a form action) -- the season this
+// division belongs to can have thousands of teams, so search server-side instead of
+// shipping the whole roster to the browser as <option> elements.
+export async function searchAvailableTeams(divisionId: string, query: string) {
+  const q = query.trim();
+  if (q.length < 2) return [];
+
+  const division = await prisma.division.findUniqueOrThrow({
+    where: { id: divisionId },
+    select: { event: { select: { seasonId: true } } },
+  });
+  const finishes = await prisma.teamFinish.findMany({ where: { divisionId }, select: { teamId: true } });
+  const excludeIds = finishes.map((f) => f.teamId);
+
+  const teams = await prisma.team.findMany({
+    where: {
+      id: { notIn: excludeIds },
+      seasons: { some: { seasonId: division.event.seasonId } },
+      name: { contains: q, mode: "insensitive" },
+    },
+    select: { id: true, name: true, seasons: { where: { seasonId: division.event.seasonId }, select: { ageGroup: true } } },
+    orderBy: { name: "asc" },
+    take: 20,
+  });
+
+  return teams.map((t) => ({ id: t.id, name: t.name, ageGroup: t.seasons[0]?.ageGroup ?? null }));
+}
+
 export async function removeTeamFinish(eventId: string, divisionId: string, finishId: string) {
   await prisma.teamFinish.delete({ where: { id: finishId } });
   redirect(divisionPath(eventId, divisionId));
