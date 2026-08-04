@@ -538,13 +538,50 @@ correctly parsed every division label (e.g. "16 American Blue" -> age 16, tier
 AMERICAN), matched 354 rows to existing clubs/teams and flagged 153 new clubs/19
 ambiguous clubs/20 region-mismatch errors -- the same shape of review queue AES/
 VBSchedule already produce, not a TM2-specific bug. The verification event/import
-batch was deleted afterward, not left in the dev DB. **Not yet built: TM2 match
-results (MATCH_RESULTS)** -- standings/TEAM_FINISHES only for now, following the same
-staged rollout AES/Sportwrench/VBSchedule each went through (standings first, match
-results as a later slice); TM2's schedule/pool-bracket endpoints observed during
-discovery (`scheduler-rounds`, `scheduler-groups`, `scheduler-pool-brackets`) look
-like plausible building blocks for that but weren't explored for match-level detail
-this pass.
+batch was deleted afterward, not left in the dev DB.
+
+**TM2 adapter, match results (MATCH_RESULTS) -- done (2026-08-04, same day).** Unlike
+every other source, TM2's `scheduler-matches` endpoint covers a *whole event* in one
+paginated query (`filter[event_id]={id}`, confirmed against the real 2169 event: 2178
+matches across 12 divisions, 22 pages of 100) -- no per-team `schedule/past` walk like
+AES, no per-division round->pool walk like VBSchedule/Sportwrench. `tm2Matches.ts`
+pages through it once, filtering to matches with a recorded winner and completed
+time, and reads set scores directly off `position_one_score_one..five`/
+`position_two_score_one..five` (parallel fixed-length fields, same shape convention
+as VBSchedule's `teamOneScores`/`teamTwoScores`) and set-win counts directly off
+`position_one_match_set_wins`/`position_two_match_set_wins` (given, not re-derived).
+Round/pool-bracket *names* aren't on the match row itself (just numeric ids), so
+those are fetched once per division from the same `scheduler-rounds`/
+`scheduler-pool-brackets` endpoints `tm2Standings.ts`'s discovery pass had already
+found, purely to build a human-readable `stage` string (e.g. "Round 1 — Pool 1") --
+division itself is resolved from the team's own `TeamFinish`, not from this, same as
+every other source (see `resolveMatches.ts`'s comment on why). Reuses
+`AesFetchedMatch`/`resolveAesMatches()`/`commitResolvedMatches()` unchanged, same
+precedent as Sportwrench/VBSchedule. New `importTm2MatchResults()`
+(`commitMatches.ts`) and worker-process wiring (`commitMatchesInWorker.ts`/
+`commitMatchesWorkerEntry.ts`) mirror the other three sources exactly. `/admin/
+imports` gained a "Fetch match results from TM2" button on `MATCH_RESULTS` batches,
+gated on `scheduleSource === "TM2"` the same way. Verified end-to-end against the
+real event `https://tm2sign.com/app/event/2169` via a direct-library script (not the
+admin UI -- see the note below) after first committing a TEAM_FINISHES import for the
+same event: 2178 matches fetched, 1872 created, 306 skipped (the same
+"team has no recorded finish yet" shape every other source's skip queue produces,
+here mostly from 20 rows this pass's TEAM_FINISHES verification deliberately excluded
+rather than hand-resolving each). A spot-checked sample match
+("TAV 16 Black Josh" over "STVA) South Texas STVA 16-1 Madison", 25-23/25-19) matched
+byte-for-byte against what the live TM2 pool-bracket page itself displayed during
+discovery -- confirmed correct, not just structurally plausible. The verification
+event and both its import batches were deleted afterward, not left in the dev DB.
+**Known page-performance issue surfaced, not introduced, by this verification**: the
+existing `/admin/imports/[batchId]?filter=all` TEAM_FINISHES review grid took 2+
+minutes to render for this real 527-row/153-new-club import in the local dev
+browser -- the per-row `overrideClubId` `<select>` still lists every club in the
+*entire system* (500+), not just clubs relevant to the batch (see `admin/CLAUDE.md`'s
+existing note on this exact class of bug, previously fixed for the team-override
+dropdown and the default-attention-only view, evidently not fully for the club
+dropdown). Pre-existing across every adapter (AES/Sportwrench/VBSchedule import batches
+of comparable size would hit the same thing), not TM2-specific and not fixed this
+pass -- flagged here as a real, reproducible gap for a future pass.
 
 **Non-anchor `PointTemplate` library — seeded.** `prisma/seedPointTemplates.ts` (new
 `db:seed-point-templates` script, idempotent — upserts by name, replaces bands

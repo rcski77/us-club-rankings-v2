@@ -17,6 +17,7 @@ import {
   importAesMatchResultsInWorker,
   importSportwrenchMatchResultsInWorker,
   importVbscheduleMatchResultsInWorker,
+  importTm2MatchResultsInWorker,
 } from "@/lib/import/commitMatchesInWorker";
 import { suggestClubName } from "@/lib/import/clubNameSuggestion";
 
@@ -411,6 +412,28 @@ export async function fetchTm2Standings(batchId: string, formData: FormData) {
   }
 
   redirect(batchPath(batchId, { filter }));
+}
+
+export async function fetchAndCommitTm2Matches(batchId: string, formData: FormData) {
+  const filter = currentFilter(formData);
+
+  const batch = await prisma.importBatch.findUniqueOrThrow({ where: { id: batchId } });
+
+  if (batch.scheduleSource !== "TM2" || !batch.scheduleUrl) {
+    redirect(batchPath(batchId, { filter, error: "no-schedule-url" }));
+  }
+
+  const tm2EventId = parseTm2EventIdFromUrl(batch.scheduleUrl!);
+  if (!tm2EventId) {
+    redirect(batchPath(batchId, { filter, error: "bad-schedule-url" }));
+  }
+
+  const result = await importTm2MatchResultsInWorker(batchId, tm2EventId!);
+  if (!result.ok) {
+    redirect(batchPath(batchId, { filter, error: "fetch-failed", reason: result.reason }));
+  }
+
+  redirect(batchPath(batchId, { filter, success: "committed" }));
 }
 
 // Points this batch at one of its event's saved EventSchedule links (or clears it,
