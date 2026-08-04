@@ -216,21 +216,23 @@ async function NpsRankingTable({
   const orderBy: Prisma.RankingResultOrderByWithRelationInput =
     sort && NPS_ORDER_BY[sort] ? NPS_ORDER_BY[sort](dir) : { rank: "asc" };
 
-  // Sequential awaits (not Promise.all) -- see docs/dev-environment.md.
-  const totalCount = await prisma.rankingResult.count({ where: { seasonId, ageGroup } });
-  const rows = await prisma.rankingResult.findMany({
-    where: { seasonId, ageGroup },
-    include: {
-      team: { include: { club: true } },
-      contributions: {
-        include: { teamFinish: { include: { division: { include: { event: true } } } } },
-        orderBy: { rankInSeason: "asc" },
+  // totalCount and rows don't depend on each other's results.
+  const [totalCount, rows] = await Promise.all([
+    prisma.rankingResult.count({ where: { seasonId, ageGroup } }),
+    prisma.rankingResult.findMany({
+      where: { seasonId, ageGroup },
+      include: {
+        team: { include: { club: true } },
+        contributions: {
+          include: { teamFinish: { include: { division: { include: { event: true } } } } },
+          orderBy: { rankInSeason: "asc" },
+        },
       },
-    },
-    orderBy,
-    skip: (page - 1) * DEFAULT_PAGE_SIZE,
-    take: DEFAULT_PAGE_SIZE,
-  });
+      orderBy,
+      skip: (page - 1) * DEFAULT_PAGE_SIZE,
+      take: DEFAULT_PAGE_SIZE,
+    }),
+  ]);
 
   return (
     <>
@@ -482,12 +484,14 @@ async function CombineRankingTable({
   page: number;
   baseParams: URLSearchParams;
 }) {
-  // Sequential awaits (not Promise.all) -- see docs/dev-environment.md.
-  const npsResults = await prisma.rankingResult.findMany({
-    where: { seasonId, ageGroup },
-    include: { team: { include: { club: true } } },
-  });
-  const powerData = await getLatestPowerRatings(seasonId, ageGroup);
+  // npsResults and powerData don't depend on each other's results.
+  const [npsResults, powerData] = await Promise.all([
+    prisma.rankingResult.findMany({
+      where: { seasonId, ageGroup },
+      include: { team: { include: { club: true } } },
+    }),
+    getLatestPowerRatings(seasonId, ageGroup),
+  ]);
   const powerRows = buildPowerRows(powerData);
 
   const npsRankByTeam = new Map(npsResults.map((r) => [r.teamId, r.rank]));

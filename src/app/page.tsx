@@ -8,11 +8,13 @@ import { prisma } from "@/lib/prisma";
 export const dynamic = "force-dynamic";
 
 async function getStats() {
-  // Sequential, not Promise.all -- see docs/dev-environment.md.
-  const eventCount = await prisma.event.count();
-  const clubCount = await prisma.club.count();
-  const teamCount = await prisma.team.count();
-  const matchCount = await prisma.match.count();
+  // All four counts are independent of each other.
+  const [eventCount, clubCount, teamCount, matchCount] = await Promise.all([
+    prisma.event.count(),
+    prisma.club.count(),
+    prisma.team.count(),
+    prisma.match.count(),
+  ]);
   return { eventCount, clubCount, teamCount, matchCount };
 }
 

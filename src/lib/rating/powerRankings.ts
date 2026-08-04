@@ -42,8 +42,9 @@ export function sortRows<T>(
  * PowerRankingTable and CombineRankingTable so both read the identical rating data
  * rather than two independently-drifting copies of the same three queries. Each engine
  * is recomputed on its own trigger, so its own latest weekEndingDate is found
- * independently rather than assuming all three runs share a date. Sequential awaits
- * throughout (not Promise.all) -- see docs/dev-environment.md.
+ * independently rather than assuming all three runs share a date. Each engine's
+ * lookup and each engine's fetch are mutually independent, so both groups run via
+ * Promise.all -- see docs/dev-environment.md.
  */
 export async function getLatestPowerRatings(seasonId: string, ageGroup: number) {
   // createdAt (not just weekEndingDate) is selected here so the UI can show when a
@@ -51,41 +52,45 @@ export async function getLatestPowerRatings(seasonId: string, ageGroup: number) 
   // weekEndingDate collapses every same-day recompute onto one value by design (see
   // normalizeWeekEndingDate), so two runs on the same day are otherwise
   // indistinguishable to an admin looking at the page.
-  const latestColley = await prisma.teamRatingHistory.findFirst({
-    where: { seasonId, ageGroup, ratingEngine: "COLLEY" },
-    orderBy: { weekEndingDate: "desc" },
-    select: { weekEndingDate: true, createdAt: true },
-  });
-  const latestElo = await prisma.teamRatingHistory.findFirst({
-    where: { seasonId, ageGroup, ratingEngine: "ELO" },
-    orderBy: { weekEndingDate: "desc" },
-    select: { weekEndingDate: true, createdAt: true },
-  });
-  const latestMassey = await prisma.teamRatingHistory.findFirst({
-    where: { seasonId, ageGroup, ratingEngine: "MASSEY" },
-    orderBy: { weekEndingDate: "desc" },
-    select: { weekEndingDate: true, createdAt: true },
-  });
+  const [latestColley, latestElo, latestMassey] = await Promise.all([
+    prisma.teamRatingHistory.findFirst({
+      where: { seasonId, ageGroup, ratingEngine: "COLLEY" },
+      orderBy: { weekEndingDate: "desc" },
+      select: { weekEndingDate: true, createdAt: true },
+    }),
+    prisma.teamRatingHistory.findFirst({
+      where: { seasonId, ageGroup, ratingEngine: "ELO" },
+      orderBy: { weekEndingDate: "desc" },
+      select: { weekEndingDate: true, createdAt: true },
+    }),
+    prisma.teamRatingHistory.findFirst({
+      where: { seasonId, ageGroup, ratingEngine: "MASSEY" },
+      orderBy: { weekEndingDate: "desc" },
+      select: { weekEndingDate: true, createdAt: true },
+    }),
+  ]);
 
-  const colleyRatings = latestColley
-    ? await prisma.teamRatingHistory.findMany({
-        where: { seasonId, ageGroup, ratingEngine: "COLLEY", weekEndingDate: latestColley.weekEndingDate },
-        include: { team: { include: { club: true } } },
-        orderBy: { rank: "asc" },
-      })
-    : [];
-  const eloRatings = latestElo
-    ? await prisma.teamRatingHistory.findMany({
-        where: { seasonId, ageGroup, ratingEngine: "ELO", weekEndingDate: latestElo.weekEndingDate },
-        include: { team: { include: { club: true } } },
-      })
-    : [];
-  const masseyRatings = latestMassey
-    ? await prisma.teamRatingHistory.findMany({
-        where: { seasonId, ageGroup, ratingEngine: "MASSEY", weekEndingDate: latestMassey.weekEndingDate },
-        include: { team: { include: { club: true } } },
-      })
-    : [];
+  const [colleyRatings, eloRatings, masseyRatings] = await Promise.all([
+    latestColley
+      ? prisma.teamRatingHistory.findMany({
+          where: { seasonId, ageGroup, ratingEngine: "COLLEY", weekEndingDate: latestColley.weekEndingDate },
+          include: { team: { include: { club: true } } },
+          orderBy: { rank: "asc" },
+        })
+      : [],
+    latestElo
+      ? prisma.teamRatingHistory.findMany({
+          where: { seasonId, ageGroup, ratingEngine: "ELO", weekEndingDate: latestElo.weekEndingDate },
+          include: { team: { include: { club: true } } },
+        })
+      : [],
+    latestMassey
+      ? prisma.teamRatingHistory.findMany({
+          where: { seasonId, ageGroup, ratingEngine: "MASSEY", weekEndingDate: latestMassey.weekEndingDate },
+          include: { team: { include: { club: true } } },
+        })
+      : [],
+  ]);
 
   return { latestColley, latestElo, latestMassey, colleyRatings, eloRatings, masseyRatings };
 }

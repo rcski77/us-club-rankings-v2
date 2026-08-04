@@ -14,14 +14,16 @@ export default async function PublicClubsPage({
   const { page: pageParam } = await searchParams;
   const page = parsePage(pageParam);
 
-  // Sequential awaits (not Promise.all) -- see docs/dev-environment.md.
-  const totalCount = await prisma.club.count();
-  const clubs = await prisma.club.findMany({
-    include: { region: true, _count: { select: { teams: true } } },
-    orderBy: { name: "asc" },
-    skip: (page - 1) * DEFAULT_PAGE_SIZE,
-    take: DEFAULT_PAGE_SIZE,
-  });
+  // totalCount and clubs don't depend on each other's results.
+  const [totalCount, clubs] = await Promise.all([
+    prisma.club.count(),
+    prisma.club.findMany({
+      include: { region: true, _count: { select: { teams: true } } },
+      orderBy: { name: "asc" },
+      skip: (page - 1) * DEFAULT_PAGE_SIZE,
+      take: DEFAULT_PAGE_SIZE,
+    }),
+  ]);
 
   return (
     <div>
