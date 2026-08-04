@@ -87,6 +87,21 @@ export default async function ImportBatchPage({
   // belong to a club outside clubIdsInBatch (e.g. lineage-matched across a club
   // change), so it's included explicitly rather than relying on the club scoping.
   const matchedTeamIdsInBatch = [...new Set(allRows.map((r) => r.matchedTeamId).filter((id): id is string => !!id))];
+  // AMBIGUOUS rows' club-override dropdown only ever needs to offer the exact
+  // candidates resolve.ts itself found ambiguous for that row's code (see
+  // resolve.ts's clubsByExternalCode) -- pulling in every club in the system (500+
+  // in real data) to populate that dropdown was the other half of the page-lockup
+  // bug the team-override fix above already addressed for teams. NEW rows have no
+  // matching club by definition (that's why they're NEW), so they get no dropdown at
+  // all below, just the existing free-text name field.
+  const ambiguousClubCodes = [
+    ...new Set(
+      allRows
+        .filter((r) => r.clubMatchType === "AMBIGUOUS")
+        .map((r) => r.parsedClubExternalCode)
+        .filter((c): c is string => !!c),
+    ),
+  ];
 
   // divisions, clubs, and teams don't depend on each other's results.
   const [divisions, clubs, teams] = await Promise.all([
@@ -94,13 +109,28 @@ export default async function ImportBatchPage({
       where: { eventId: batch.eventId },
       orderBy: [{ ageGroup: "desc" }, { name: "asc" }],
     }),
-    prisma.club.findMany({ orderBy: { name: "asc" } }),
+    prisma.club.findMany({
+      where: { OR: [{ id: { in: clubIdsInBatch } }, { externalCode: { in: ambiguousClubCodes } }] },
+      orderBy: { name: "asc" },
+    }),
     prisma.team.findMany({
       where: { OR: [{ clubId: { in: clubIdsInBatch } }, { id: { in: matchedTeamIdsInBatch } }] },
       orderBy: { name: "asc" },
       include: { club: true },
     }),
   ]);
+
+  // Per-row AMBIGUOUS dropdown candidates -- clubs sharing that row's own parsed
+  // code, mirroring resolve.ts's own clubsByExternalCode grouping (externalCode is
+  // stored lowercased at commit time, same as parsedClubExternalCode, so this
+  // compares directly without re-lowercasing either side).
+  const clubsByExternalCode = new Map<string, typeof clubs>();
+  for (const c of clubs) {
+    if (!c.externalCode) continue;
+    const list = clubsByExternalCode.get(c.externalCode) ?? [];
+    list.push(c);
+    clubsByExternalCode.set(c.externalCode, list);
+  }
 
   const divisionById = new Map(divisions.map((d) => [d.id, d]));
   const clubById = new Map(clubs.map((c) => [c.id, c]));
@@ -497,26 +527,35 @@ export default async function ImportBatchPage({
                       ) : (
                         <span className="text-xs text-slate-400">(not yet resolved)</span>
                       )}
-                      {/* Full club list is 500+ rows -- only render it for rows that
-                          actually need a manual club decision (matches blockingReason's
-                          AMBIGUOUS/NEW check), not for every cleanly-matched row. See
-                          docs/plan.md Phase 2 postmortem: rendering this select for every
-                          row of a real-sized (500+ row) import froze the page. */}
+                      {/* Only render for rows that actually need a manual club
+                          decision (matches blockingReason's AMBIGUOUS/NEW check), not
+                          for every cleanly-matched row. See docs/plan.md Phase 2
+                          postmortem: rendering a club <select> for every row of a
+                          real-sized (500+ row) import froze the page. The AMBIGUOUS
+                          <select>'s own options are scoped to that row's own
+                          same-code candidates (see clubsByExternalCode above) rather
+                          than every club in the system (500+) -- the other half of
+                          that same page-lockup bug, confirmed against a real 527-row/
+                          153-new-club TM2 import. NEW rows get no <select> at all --
+                          by definition no existing club shares their code, so the
+                          free-text name field below is the only real option. */}
                       {!isCommitted && (row.clubMatchType === "NEW" || row.clubMatchType === "AMBIGUOUS") && (
                         <form action={overrideClubWithIds} className="mt-1 flex flex-wrap items-center gap-1">
                           <input type="hidden" name="filter" value={filter ?? ""} />
-                          <select
-                            name="overrideClubId"
-                            className={`${selectClass} w-28 text-xs`}
-                            defaultValue={row.overrideClubId ?? ""}
-                          >
-                            <option value="">— auto —</option>
-                            {clubs.map((c) => (
-                              <option key={c.id} value={c.id}>
-                                {c.name}
-                              </option>
-                            ))}
-                          </select>
+                          {row.clubMatchType === "AMBIGUOUS" && (
+                            <select
+                              name="overrideClubId"
+                              className={`${selectClass} w-28 text-xs`}
+                              defaultValue={row.overrideClubId ?? ""}
+                            >
+                              <option value="">— auto —</option>
+                              {(clubsByExternalCode.get(row.parsedClubExternalCode ?? "") ?? []).map((c) => (
+                                <option key={c.id} value={c.id}>
+                                  {c.name}
+                                </option>
+                              ))}
+                            </select>
+                          )}
                           <input
                             name="overrideClubName"
                             placeholder="New club name"

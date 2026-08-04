@@ -572,16 +572,31 @@ rather than hand-resolving each). A spot-checked sample match
 byte-for-byte against what the live TM2 pool-bracket page itself displayed during
 discovery -- confirmed correct, not just structurally plausible. The verification
 event and both its import batches were deleted afterward, not left in the dev DB.
-**Known page-performance issue surfaced, not introduced, by this verification**: the
+**Page-performance issue surfaced by this verification, fixed same day.** The
 existing `/admin/imports/[batchId]?filter=all` TEAM_FINISHES review grid took 2+
 minutes to render for this real 527-row/153-new-club import in the local dev
-browser -- the per-row `overrideClubId` `<select>` still lists every club in the
+browser -- the per-row `overrideClubId` `<select>` still listed every club in the
 *entire system* (500+), not just clubs relevant to the batch (see `admin/CLAUDE.md`'s
 existing note on this exact class of bug, previously fixed for the team-override
 dropdown and the default-attention-only view, evidently not fully for the club
-dropdown). Pre-existing across every adapter (AES/Sportwrench/VBSchedule import batches
-of comparable size would hit the same thing), not TM2-specific and not fixed this
-pass -- flagged here as a real, reproducible gap for a future pass.
+dropdown). Pre-existing across every adapter (AES/Sportwrench/VBSchedule import
+batches of comparable size would hit the same thing), not TM2-specific, but this real
+TM2 import was what actually reproduced it. Fixed: `page.tsx` now scopes the query
+that used to fetch every club to `clubIdsInBatch` (rows' already-matched/overridden
+clubs, unchanged) plus a new `ambiguousClubCodes` set (distinct `parsedClubExternalCode`
+values among AMBIGUOUS rows only); a new `clubsByExternalCode` map (mirroring
+`resolve.ts`'s own identically-named grouping) lets each AMBIGUOUS row's `<select>`
+render only *its* actual candidates (resolve.ts already computed exactly this set to
+decide the row was ambiguous in the first place -- typically 2-6 clubs, not 500+).
+NEW rows dropped the `<select>` entirely: by definition no existing club shares a
+NEW row's code, so it never had a real candidate to offer, only noise -- the
+free-text name field (unchanged) remains the actual create-a-new-club path. Verified
+against the same real 527-row/153-new-club/19-ambiguous TM2 batch that exposed the
+bug: page load went from 104s-131s-2.1min (three real dev-browser measurements before
+the fix) to a steady ~4.5s after, and each AMBIGUOUS row's dropdown now shows only
+its real candidates (e.g. code "ignit" -> the 6 real Ignite-named clubs in the dev
+DB) instead of the full alphabetical 500+ list -- more usable, not just faster. The
+verification event/batch was deleted afterward, not left in the dev DB.
 
 **Non-anchor `PointTemplate` library — seeded.** `prisma/seedPointTemplates.ts` (new
 `db:seed-point-templates` script, idempotent — upserts by name, replaces bands
