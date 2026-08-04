@@ -55,18 +55,20 @@ export default async function PublicEventsPage({
   const selectedSeasonId = seasonParam === "all" ? "all" : seasonParam && seasons.some((s) => s.id === seasonParam) ? seasonParam : activeSeason?.id ?? "all";
 
   const eventsWhere = selectedSeasonId === "all" ? {} : { seasonId: selectedSeasonId };
-  // Sequential awaits (not Promise.all) -- see docs/dev-environment.md.
-  const totalCount = await prisma.event.count({ where: eventsWhere });
-  const events = await prisma.event.findMany({
-    where: eventsWhere,
-    include: {
-      _count: { select: { divisions: true, matches: true } },
-      divisions: { select: { _count: { select: { finishes: true } } } },
-    },
-    orderBy: { startDate: "desc" },
-    skip: (page - 1) * DEFAULT_PAGE_SIZE,
-    take: DEFAULT_PAGE_SIZE,
-  });
+  // totalCount and events don't depend on each other's results.
+  const [totalCount, events] = await Promise.all([
+    prisma.event.count({ where: eventsWhere }),
+    prisma.event.findMany({
+      where: eventsWhere,
+      include: {
+        _count: { select: { divisions: true, matches: true } },
+        divisions: { select: { _count: { select: { finishes: true } } } },
+      },
+      orderBy: { startDate: "desc" },
+      skip: (page - 1) * DEFAULT_PAGE_SIZE,
+      take: DEFAULT_PAGE_SIZE,
+    }),
+  ]);
 
   return (
     <div>

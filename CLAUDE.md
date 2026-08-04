@@ -49,11 +49,11 @@ Merge (and push, if asked) once the change is verified.
 
 ## Conventions worth knowing before editing
 
-- **Sequential `await`, never `Promise.all`, for multiple Prisma queries in the same
-  request.** Inherited from the old `npx prisma dev` database, which unreliably
-  dropped connections under concurrent queries — now on Docker Postgres this likely
-  no longer applies, but hasn't been re-verified/converted project-wide, so keep
-  following the existing convention. See `docs/dev-environment.md`.
+- **`Promise.all` for independent Prisma queries, sequential `await` for dependent
+  chains.** The old "always sequential" rule was inherited from the flaky `npx prisma
+  dev` database; concurrent queries are verified safe against Docker Postgres (see
+  `docs/dev-environment.md`). Only keep `await` sequential where query B genuinely
+  needs a value read from query A's result.
 - **Shared style constants** in `src/lib/ui.ts` (`inputClass`, `tableClass`,
   `primaryButtonClass`, etc.) — reuse these rather than inlining Tailwind classes on
   new admin pages, for visual consistency.

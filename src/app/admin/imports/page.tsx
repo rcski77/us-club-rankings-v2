@@ -70,17 +70,19 @@ export default async function ImportsPage({
 }) {
   const { error, success } = await searchParams;
 
-  // Sequential, not Promise.all -- see docs/dev-environment.md.
-  const batches = await prisma.importBatch.findMany({
-    include: { event: true },
-    orderBy: { createdAt: "desc" },
-    take: 100,
-  });
-  const events = await prisma.event.findMany({
-    include: { season: true },
-    orderBy: [{ startDate: "desc" }],
-    take: 200,
-  });
+  // batches and events don't depend on each other's results.
+  const [batches, events] = await Promise.all([
+    prisma.importBatch.findMany({
+      include: { event: true },
+      orderBy: { createdAt: "desc" },
+      take: 100,
+    }),
+    prisma.event.findMany({
+      include: { season: true },
+      orderBy: [{ startDate: "desc" }],
+      take: 200,
+    }),
+  ]);
 
   return (
     <div>

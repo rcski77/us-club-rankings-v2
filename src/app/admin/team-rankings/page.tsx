@@ -520,12 +520,14 @@ async function CombineRankingTable({
   dir: SortDir;
   baseParams: URLSearchParams;
 }) {
-  // Sequential awaits (not Promise.all) -- see docs/dev-environment.md.
-  const npsResults = await prisma.rankingResult.findMany({
-    where: { seasonId, ageGroup },
-    include: { team: { include: { club: true } } },
-  });
-  const powerData = await getLatestPowerRatings(seasonId, ageGroup);
+  // npsResults and powerData don't depend on each other's results.
+  const [npsResults, powerData] = await Promise.all([
+    prisma.rankingResult.findMany({
+      where: { seasonId, ageGroup },
+      include: { team: { include: { club: true } } },
+    }),
+    getLatestPowerRatings(seasonId, ageGroup),
+  ]);
   const powerRows = buildPowerRows(powerData);
 
   const npsRankByTeam = new Map(npsResults.map((r) => [r.teamId, r.rank]));
