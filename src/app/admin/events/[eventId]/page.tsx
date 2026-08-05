@@ -55,6 +55,7 @@ async function updateEvent(eventId: string, formData: FormData) {
   const startDateRaw = String(formData.get("startDate") ?? "");
   const endDateRaw = String(formData.get("endDate") ?? "");
   const isAnchor = formData.get("isAnchor") === "on";
+  const isPriority = formData.get("isPriority") === "on";
   const addressLine = String(formData.get("addressLine") ?? "").trim() || null;
   const city = String(formData.get("city") ?? "").trim() || null;
   const state = String(formData.get("state") ?? "").trim() || null;
@@ -69,7 +70,7 @@ async function updateEvent(eventId: string, formData: FormData) {
 
   await prisma.event.update({
     where: { id: eventId },
-    data: { name, startDate, endDate, isAnchor, addressLine, city, state, zip },
+    data: { name, startDate, endDate, isAnchor, isPriority, addressLine, city, state, zip },
   });
 
   revalidatePath(`/admin/events/${eventId}`);
@@ -268,6 +269,7 @@ export default async function EventDetailPage({
         {event.season.label} · {event.startDate.toISOString().slice(0, 10)} –{" "}
         {event.endDate.toISOString().slice(0, 10)}
         {event.isAnchor && " · Anchor event"}
+        {event.isPriority && " · Priority"}
       </p>
 
       {error === "invalid" && (
@@ -499,6 +501,10 @@ export default async function EventDetailPage({
           <label className="flex items-center gap-2 text-sm">
             <input name="isAnchor" type="checkbox" defaultChecked={event.isAnchor} />
             Anchor event
+          </label>
+          <label className="flex items-center gap-2 text-sm">
+            <input name="isPriority" type="checkbox" defaultChecked={event.isPriority} />
+            Priority event (import first)
           </label>
           <button type="submit" className={`${primaryButtonClass} self-start`}>
             Save

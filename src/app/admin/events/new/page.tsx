@@ -15,6 +15,7 @@ async function createEvent(formData: FormData) {
   const state = String(formData.get("state") ?? "").trim() || null;
   const zip = String(formData.get("zip") ?? "").trim() || null;
   const isAnchor = formData.get("isAnchor") === "on";
+  const isPriority = formData.get("isPriority") === "on";
 
   if (!name || !seasonId || !startDate || !endDate) {
     redirect("/admin/events/new?error=invalid");
@@ -37,6 +38,7 @@ async function createEvent(formData: FormData) {
       state,
       zip,
       isAnchor,
+      isPriority,
     },
   });
 
@@ -110,6 +112,10 @@ export default async function NewEventPage({
           <label className="flex items-center gap-2 text-sm">
             <input name="isAnchor" type="checkbox" />
             Anchor event (USAV Nationals / Triple Crown NIT)
+          </label>
+          <label className="flex items-center gap-2 text-sm">
+            <input name="isPriority" type="checkbox" />
+            Priority event (import first)
           </label>
           <button type="submit" className={`${primaryButtonClass} self-start`}>
             Create event

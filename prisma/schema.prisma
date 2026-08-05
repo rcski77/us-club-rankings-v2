@@ -194,6 +194,11 @@ model Event {
   isAnchor    Boolean  @default(false) // USAV Nationals / Triple Crown NIT -- exempt
   // from the future suggestion algorithm (Phase 4+); manually assigned max-value
   // templates always.
+  isPriority  Boolean  @default(false) // marks events worth importing first / worth
+  // running rankings against when not every event is imported yet. All events that
+  // existed when this flag was introduced were backfilled to true (see migration);
+  // new events default to unchecked since lower-priority events are expected going
+  // forward.
   schedules     EventSchedule[] // one row per results/schedule page this event's
   // divisions are spread across -- most events have exactly one, but some run one
   // weekend split across several AES/Sportwrench schedule pages (e.g. separate pages
