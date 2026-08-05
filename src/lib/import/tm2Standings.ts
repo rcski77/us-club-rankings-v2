@@ -67,10 +67,20 @@ export type ApiLeagueStandingRow = {
   place: number | null;
 };
 
+// Returns [] (rather than throwing) on a 404 -- that means this division isn't a
+// league at all (e.g. a normal bracket division whose final finishes just haven't
+// been posted yet, such as a DRAFT-status event), not a fetch failure.
 export async function fetchTm2LeagueStandings(divisionId: number): Promise<ApiLeagueStandingRow[]> {
-  return fetchTm2Json<ApiLeagueStandingRow[]>(
-    `${TM2_API_BASE}/event-divisions/${divisionId}/league-standings`,
-  );
+  try {
+    return await fetchTm2Json<ApiLeagueStandingRow[]>(
+      `${TM2_API_BASE}/event-divisions/${divisionId}/league-standings`,
+    );
+  } catch (err) {
+    if (err instanceof Error && /: 404 /.test(err.message)) {
+      return [];
+    }
+    throw err;
+  }
 }
 
 export type Tm2StandingRow = RawAesCsvRow & { clubName: string | null };
