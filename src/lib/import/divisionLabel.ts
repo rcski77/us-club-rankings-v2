@@ -66,17 +66,19 @@ const TIER_KEYWORDS = Object.keys(TIER_KEYWORD_MAP);
 const TIER_LEVEL_PATTERN = /\b(I{1,3})\b/i;
 
 // A Sportwrench event with both boys and girls divisions prefixes each label with a
-// bare gender letter right before the age number (e.g. "B18 Open", "G18 Open") --
-// confirmed against a real coed event. AES's girls-only events never carry this
-// prefix. Stripped before age parsing so it doesn't defeat the leading-digit match.
-const GENDER_PREFIX_PATTERN = /^([bg])(?=\d)/i;
+// gender marker right before the age number -- usually a bare letter (e.g. "B18 Open",
+// "G18 Open", confirmed against a real coed event) but sometimes the spelled-out word
+// with a space (e.g. "Boys 16 Open", seen on another coed event). AES's girls-only
+// events never carry this prefix. Stripped before age parsing so it doesn't defeat the
+// leading-digit match.
+const GENDER_PREFIX_PATTERN = /^(boys|girls|b|g)\s*(?=\d)/i;
 const GENDER_PREFIX_MAP: Record<string, DivisionGender> = { b: "BOYS", g: "GIRLS" };
 
 export function parseAgeGroupLabel(label: string): ParsedDivisionLabel | DivisionLabelParseError {
   const trimmed = label.trim();
 
   const genderPrefixMatch = trimmed.match(GENDER_PREFIX_PATTERN);
-  const genderFromLabel = genderPrefixMatch ? GENDER_PREFIX_MAP[genderPrefixMatch[1].toLowerCase()] : null;
+  const genderFromLabel = genderPrefixMatch ? GENDER_PREFIX_MAP[genderPrefixMatch[1][0].toLowerCase()] : null;
   const afterGenderPrefix = genderPrefixMatch ? trimmed.slice(genderPrefixMatch[0].length) : trimmed;
 
   // Combined-range labels ("12/13 Club") carry two leading numbers, not one -- the
