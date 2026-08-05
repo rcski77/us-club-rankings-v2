@@ -16,6 +16,7 @@ import {
   searchAvailableTeams,
 } from "./actions";
 import { TeamCombobox } from "./TeamCombobox";
+import { SubmitButton } from "@/components/SubmitButton";
 import {
   inputClass,
   selectClass,
@@ -297,9 +298,9 @@ export default async function DivisionDetailPage({
                 await confirmDivisionScoring(eventId, divisionId);
               }}
             >
-              <button type="submit" className={primaryButtonClass}>
+              <SubmitButton className={primaryButtonClass} pendingText="Confirming...">
                 Confirm scoring
-              </button>
+              </SubmitButton>
             </form>
           ) : (
             <form
@@ -308,9 +309,9 @@ export default async function DivisionDetailPage({
                 await unlockDivisionScoring(eventId, divisionId);
               }}
             >
-              <button type="submit" className={secondaryButtonClass}>
+              <SubmitButton className={secondaryButtonClass} pendingText="Unlocking...">
                 Unlock
-              </button>
+              </SubmitButton>
             </form>
           )}
         </div>
