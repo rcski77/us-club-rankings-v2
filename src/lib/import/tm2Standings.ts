@@ -46,6 +46,33 @@ export async function fetchTm2DivisionStandings(divisionId: number): Promise<Api
   );
 }
 
+// Same endpoint, unfiltered -- used to resolve team code/name for the league-standings
+// fallback below, which only gives team_id.
+export async function fetchTm2AllDivisionTeams(divisionId: number): Promise<ApiSchedulerTeam[]> {
+  return fetchTm2Json<ApiSchedulerTeam[]>(
+    `${TM2_API_BASE}/scheduler-teams?filter[event_division_id]=${divisionId}&withWinLossStats=false`,
+  );
+}
+
+// Some divisions (e.g. multi-week power/league play, confirmed against a real event --
+// NCVA Girls Power League, event 2136 division 10254) never populate
+// final_finish_position_number at all: TM2 shows them under a "League Standings" tab
+// instead of "Final Finishes", with a season-long point total and place computed
+// across every week's round instead of one final bracket. This endpoint is that
+// division-wide standing -- team_id must be joined against scheduler-teams (see
+// fetchTm2AllDivisionTeams) to get the team code/name fetchTm2StandingsRows needs.
+export type ApiLeagueStandingRow = {
+  team_id: number;
+  league_score: number | null;
+  place: number | null;
+};
+
+export async function fetchTm2LeagueStandings(divisionId: number): Promise<ApiLeagueStandingRow[]> {
+  return fetchTm2Json<ApiLeagueStandingRow[]>(
+    `${TM2_API_BASE}/event-divisions/${divisionId}/league-standings`,
+  );
+}
+
 export type Tm2StandingRow = RawAesCsvRow & { clubName: string | null };
 
 export type FetchTm2StandingsResult = {
@@ -64,17 +91,45 @@ export type FetchTm2StandingsResult = {
 export async function fetchTm2StandingsRows(eventId: string): Promise<FetchTm2StandingsResult> {
   const eventInfo = await fetchTm2EventInfo(eventId);
 
-  const rawByDivision: Record<number, ApiSchedulerTeam[]> = {};
+  const rawByDivision: Record<number, ApiSchedulerTeam[] | { league: ApiLeagueStandingRow[]; teams: ApiSchedulerTeam[] }> = {};
   const rows: Tm2StandingRow[] = [];
   let skippedCount = 0;
   let rowNumber = 0;
 
   for (const division of eventInfo.divisions) {
     const teams = await fetchTm2DivisionStandings(division.divisionId);
-    rawByDivision[division.divisionId] = teams;
 
-    for (const team of teams) {
-      if (!team.alternate_identifier || team.final_finish_position_number == null) {
+    if (teams.length > 0) {
+      rawByDivision[division.divisionId] = teams;
+      for (const team of teams) {
+        if (!team.alternate_identifier || team.final_finish_position_number == null) {
+          skippedCount += 1;
+          continue;
+        }
+        rowNumber += 1;
+        rows.push({
+          rowNumber,
+          ageGroupLabel: division.name,
+          rank: String(team.final_finish_position_number),
+          teamNameField: team.name ?? "",
+          teamCode: team.alternate_identifier,
+          clubName: team.club_name?.trim() || null,
+        });
+      }
+      continue;
+    }
+
+    // No bracket final finishes for this division -- fall back to league standings.
+    const [allTeams, leagueStandings] = await Promise.all([
+      fetchTm2AllDivisionTeams(division.divisionId),
+      fetchTm2LeagueStandings(division.divisionId),
+    ]);
+    rawByDivision[division.divisionId] = { league: leagueStandings, teams: allTeams };
+
+    const teamsById = new Map(allTeams.map((t) => [t.id, t]));
+    for (const standing of leagueStandings) {
+      const team = teamsById.get(standing.team_id);
+      if (!team?.alternate_identifier || standing.place == null) {
         skippedCount += 1;
         continue;
       }
@@ -82,7 +137,7 @@ export async function fetchTm2StandingsRows(eventId: string): Promise<FetchTm2St
       rows.push({
         rowNumber,
         ageGroupLabel: division.name,
-        rank: String(team.final_finish_position_number),
+        rank: String(standing.place),
         teamNameField: team.name ?? "",
         teamCode: team.alternate_identifier,
         clubName: team.club_name?.trim() || null,

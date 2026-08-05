@@ -19,6 +19,7 @@ type RowInput = {
 
 type DivisionRef = {
   id: string;
+  name: string;
   ageGroup: number;
   gender: DivisionGender;
   tierLabel: DivisionTierLabel;
@@ -30,7 +31,17 @@ type TeamRef = { id: string; lineageKey: string | null };
 type ClubRef = { id: string; externalCode: string | null; regionId: string | null };
 
 type ResolveContext = {
-  divisionByKey: Map<string, DivisionRef>;
+  // A structural key (ageGroup/gender/tierLabel/tierLevel) can legitimately collide
+  // across two DIFFERENT real divisions within one event when neither's label carries
+  // a recognized tier keyword -- both then default to OPEN. Confirmed against a real
+  // event: TM2's "18 Championship" (bracket final finishes) and "18/17 League"
+  // (season-long league standings, see tm2Standings.ts) both parse to age 18/OPEN,
+  // since neither "Championship" nor "League" is in TIER_KEYWORD_MAP. So this maps to
+  // every existing division sharing that signature (usually just one), and resolveRow
+  // disambiguates by exact label-text match only when there's more than one --
+  // keeping the normal case (reuse a division across imports even if the wording of
+  // its tier varies, e.g. "National" vs "Premier") working exactly as before.
+  divisionByKey: Map<string, DivisionRef[]>;
   regionByCode: Map<string, RegionRef>;
   teamSeasonByExternalCode: Map<string, TeamSeasonRef>;
   // A lineageKey is NOT enough on its own to mean "the same team" -- a club fields a
@@ -106,9 +117,12 @@ export async function resolveImportBatch(batchId: string): Promise<void> {
     ? await prisma.club.findMany({ where: { externalCode: { in: [...neededClubCodes] } } })
     : [];
 
-  const divisionByKey = new Map<string, DivisionRef>();
+  const divisionByKey = new Map<string, DivisionRef[]>();
   for (const d of divisions) {
-    divisionByKey.set(divisionKeyOf(d.ageGroup, d.gender, d.tierLabel, d.tierLevel), d);
+    const key = divisionKeyOf(d.ageGroup, d.gender, d.tierLabel, d.tierLevel);
+    const group = divisionByKey.get(key) ?? [];
+    group.push(d);
+    divisionByKey.set(key, group);
   }
 
   const regionByCode = new Map<string, RegionRef>();
@@ -252,7 +266,18 @@ function resolveRow(row: RowInput, ctx: ResolveContext) {
     effectiveDivisionKey = `id:${row.overrideDivisionId}`;
   } else {
     const key = divisionKeyOf(label.ageGroup, effectiveGender, label.tierLabel, label.tierLevel);
-    const existing = ctx.divisionByKey.get(key);
+    const candidates = ctx.divisionByKey.get(key) ?? [];
+    const rawLabel = row.ageGroupLabelRaw.trim().toLowerCase();
+    const existing =
+      candidates.length <= 1
+        ? (candidates[0] ?? null)
+        : (candidates.find((d) => d.name.trim().toLowerCase() === rawLabel) ?? null);
+    if (candidates.length > 1 && !existing) {
+      escalate(
+        "WARNING",
+        `Multiple existing divisions share this age/tier signature and none match label "${row.ageGroupLabelRaw}" exactly -- creating a separate division rather than guessing.`,
+      );
+    }
     if (existing) {
       divisionMatchType = "EXISTING";
       matchedDivisionId = existing.id;
