@@ -89,9 +89,16 @@ export function computeClubScore(bestRankByAgeGroup: BestRankByAgeGroup): ClubSc
     countedInBest5: !droppedIds.has(s.ageGroup),
   }));
 
-  const totalPoints = contributions
+  const rawTotal = contributions
     .filter((c) => c.countedInBest5)
     .reduce((sum, c) => sum + (c.weightedPoints ?? 0), 0);
+  // Rounded to the 1 decimal place actually displayed -- summing rawPoints * 0.2
+  // (binary floating point) can leave clubs that are really tied differing in the
+  // 15th decimal digit (e.g. 92.60000000000001 vs 92.59999999999999), which both
+  // display as "92.6" but compare unequal, so rankClubs's tie detection silently
+  // misses them. Rounding here (not just at display time) keeps the stored value and
+  // every downstream sort/tie-break consistent with what's shown.
+  const totalPoints = Math.round(rawTotal * 10) / 10;
 
   return { totalPoints, isQualified, qualifyingAgeGroupCount, contributions };
 }
