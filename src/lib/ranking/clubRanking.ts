@@ -113,12 +113,26 @@ export type RankableClub = {
  * better" principle §8 already applies at the 3-team threshold. `rank` is a single
  * continuous position across both tiers (1, 2, 3, ... through qualified, then
  * continuing through under-qualified), matching how RankingResult.rank is a single
- * sequence rather than restarting per group.
+ * sequence rather than restarting per group. Standard competition ranking within
+ * that sequence: clubs tied on the sort key share a rank and the next rank skips
+ * accordingly (same tie handling as computeRanking.ts at the team level), so e.g.
+ * three clubs tied for 3rd are all shown as 3rd and the next club is 6th.
  */
 export function rankClubs<T extends RankableClub>(clubs: T[]): (T & { rank: number })[] {
   const byCountThenScore = (a: T, b: T) =>
     b.qualifyingAgeGroupCount - a.qualifyingAgeGroupCount || b.totalPoints - a.totalPoints;
   const qualified = clubs.filter((c) => c.isQualified).sort((a, b) => b.totalPoints - a.totalPoints);
   const underQualified = clubs.filter((c) => !c.isQualified).sort(byCountThenScore);
-  return [...qualified, ...underQualified].map((c, i) => ({ ...c, rank: i + 1 }));
+  const ordered = [...qualified, ...underQualified];
+
+  let rank = 0;
+  let lastKey: string | null = null;
+  return ordered.map((c, i) => {
+    const key = `${c.isQualified}:${c.qualifyingAgeGroupCount}:${c.totalPoints}`;
+    if (key !== lastKey) {
+      rank = i + 1;
+      lastKey = key;
+    }
+    return { ...c, rank };
+  });
 }
