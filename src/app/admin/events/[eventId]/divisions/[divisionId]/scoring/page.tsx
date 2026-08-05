@@ -2,7 +2,10 @@ import { prisma } from "@/lib/prisma";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { BUCKET_THRESHOLDS } from "@/lib/rating/fieldStrength";
-import { getDivisionRatedRatings } from "@/lib/rating/computeDivisionFieldStrength";
+import {
+  getDivisionRatedRatings,
+  getSeasonColleyRatingPopulation,
+} from "@/lib/rating/computeDivisionFieldStrength";
 import { computeRatingHistogram } from "@/lib/rating/ratingHistogram";
 import { generateSuggestion, acceptSuggestion, overrideSuggestion } from "./actions";
 import { RatingHistogramChart } from "./RatingHistogramChart";
@@ -42,7 +45,17 @@ export default async function DivisionScoringPage({
   const isPending = snapshot?.status === "PENDING" && division.scoringStatus === "SUGGESTED";
 
   const ratings = snapshot ? await getDivisionRatedRatings(divisionId) : [];
-  const histogram = snapshot ? computeRatingHistogram(ratings) : null;
+  const populationRatings = snapshot
+    ? await getSeasonColleyRatingPopulation(division.event.seasonId, division.ageGroup)
+    : [];
+  const histogram =
+    snapshot && ratings.length > 0
+      ? computeRatingHistogram(
+          populationRatings.length > 0 ? populationRatings : ratings,
+          10,
+          ratings,
+        )
+      : null;
 
   return (
     <div className="max-w-2xl">
