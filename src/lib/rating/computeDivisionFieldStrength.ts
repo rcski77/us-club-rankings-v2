@@ -57,3 +57,25 @@ export async function getDivisionRatedRatings(divisionId: string): Promise<numbe
   const { ratedTeams } = await fetchLatestRatedTeams(divisionId);
   return ratedTeams.map((t) => t.rating);
 }
+
+/**
+ * The full (season, ageGroup) Colley rating population -- one rating per team, its
+ * latest by week. Mirrors the population query computeDivisionScoringSuggestion.ts
+ * uses for percentile calibration; reused here so the scoring-review screen's
+ * histogram can show where a division's own ratings fall within that same population
+ * instead of just the division's own (much narrower) range.
+ */
+export async function getSeasonColleyRatingPopulation(
+  seasonId: string,
+  ageGroup: number,
+): Promise<number[]> {
+  const population = await prisma.teamRatingHistory.findMany({
+    where: { seasonId, ageGroup, ratingEngine: "COLLEY" },
+    orderBy: { weekEndingDate: "desc" },
+  });
+  const latestByTeam = new Map<string, number>();
+  for (const row of population) {
+    if (!latestByTeam.has(row.teamId)) latestByTeam.set(row.teamId, row.rating);
+  }
+  return Array.from(latestByTeam.values());
+}
