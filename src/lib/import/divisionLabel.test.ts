@@ -66,6 +66,17 @@ describe("parseAgeGroupLabel", () => {
     }
   });
 
+  it("strips a spelled-out Boys/Girls gender prefix (real Sportwrench coed-event case)", () => {
+    const boys = parseAgeGroupLabel("Boys 16 Open");
+    const girls = parseAgeGroupLabel("Girls 16 Open");
+    expect(isDivisionLabelParseError(boys)).toBe(false);
+    expect(isDivisionLabelParseError(girls)).toBe(false);
+    if (!isDivisionLabelParseError(boys) && !isDivisionLabelParseError(girls)) {
+      expect(boys).toEqual({ ageGroup: 16, genderFromLabel: "BOYS", tierLabel: "OPEN", tierLevel: null, tierWasDefaulted: false });
+      expect(girls).toEqual({ ageGroup: 16, genderFromLabel: "GIRLS", tierLabel: "OPEN", tierLevel: null, tierWasDefaulted: false });
+    }
+  });
+
   it("does not treat an ordinary tier keyword starting with b/g as a gender prefix", () => {
     // Guards against the gender-prefix regex misfiring on a label with no prefix at
     // all -- it only matches when a bare B/G is immediately followed by a digit.
