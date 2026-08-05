@@ -118,9 +118,16 @@ model Team {
   club   Club?   @relation(fields: [clubId], references: [id])
 
   name       String // display name, e.g. "MADFROG Green"
-  lineageKey String? // derived from (club externalCode+region, teamNumber) -- stable
-  // across seasons even as the age-group digit in the source code changes; powers
-  // cross-season rating carry-forward and "same program as last year" suggestions.
+  lineageKey String? // derived from (gender, club externalCode+region, teamNumber) --
+  // stable across seasons even as the age-group digit in the source code changes;
+  // powers cross-season rating carry-forward and "same program as last year"
+  // suggestions.
+  gender     DivisionGender @default(GIRLS) // authoritative from the team's own code
+  // (see aesTeamCode.ts) at creation time -- default GIRLS matches every team created
+  // before this field existed, same convention as Division.gender. Included in
+  // lineageKey specifically so a club's boys and girls squads sharing a club
+  // code/region/team number never resolve to the same Team (see docs/plan.md
+  // postmortem on the "Mintonette" cross-gender merge bug this fixes).
 
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())

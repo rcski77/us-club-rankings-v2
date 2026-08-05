@@ -80,11 +80,17 @@ export async function computeColleyRatings(
   }
 
   const divisionIds = Array.from(byDivision.keys());
-  const matches = divisionIds.length
+  const allMatches = divisionIds.length
     ? await prisma.match.findMany({
         where: { divisionId: { in: divisionIds }, winnerTeamId: { not: null } },
+        include: { teamA: { select: { gender: true } }, teamB: { select: { gender: true } } },
       })
     : [];
+  // A mixed division can have a genuine, intentional cross-gender match (an
+  // "exhibition" in effect -- see computeEloRatings.ts's getPartitionMatches for
+  // the same filter and full reasoning). Excluded here too, since it's no more a
+  // meaningful signal for Colley than for Elo/Massey.
+  const matches = allMatches.filter((m) => !m.teamA || !m.teamB || m.teamA.gender === m.teamB.gender);
   const matchesByDivision = new Map<string, typeof matches>();
   for (const m of matches) {
     if (!m.divisionId) continue;

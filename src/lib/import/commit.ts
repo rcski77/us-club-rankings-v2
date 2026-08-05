@@ -220,6 +220,7 @@ export async function commitImportBatch(batchId: string): Promise<CommitResult> 
             row.parsedClubExternalCode!,
             row.parsedRegionCodeFromCode!,
             row.parsedTeamNumber!,
+            row.parsedDivisionGender!,
           );
           const key = `${lineageKey}|${row.parsedTeamAgeGroup}`;
           const group = newTeamGroups.get(key) ?? [];
@@ -234,12 +235,14 @@ export async function commitImportBatch(batchId: string): Promise<CommitResult> 
           first.parsedClubExternalCode!,
           first.parsedRegionCodeFromCode!,
           first.parsedTeamNumber!,
+          first.parsedDivisionGender!,
         );
         const team = await tx.team.create({
           data: {
             clubId,
             name: first.teamNameClean ?? first.teamCodeRaw,
             lineageKey,
+            gender: first.parsedDivisionGender!,
             seasons: {
               create: {
                 seasonId: batch.event.seasonId,
@@ -286,12 +289,19 @@ export async function commitImportBatch(batchId: string): Promise<CommitResult> 
 
         const team = await tx.team.findUniqueOrThrow({ where: { id: teamId } });
         if (!team.lineageKey) {
+          // A team predating the lineageKey/gender fields -- backfill both together
+          // from this row's own decoded gender, rather than leaving gender at its
+          // schema default while lineageKey moves on without it.
           const lineageKey = computeLineageKey(
             row.parsedClubExternalCode!,
             row.parsedRegionCodeFromCode!,
             row.parsedTeamNumber!,
+            row.parsedDivisionGender!,
           );
-          await tx.team.update({ where: { id: teamId }, data: { lineageKey } });
+          await tx.team.update({
+            where: { id: teamId },
+            data: { lineageKey, gender: row.parsedDivisionGender! },
+          });
         }
       }
 

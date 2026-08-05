@@ -55,9 +55,9 @@ export async function getPartitionMatches(seasonId: string, ageGroup: number, as
   // call this helper), so filtering here covers both engines and getTeamEloHistory in
   // one place. Filtered out before divisionIds is built, so a boys-only division pulls
   // in no matches at all here (the "ignore the division" effect), not just a discarded
-  // final rating -- though it wouldn't affect girls' ratings numerically either way,
-  // since Elo/Massey only update the two teams in a given match and boys teams never
-  // play girls teams.
+  // final rating. A mixed division (girls and boys teams both with relevant finishes)
+  // still pulls in every match below, including genuine cross-gender ones -- those are
+  // separately filtered out just after the query (see the allMatches/matches split).
   const boysTeamIds = new Set(
     teamSeasons.filter((ts) => isBoysTeamCode(ts.externalTeamCode)).map((ts) => ts.teamId),
   );
@@ -73,7 +73,7 @@ export async function getPartitionMatches(seasonId: string, ageGroup: number, as
   const divisionIds = Array.from(new Set(relevant.map((f) => f.divisionId)));
   if (!divisionIds.length) return { matches: [], relevantTeamIds };
 
-  const matches = await prisma.match.findMany({
+  const allMatches = await prisma.match.findMany({
     where: {
       divisionId: { in: divisionIds },
       winnerTeamId: { not: null },
@@ -86,6 +86,15 @@ export async function getPartitionMatches(seasonId: string, ageGroup: number, as
       teamB: { include: { club: true } },
     },
   });
+
+  // A genuinely mixed division can pit a boys team against a girls team as a
+  // real, intentional match (not a data error -- see the Mintonette/lineageKey
+  // postmortem in docs/plan.md for the *unintentional* cross-gender case this is
+  // NOT). Treated like an exhibition game: it still shows in a team's own match
+  // history (that query goes straight to Match, not through here), but never
+  // feeds Elo/Massey, since rating a girls team off a boys opponent (or vice
+  // versa) has no meaningful signal for either engine.
+  const matches = allMatches.filter((m) => !m.teamA || !m.teamB || m.teamA.gender === m.teamB.gender);
 
   return { matches, relevantTeamIds };
 }

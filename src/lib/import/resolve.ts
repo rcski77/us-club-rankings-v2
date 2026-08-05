@@ -107,7 +107,13 @@ export async function resolveImportBatch(batchId: string): Promise<void> {
     const decoded = decodeAesTeamCode(row.teamCodeRaw);
     if (isAesTeamCodeParseError(decoded)) continue;
     neededClubCodes.add(decoded.clubExternalCode);
-    neededLineageKeys.add(computeLineageKey(decoded.clubExternalCode, decoded.regionCode, decoded.teamNumber));
+    // Gender defaults to GIRLS on an unrecognized code char, matching resolveRow's own
+    // effectiveGender fallback below -- kept in sync so the prefetch always covers the
+    // lineageKey resolveRow will actually look up.
+    const gender = divisionGenderFromTeamCodeGender(decoded.gender) ?? "GIRLS";
+    neededLineageKeys.add(
+      computeLineageKey(decoded.clubExternalCode, decoded.regionCode, decoded.teamNumber, gender),
+    );
   }
 
   const teamsWithLineage = neededLineageKeys.size
@@ -347,7 +353,12 @@ function resolveRow(row: RowInput, ctx: ResolveContext) {
   // Team
   let teamMatchType: "EXISTING" | "NEW";
   let matchedTeamId: string | null = null;
-  const lineageKey = computeLineageKey(decoded.clubExternalCode, decoded.regionCode, decoded.teamNumber);
+  const lineageKey = computeLineageKey(
+    decoded.clubExternalCode,
+    decoded.regionCode,
+    decoded.teamNumber,
+    effectiveGender,
+  );
   if (row.overrideTeamId) {
     teamMatchType = "EXISTING";
     matchedTeamId = row.overrideTeamId;
