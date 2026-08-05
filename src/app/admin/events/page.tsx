@@ -70,6 +70,7 @@ export default async function EventsPage({
             </th>
             <th className={thClass}>Divisions</th>
             <th className={thClass}>Anchor</th>
+            <th className={thClass}>Priority</th>
           </tr>
         </thead>
         <tbody>
@@ -90,12 +91,13 @@ export default async function EventsPage({
                   {confirmed}/{e.divisions.length}
                 </td>
                 <td className={tdClass}>{e.isAnchor ? "Anchor" : ""}</td>
+                <td className={tdClass}>{e.isPriority ? "Priority" : ""}</td>
               </tr>
             );
           })}
           {events.length === 0 && (
             <tr>
-              <td className={tdClass} colSpan={5}>
+              <td className={tdClass} colSpan={6}>
                 {q ? "No events match your search." : "No events yet."}
               </td>
             </tr>
