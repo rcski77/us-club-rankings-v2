@@ -56,7 +56,7 @@ export default async function ClubsPage({
           : {}),
         ...(regionId ? { regionId } : {}),
       },
-      include: { region: true, _count: { select: { teams: true } } },
+      include: { region: true, mergedInto: true, _count: { select: { teams: true } } },
       orderBy: { name: "asc" },
     }),
     prisma.region.findMany({ orderBy: { code: "asc" } }),
@@ -104,6 +104,11 @@ export default async function ClubsPage({
                 <Link href={`/admin/clubs/${c.id}`} prefetch={false} className="text-slate-900 underline">
                   {c.name}
                 </Link>
+                {c.mergedInto && (
+                  <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-800">
+                    merged → {c.mergedInto.name}
+                  </span>
+                )}
               </td>
               <td className={tdClass}>{c.region?.code ?? ""}</td>
               <td className={tdClass}>

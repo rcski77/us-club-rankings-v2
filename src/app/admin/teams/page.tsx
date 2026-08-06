@@ -46,7 +46,11 @@ export default async function TeamsPage({
   const { error, seasonId: seasonIdParam } = await searchParams;
   // clubs and seasons don't depend on each other's results.
   const [clubs, seasons] = await Promise.all([
-    prisma.club.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
+    prisma.club.findMany({
+      where: { mergedIntoClubId: null },
+      orderBy: { name: "asc" },
+      select: { id: true, name: true },
+    }),
     prisma.season.findMany({ orderBy: { startDate: "desc" } }),
   ]);
   const activeSeason = seasons.find((s) => s.isActive) ?? seasons[0];

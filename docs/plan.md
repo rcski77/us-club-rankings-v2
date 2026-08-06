@@ -888,6 +888,63 @@ Nationals division) that aren't quite top-of-field. `SCORE_BAND_CUTOFFS`
 placeholder (Open Question 5), picked as a round-number midpoint rather than from real
 data. `scoreBandBadgeClass()` (`ui.ts`) has a matching indigo badge.
 
+## Known issues (not yet fixed)
+
+- **Browser tab/page `<title>` doesn't change per route (2026-08-05).** Every page —
+  admin and public alike — shows the same static "US Club Rankings v2.0" tab title.
+  Root cause: `export const metadata` (the `title`/`description`) is only ever set
+  once, in the root `src/app/layout.tsx`; no route has its own `export const
+  metadata` / `generateMetadata()` to override it, so Next.js falls back to the root
+  value everywhere. Fix is to add per-route metadata (e.g. `{title: "Club Rankings —
+  US Club Rankings"}` on `src/app/admin/club-rankings/page.tsx`,
+  `src/app/rankings/team-rankings/page.tsx`, etc.) — dynamic routes (`[clubId]`,
+  `[teamId]`, `[eventId]`, ...) should ideally use `generateMetadata()` to include the
+  actual club/team/event name, not just a static per-section title. Not fixed yet —
+  flagged for a follow-up session, not urgent enough to interrupt current work for.
+
+**Club merge mechanism — done (2026-08-06).** Fixes the gap the note above used to
+flag here (and the same gap the Phase 7 club-rankings note calls out at §7 item 13) —
+the real **SC Rockstar** case (two previously-separate, previously-ranked clubs that
+combined into one program under a new code, showing up with no 2021-2025 history)
+motivated this. New `Club.mergedIntoClubId` self-relation (nullable pointer +
+`mergedInto`/`mergedClubs` relations) — a **true merge**, not a live alias table: a
+source club's `Team` rows (and therefore everything keyed off `Team`, which is every
+ranking/rating result except the legacy annual-score import) are reassigned to the
+surviving target club via `mergeClubsIntoTarget()`
+(`src/lib/club/mergeClubs.ts`), so the next ranking/rating recompute already treats
+the merged history as one program with no further code changes needed —
+`ClubRankingResult`/`RankingResult` needed no rollup-query changes at all, since they
+already read through `Team.clubId`. `ClubContact` is reassigned the same way. The
+legacy `ClubAnnualScore`/`ClubAnnualAgeGroupScore` import rows (unique per
+`(clubId, year[, ageGroup])`) are reassigned too, *unless* the target already has a
+row for that year — a real possible case (two separately-ranked programs existing in
+an overlapping year before merging) that's left on the source club and reported back
+as a conflict for manual review rather than guessed at (sum/pick-higher/etc.).
+`ClubFiveYearRankingResult` is deliberately NOT migrated — it's a delete-and-replace
+computed rollup of `ClubAnnualScore` (`computeFiveYearClubRanking.ts`), so a normal
+recompute after the merge picks up the moved rows for free. The source club row is
+kept, not deleted (audit trail / FK integrity for historical `ImportRow`/`AuditFlag`
+references), marked `isActive: false`; its own detail page
+(`/admin/clubs/[clubId]`) shows a "merged into X" banner and disables further
+edit/merge actions on it. New "Merge another club into this one" section on the
+target club's detail page (`src/app/admin/clubs/[clubId]/page.tsx` +
+sibling `actions.ts`, per the admin multi-action-page convention): a search box
+(`?mergeQ=`) lists non-merged candidate clubs with checkboxes, submitting reassigns
+them all in one `mergeClubsIntoTarget()` call. Import resolution
+(`src/lib/import/resolve.ts`) follows the merge pointer for both the in-region and
+no-region-fallback EXISTING-club-match paths, so a stray future import row still
+using a retired club's old external code resolves to the surviving club instead of
+resurrecting the retired one (per explicit user decision — the alternative, requiring
+staff to notice and manually re-override every time, was rejected). The clubs list
+(`/admin/clubs`) shows a "merged → X" badge on retired clubs rather than hiding them
+(consistent with the page's existing behavior of not filtering `isActive` at all);
+the Teams admin page's club-picker dropdown (`/admin/teams`) excludes merged clubs so
+staff can't assign a new team to a retired one. Verified end-to-end in the browser
+against two disposable test clubs (created and deleted via a one-off script after,
+not left in the dev DB): merge banner, teams-moved count, "Clubs merged into this
+one" list on the target, and the retired source's own read-only banner all rendered
+correctly.
+
 ## Deviations from the original plan
 
 The plan below is preserved close to its original approved form for continuity, but

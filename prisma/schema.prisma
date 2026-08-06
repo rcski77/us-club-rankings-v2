@@ -57,6 +57,16 @@ model Club {
   state        String?
   zip          String?
   isActive     Boolean       @default(true)
+  mergedIntoClubId String?   // set when this club's history was merged into another
+  // Club (e.g. a real-world club merger under a new code, or an admin-corrected
+  // duplicate) -- see mergeClubsIntoTarget() in src/lib/club/mergeClubs.ts. The row
+  // itself is kept (not deleted) for audit trail/FK integrity on historical
+  // ImportRow/AuditFlag references; isActive is set to false alongside this so it
+  // drops out of normal club lists. Import resolution (resolve.ts) follows this
+  // pointer so a stray import row still using this club's old external code resolves
+  // to the surviving club instead of resurrecting this one.
+  mergedInto       Club?     @relation("ClubMerge", fields: [mergedIntoClubId], references: [id])
+  mergedClubs      Club[]    @relation("ClubMerge")
   teams        Team[]
   contacts     ClubContact[]
   importRows   ImportRow[]
