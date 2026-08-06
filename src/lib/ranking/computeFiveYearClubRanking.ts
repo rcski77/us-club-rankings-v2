@@ -107,11 +107,33 @@ export async function computeFiveYearClubRankingForYear(
     select: { clubId: true, year: true, totalPoints: true },
   });
 
+  // A club with rankingGroupPrimaryClubId set stays fully independent (own teams, own
+  // imports -- see the field's comment on Club) but should be scored as one program
+  // for club-rankings purposes, same as computeClubRankingForSeason() already does
+  // for the current season. Extends that here: a year's score is redirected onto the
+  // group's primary club, and where both the primary and a member have a real score
+  // for the same year, the higher one wins -- same "best of the two" rule already
+  // used for merge-conflict years (mergeClubs.ts) and for picking a group's
+  // best-per-age-group team in the current season, not a sum (these are already
+  // final, best-5-of-6-derived scores, not additive raw points).
+  const clubIds = [...new Set(scores.map((s) => s.clubId))];
+  const clubs = clubIds.length
+    ? await prisma.club.findMany({
+        where: { id: { in: clubIds } },
+        select: { id: true, rankingGroupPrimaryClubId: true },
+      })
+    : [];
+  const rankingClubId = new Map(clubs.map((c) => [c.id, c.rankingGroupPrimaryClubId ?? c.id]));
+
   const pointsByClub = new Map<string, Partial<Record<number, number>>>();
   for (const s of scores) {
-    const entry = pointsByClub.get(s.clubId) ?? {};
-    entry[s.year] = s.totalPoints;
-    pointsByClub.set(s.clubId, entry);
+    const targetClubId = rankingClubId.get(s.clubId) ?? s.clubId;
+    const entry = pointsByClub.get(targetClubId) ?? {};
+    const existing = entry[s.year];
+    if (existing === undefined || s.totalPoints > existing) {
+      entry[s.year] = s.totalPoints;
+    }
+    pointsByClub.set(targetClubId, entry);
   }
 
   const scored = Array.from(pointsByClub.entries()).map(([clubId, pointsByYear]) => {
