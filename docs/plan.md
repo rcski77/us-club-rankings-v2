@@ -684,6 +684,63 @@ renders correctly against real dev data on both tabs, visually consistent with
 `/rankings/team-rankings`, dropped (best-5-of-6) age-group cells struck through
 same as the admin view.
 
+**Club ranking groups (2026-08-06, same day as the merge mechanism above).** A
+second, non-destructive mechanism alongside `mergedIntoClubId` for a related but
+different real case: **FORZA1 / FORZA1 NORTH**, two active locations of one real
+program, each with its own external code, both continuing to import independently —
+unlike SC Rockstar, neither club retires. New `Club.rankingGroupPrimaryClubId`
+self-relation (`rankingGroupPrimary`/`rankingGroupMembers`), read only by
+`computeClubRankingForSeason()` (`src/lib/ranking/computeClubRanking.ts`): when
+rolling up each team's best finish per age group into `bestByClub`, a team's club id
+is redirected through `rankingGroupPrimaryClubId` (falling back to the club's own id
+when unset) before being used as the map key, so a group's teams all roll up into one
+`ClubRankingResult` row under the primary club — the non-primary member never
+publishes its own separate (weaker, partial) row. Nothing else about a member club
+changes: `isActive` stays true, `Team.clubId` is untouched, and import resolution
+does NOT redirect through this pointer (unlike a merge, each location keeps matching
+its own code) — this is the key difference from `mergedIntoClubId`, by explicit user
+decision after they clarified both clubs stay independently active. New
+`src/lib/club/combineClubsForRankings.ts` (`combineClubsForRankings()` sets the
+pointer on each member with validation against nesting/re-parenting;
+`removeFromRankingGroup()` clears it, a cheap reversible undo deliberately added
+alongside the harder-to-reverse merge). Verified end-to-end in the browser (including
+against the real FORZA1/FORZA1 NORTH clubs, which the user combined for real through
+the UI while this was being verified) and via the existing `computeClubRanking`/
+`clubRanking` unit-test suite (51 tests, unaffected — the grouping redirect is
+additive and defaults to a no-op when `rankingGroupPrimaryClubId` is unset).
+Deliberately out of scope for this pass: the 5-year legacy `ClubAnnualScore`/
+`ClubFiveYearRankingResult` rollup does not read this pointer, since that page wasn't
+confirmed as in-scope for the "combine for club rankings" request — a real gap if a
+grouped club's history predates this app's own computed rankings, flagged for a
+follow-up if it comes up.
+
+**Merge/ranking-group admin UI moved off every club's own page, same day.** The
+initial version of both features above put their action UI (search box, candidate
+checkboxes, submit) directly on `/admin/clubs/[clubId]` — live on every one of the
+system's 1500+ club pages, even though the overwhelming majority of clubs will never
+use either. Per explicit user feedback ("I don't think I like having both those
+options on every single club"), both actions moved to a new dedicated
+`/admin/club-groups` page (new "Club Groups" sidebar entry in
+`src/app/admin/layout.tsx`), which also lists every existing merge and ranking group
+up front (per the user's follow-up ask to make them "easy to find") rather than
+requiring staff to already know which club to check. Each of the two sections
+(Merges / Ranking groups) is a two-step target-then-candidates flow driven by
+`searchParams` (`mergeTargetId`/`mergeSourceQ`, `groupPrimaryId`/`groupMemberQ`) since
+there's no client-side autocomplete component in this codebase to pick a target
+without a page round-trip. `src/app/admin/clubs/[clubId]/page.tsx` kept the passive,
+conditional bits (the "merged into X" / "combined with X" banners, and the read-only
+"clubs merged into this one" / "clubs combined with this one" lists) since those only
+render for the small number of clubs actually involved and aren't the "options on
+every club" clutter the feedback was about; it dropped the always-rendered search
+sections entirely, along with the now-unused `mergeIntoThisClub`/`combineWithThisClub`
+actions (`leaveRankingGroup` stayed, since removing a club from its own group from
+its own page is still a reasonable convenience, now duplicated by a "Remove" button in
+the new page's group listing too). Caught one real bug while wiring this up: the
+`rankingGroupPrimary` banner's original markup nested a `<form>` inside a `<p>`,
+invalid HTML that React silently accepted at parse time but threw a hydration
+mismatch on in the browser (`<form> cannot be a descendant of <p>`) — fixed by
+swapping the wrapping element to a `<div>`.
+
 **Phase 7 — floor per-age-group points at 0 (2026-08-01).** By explicit user
 decision, diverging from §8 point 2's literal "strictly linear... with no floor"
 wording: `rankToPoints()` (`clubRanking.ts`) now returns `Math.max(0, 101 - rank)`

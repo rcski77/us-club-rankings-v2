@@ -3,7 +3,7 @@
 import { prisma } from "@/lib/prisma";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { mergeClubsIntoTarget } from "@/lib/club/mergeClubs";
+import { removeFromRankingGroup } from "@/lib/club/combineClubsForRankings";
 
 export async function updateClub(clubId: string, formData: FormData) {
   const name = String(formData.get("name") ?? "").trim();
@@ -28,28 +28,10 @@ export async function updateClub(clubId: string, formData: FormData) {
   redirect(`/admin/clubs/${clubId}?success=1`);
 }
 
-export async function mergeIntoThisClub(clubId: string, formData: FormData) {
-  const sourceClubIds = formData.getAll("sourceClubIds").map(String).filter(Boolean);
-
-  if (sourceClubIds.length === 0) {
-    redirect(`/admin/clubs/${clubId}?error=no_source_selected`);
-  }
-
-  let result;
-  try {
-    result = await mergeClubsIntoTarget(clubId, sourceClubIds);
-  } catch (e) {
-    const message = e instanceof Error ? e.message : "Merge failed.";
-    redirect(`/admin/clubs/${clubId}?error=merge_failed&mergeError=${encodeURIComponent(message)}`);
-  }
-
+export async function leaveRankingGroup(clubId: string) {
+  await removeFromRankingGroup(clubId);
   revalidatePath(`/admin/clubs/${clubId}`);
   revalidatePath("/admin/clubs");
-
-  const params = new URLSearchParams({
-    success: "merged",
-    teamsMoved: String(result.teamsMoved),
-    conflicts: String(result.conflicts.length),
-  });
-  redirect(`/admin/clubs/${clubId}?${params.toString()}`);
+  revalidatePath("/admin/club-groups");
+  redirect(`/admin/clubs/${clubId}?success=removed_from_group`);
 }
