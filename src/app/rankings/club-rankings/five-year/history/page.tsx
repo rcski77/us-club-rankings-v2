@@ -4,6 +4,13 @@ import { brand } from "@/lib/brand";
 import { tableWrapClass, thClass, tdClass, numThClass, numTdClass, tbodyClass } from "@/lib/publicUi";
 import { getFiveYearRankingHistory } from "@/lib/ranking/fiveYearRankingHistory";
 
+// No searchParams on this page (unlike its siblings), so Next has no dynamic-API
+// signal to infer dynamic rendering from -- without this it gets statically
+// prerendered at build time, which hits the DB and fails the Docker build (no DB
+// reachable during `npm run build`). Same explicit opt-out /rankings/clubs/page.tsx
+// already uses.
+export const dynamic = "force-dynamic";
+
 // Same top-100 cap as /rankings/club-rankings/five-year (only the top 100 gets
 // published) -- applied against the most recent computed window's rank, since rows
 // here are already sorted that way; the admin equivalent stays uncapped for staff QA.
