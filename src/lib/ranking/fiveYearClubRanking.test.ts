@@ -12,7 +12,7 @@ describe("computeFiveYearClubScore", () => {
       { 2021: 94.1, 2022: 86, 2023: 87.2, 2024: 83.2, 2025: 95.80000000000001 },
       YEARS,
     );
-    expect(result.totalPoints).toBe(89.4);
+    expect(result.totalPoints).toBe(89.38);
   });
 
   it("applies weights oldest (5%) to newest (35%)", () => {

@@ -130,7 +130,7 @@ export default async function FiveYearClubRankingsPage({
                     {r.club.name}
                   </Link>
                 </td>
-                <td className={tdClass}>{r.totalPoints.toFixed(1)}</td>
+                <td className={tdClass}>{r.totalPoints.toFixed(2)}</td>
                 {years.map((y) => {
                   const c = byYear.get(y);
                   if (!c || !c.present) {
@@ -142,7 +142,7 @@ export default async function FiveYearClubRankingsPage({
                   }
                   return (
                     <td key={y} className={tdClass}>
-                      {c.points.toFixed(1)}
+                      {c.points.toFixed(2)}
                     </td>
                   );
                 })}

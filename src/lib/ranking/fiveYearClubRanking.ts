@@ -45,11 +45,11 @@ export function computeFiveYearClubScore(
     return { year, weight, points, weightedPoints: points * weight, present };
   });
 
-  // Rounded to the 1 decimal place actually displayed -- same float-tie rationale as
+  // Rounded to the 2 decimal places actually displayed -- same float-tie rationale as
   // clubRanking.ts's computeClubScore (binary floating point can leave genuinely-tied
   // totals differing in the 15th decimal digit).
   const rawTotal = contributions.reduce((sum, c) => sum + c.weightedPoints, 0);
-  const totalPoints = Math.round(rawTotal * 10) / 10;
+  const totalPoints = Math.round(rawTotal * 100) / 100;
 
   return { totalPoints, contributions };
 }
