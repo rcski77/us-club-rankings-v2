@@ -34,14 +34,19 @@ export default async function FiveYearClubRankingsPage({
 
   // Offer every endYear that either has ClubAnnualScore data to compute from, or
   // already has a computed result -- whichever is more, defaulting to the latest.
-  const [scoreYears, resultYears] = await Promise.all([
+  const [scoreYears, resultYears, seasons] = await Promise.all([
     prisma.clubAnnualScore.findMany({ distinct: ["year"], select: { year: true }, orderBy: { year: "desc" } }),
     prisma.clubFiveYearRankingResult.findMany({
       distinct: ["endYear"],
       select: { endYear: true },
       orderBy: { endYear: "desc" },
     }),
+    // Just to build the "back to NPS/Combined" tab links below with the same
+    // default-season logic /admin/club-rankings itself uses -- no season-scoped data
+    // is queried on this page otherwise, since ClubAnnualScore isn't season-scoped.
+    prisma.season.findMany({ orderBy: { startDate: "desc" } }),
   ]);
+  const defaultSeason = seasons.find((s) => s.isActive) ?? seasons[0];
   const availableYears = Array.from(
     new Set([...scoreYears.map((y) => y.year), ...resultYears.map((y) => y.endYear)]),
   ).sort((a, b) => b - a);
@@ -58,12 +63,33 @@ export default async function FiveYearClubRankingsPage({
 
   return (
     <div>
-      <div className="mb-2 flex items-center gap-3">
-        <h1 className="text-2xl font-semibold">5-Year Aggregate Club Rankings</h1>
-        <Link href="/admin/club-rankings" prefetch={false} className="text-sm text-slate-500 underline">
-          ← Back to Club Rankings
-        </Link>
-      </div>
+      <h1 className="mb-2 text-2xl font-semibold">5-Year Aggregate Club Rankings</h1>
+
+      {/* Same tab row as /admin/club-rankings, so the two views read as one surface --
+          NPS/Combined link back with whatever season is currently active/default,
+          since this page itself has no season selector of its own to preserve. */}
+      {defaultSeason && (
+        <div className="mb-4 flex gap-1 border-b">
+          <Link
+            href={`/admin/club-rankings?${new URLSearchParams({ season: defaultSeason.id, source: "NPS" })}`}
+            prefetch={false}
+            className="border-b-2 border-transparent px-3 py-2 text-sm text-slate-500 hover:text-slate-900"
+          >
+            NPS
+          </Link>
+          <Link
+            href={`/admin/club-rankings?${new URLSearchParams({ season: defaultSeason.id, source: "COMBINED" })}`}
+            prefetch={false}
+            className="border-b-2 border-transparent px-3 py-2 text-sm text-slate-500 hover:text-slate-900"
+          >
+            Combined
+          </Link>
+          <span className="border-b-2 border-slate-900 px-3 py-2 text-sm font-medium text-slate-900">
+            5-Year Aggregate
+          </span>
+        </div>
+      )}
+
       <p className="mb-6 text-sm text-slate-500">
         Recency-weighted blend of each year&apos;s club-level score ({FIVE_YEAR_WEIGHTS.map((w) => `${w * 100}%`).join(" / ")},
         oldest to newest) — used for NIT invites and housing priority. Sourced from{" "}

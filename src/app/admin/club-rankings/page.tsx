@@ -56,12 +56,7 @@ export default async function ClubRankingsPage({
 
   return (
     <div>
-      <div className="mb-6 flex items-center gap-3">
-        <h1 className="text-2xl font-semibold">Club Rankings</h1>
-        <Link href="/admin/club-rankings/five-year" prefetch={false} className="text-sm text-slate-500 underline">
-          5-Year Aggregate →
-        </Link>
-      </div>
+      <h1 className="mb-6 text-2xl font-semibold">Club Rankings</h1>
 
       {recomputeStarted === "1" && (
         <p className={successBannerClass}>
@@ -113,6 +108,18 @@ export default async function ClubRankingsPage({
                 {s.label}
               </Link>
             ))}
+            {/* Not a season+source tab like NPS/Combined above -- 5-Year Aggregate is
+                a different route entirely (year-window-scoped, not season-scoped, see
+                src/app/admin/club-rankings/five-year/page.tsx), so it's never "active"
+                here; styled as a plain (never-underlined-active) tab so it reads as a
+                sibling view of Club Rankings rather than a stray link. */}
+            <Link
+              href="/admin/club-rankings/five-year"
+              prefetch={false}
+              className="border-b-2 border-transparent px-3 py-2 text-sm text-slate-500 hover:text-slate-900"
+            >
+              5-Year Aggregate →
+            </Link>
           </div>
 
           <ClubRankingTable seasonId={season.id} source={source} />
