@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { prisma } from "@/lib/prisma";
 
 export type SortDir = "asc" | "desc";
@@ -46,7 +47,10 @@ export function sortRows<T>(
  * lookup and each engine's fetch are mutually independent, so both groups run via
  * Promise.all -- see docs/dev-environment.md.
  */
-export async function getLatestPowerRatings(seasonId: string, ageGroup: number) {
+export const getLatestPowerRatings = cache(async function getLatestPowerRatings(
+  seasonId: string,
+  ageGroup: number,
+) {
   // createdAt (not just weekEndingDate) is selected here so the UI can show when a
   // recompute actually ran, not just which business date it's dated for --
   // weekEndingDate collapses every same-day recompute onto one value by design (see
@@ -93,7 +97,7 @@ export async function getLatestPowerRatings(seasonId: string, ageGroup: number) 
   ]);
 
   return { latestColley, latestElo, latestMassey, colleyRatings, eloRatings, masseyRatings };
-}
+});
 
 export type PowerRatingsData = Awaited<ReturnType<typeof getLatestPowerRatings>>;
 export type PowerRow = {
