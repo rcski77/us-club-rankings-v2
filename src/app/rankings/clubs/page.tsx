@@ -41,8 +41,8 @@ export default async function PublicClubsPage({
           </thead>
           <tbody className={tbodyClass}>
             {clubs.map((c) => (
-              <tr key={c.id} className="relative cursor-pointer">
-                <td className={primaryTdClass}>
+              <tr key={c.id} className="cursor-pointer">
+                <td className={`${primaryTdClass} relative`}>
                   <Link href={`/rankings/clubs/${c.id}`} className="after:absolute after:inset-0 hover:underline">
                     {c.name}
                   </Link>

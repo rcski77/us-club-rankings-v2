@@ -257,8 +257,8 @@ export default async function PublicClubDetailPage({
                 ? t.seasons.find((ts) => ts.seasonId === activeSeason.id)
                 : undefined;
               return (
-                <tr key={t.id} className="relative cursor-pointer">
-                  <td className={primaryTdClass}>
+                <tr key={t.id} className="cursor-pointer">
+                  <td className={`${primaryTdClass} relative`}>
                     <Link href={`/rankings/teams/${t.id}`} className="after:absolute after:inset-0 hover:underline">
                       {t.name}
                     </Link>

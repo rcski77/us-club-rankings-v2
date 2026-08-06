@@ -95,8 +95,8 @@ export default async function PublicEventsPage({
               const teamCount = e.divisions.reduce((sum, d) => sum + d._count.finishes, 0);
               const location = [e.city, e.state].filter(Boolean).join(", ");
               return (
-                <tr key={e.id} className="relative cursor-pointer">
-                  <td className="px-4 py-3 text-sm">
+                <tr key={e.id} className="cursor-pointer">
+                  <td className="relative px-4 py-3 text-sm">
                     <Link
                       href={`/rankings/events/${e.id}`}
                       className="font-medium text-slate-900 after:absolute after:inset-0 hover:underline"

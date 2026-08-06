@@ -256,11 +256,11 @@ async function NpsRankingTable({
         </thead>
         <tbody className={tbodyClass}>
           {rows.map((r) => (
-            <tr key={r.id} className="relative cursor-pointer">
+            <tr key={r.id} className="cursor-pointer">
               <td className={numTdClass}>
                 <RankBadge rank={r.rank} />
               </td>
-              <td className={primaryTdClass}>
+              <td className={`${primaryTdClass} relative`}>
                 <Link href={`/rankings/teams/${r.team.id}`} className="after:absolute after:inset-0 hover:underline">
                   {r.team.name}
                 </Link>
@@ -421,11 +421,11 @@ async function PowerRankingTable({
           </thead>
           <tbody className={tbodyClass}>
             {rows.map(({ team, colley, elo, massey }) => (
-              <tr key={team.id} className="relative cursor-pointer">
+              <tr key={team.id} className="cursor-pointer">
                 <td className={numTdClass}>
                   <RankBadge rank={rankByTeamId.get(team.id)} />
                 </td>
-                <td className={primaryTdClass}>
+                <td className={`${primaryTdClass} relative`}>
                   <Link href={`/rankings/teams/${team.id}`} className="after:absolute after:inset-0 hover:underline">
                     {team.name}
                   </Link>
@@ -570,11 +570,11 @@ async function CombineRankingTable({
         </thead>
         <tbody className={tbodyClass}>
           {rows.map((r) => (
-            <tr key={r.team.id} className="relative cursor-pointer">
+            <tr key={r.team.id} className="cursor-pointer">
               <td className={numTdClass}>
                 <RankBadge rank={rankByTeamId.get(r.team.id)} />
               </td>
-              <td className={primaryTdClass}>
+              <td className={`${primaryTdClass} relative`}>
                 <Link href={`/rankings/teams/${r.team.id}`} className="after:absolute after:inset-0 hover:underline">
                   {r.team.name}
                 </Link>

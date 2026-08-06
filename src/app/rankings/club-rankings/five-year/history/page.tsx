@@ -66,8 +66,8 @@ export default async function PublicFiveYearRankingHistoryPage() {
               </thead>
               <tbody className={tbodyClass}>
                 {publishedRows.map((r) => (
-                  <tr key={r.clubId} className="relative cursor-pointer">
-                    <td className={`${tdClass} max-w-[180px] truncate font-medium text-slate-900`}>
+                  <tr key={r.clubId} className="cursor-pointer">
+                    <td className={`${tdClass} relative max-w-[180px] truncate font-medium text-slate-900`}>
                       <Link href={`/rankings/clubs/${r.clubId}`} className="after:absolute after:inset-0 hover:underline">
                         {r.clubName}
                       </Link>
