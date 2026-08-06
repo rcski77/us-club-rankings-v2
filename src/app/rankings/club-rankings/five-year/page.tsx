@@ -3,7 +3,13 @@ import Link from "next/link";
 import { brand } from "@/lib/brand";
 import { tableWrapClass, thClass, tdClass, numThClass, numTdClass, tbodyClass, RankBadge } from "@/lib/publicUi";
 import { FIVE_YEAR_WEIGHTS } from "@/lib/ranking/fiveYearClubRanking";
-import { DEFAULT_PAGE_SIZE, Pagination, parsePage } from "../../Pagination";
+
+// Only the top 100 gets published (NIT invites/housing priority), same cap the
+// legacy workbook's own published sheets used -- unlike /rankings/club-rankings
+// (NPS/Combined), which shows every qualified/under-qualified club, this view is
+// capped, and the admin equivalent (/admin/club-rankings/five-year) stays uncapped
+// for staff QA.
+const PUBLISHED_RANK_LIMIT = 100;
 
 const SOURCES = [
   { value: "NPS", label: "NPS" },
@@ -13,10 +19,9 @@ const SOURCES = [
 export default async function PublicFiveYearClubRankingsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ endYear?: string; page?: string }>;
+  searchParams: Promise<{ endYear?: string }>;
 }) {
-  const { endYear: endYearParam, page: pageParam } = await searchParams;
-  const page = parsePage(pageParam);
+  const { endYear: endYearParam } = await searchParams;
 
   const [availableYearRows, seasons] = await Promise.all([
     prisma.clubFiveYearRankingResult.findMany({
@@ -62,7 +67,7 @@ export default async function PublicFiveYearClubRankingsPage({
           <p className="mb-4 text-sm text-slate-500">
             Recency-weighted blend of each year&apos;s club-level score (
             {FIVE_YEAR_WEIGHTS.map((w) => `${w * 100}%`).join(" / ")}, oldest to newest) — used for NIT invites
-            and housing priority.
+            and housing priority. Top {PUBLISHED_RANK_LIMIT} shown.
           </p>
 
           <p className="mb-6 text-sm">
@@ -90,21 +95,18 @@ export default async function PublicFiveYearClubRankingsPage({
             </div>
           )}
 
-          <FiveYearClubRankingTable endYear={endYear} page={page} />
+          <FiveYearClubRankingTable endYear={endYear} />
         </>
       )}
     </div>
   );
 }
 
-async function FiveYearClubRankingTable({ endYear, page }: { endYear: number; page: number }) {
-  const totalCount = await prisma.clubFiveYearRankingResult.count({ where: { endYear } });
+async function FiveYearClubRankingTable({ endYear }: { endYear: number }) {
   const results = await prisma.clubFiveYearRankingResult.findMany({
-    where: { endYear },
+    where: { endYear, rank: { lte: PUBLISHED_RANK_LIMIT } },
     include: { club: true, contributions: { orderBy: { year: "asc" } } },
     orderBy: { rank: "asc" },
-    skip: (page - 1) * DEFAULT_PAGE_SIZE,
-    take: DEFAULT_PAGE_SIZE,
   });
   const computedAt = results[0]?.computedAt;
   const years = Array.from({ length: FIVE_YEAR_WEIGHTS.length }, (_, i) => endYear - (FIVE_YEAR_WEIGHTS.length - 1 - i));
@@ -176,13 +178,6 @@ async function FiveYearClubRankingTable({ endYear, page }: { endYear: number; pa
           </tbody>
         </table>
       </div>
-      <Pagination
-        page={page}
-        totalCount={totalCount}
-        pageSize={DEFAULT_PAGE_SIZE}
-        basePath="/rankings/club-rankings/five-year"
-        baseParams={new URLSearchParams({ endYear: String(endYear) })}
-      />
     </>
   );
 }

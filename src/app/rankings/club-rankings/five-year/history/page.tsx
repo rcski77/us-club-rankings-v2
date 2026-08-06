@@ -3,19 +3,16 @@ import Link from "next/link";
 import { brand } from "@/lib/brand";
 import { tableWrapClass, thClass, tdClass, numThClass, numTdClass, tbodyClass } from "@/lib/publicUi";
 import { getFiveYearRankingHistory } from "@/lib/ranking/fiveYearRankingHistory";
-import { DEFAULT_PAGE_SIZE, Pagination, parsePage } from "../../../Pagination";
 
-export default async function PublicFiveYearRankingHistoryPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ page?: string }>;
-}) {
-  const { page: pageParam } = await searchParams;
-  const page = parsePage(pageParam);
+// Same top-100 cap as /rankings/club-rankings/five-year (only the top 100 gets
+// published) -- applied against the most recent computed window's rank, since rows
+// here are already sorted that way; the admin equivalent stays uncapped for staff QA.
+const PUBLISHED_RANK_LIMIT = 100;
 
+export default async function PublicFiveYearRankingHistoryPage() {
   const { endYears, rows } = await getFiveYearRankingHistory();
-  const totalCount = rows.length;
-  const pageRows = rows.slice((page - 1) * DEFAULT_PAGE_SIZE, page * DEFAULT_PAGE_SIZE);
+  const latestYear = endYears[endYears.length - 1];
+  const publishedRows = rows.filter((r) => (r.byYear[latestYear]?.rank ?? Infinity) <= PUBLISHED_RANK_LIMIT);
 
   return (
     <div>
@@ -27,7 +24,8 @@ export default async function PublicFiveYearRankingHistoryPage({
       </p>
       <p className="mb-6 text-sm text-slate-500">
         Each club&apos;s rank and total within that year&apos;s own 5-year-window aggregate — not a single-year
-        rank. One column per computed window, growing over time as new years are added.
+        rank. One column per computed window, growing over time as new years are added. Limited to clubs
+        currently ranked in the top {PUBLISHED_RANK_LIMIT}.
       </p>
 
       {endYears.length === 0 ? (
@@ -60,7 +58,7 @@ export default async function PublicFiveYearRankingHistoryPage({
                 </tr>
               </thead>
               <tbody className={tbodyClass}>
-                {pageRows.map((r) => (
+                {publishedRows.map((r) => (
                   <tr key={r.clubId} className="relative cursor-pointer">
                     <td className={`${tdClass} max-w-[180px] truncate font-medium text-slate-900`}>
                       <Link href={`/rankings/clubs/${r.clubId}`} className="after:absolute after:inset-0 hover:underline">
@@ -84,13 +82,6 @@ export default async function PublicFiveYearRankingHistoryPage({
               </tbody>
             </table>
           </div>
-          <Pagination
-            page={page}
-            totalCount={totalCount}
-            pageSize={DEFAULT_PAGE_SIZE}
-            basePath="/rankings/club-rankings/five-year/history"
-            baseParams={new URLSearchParams()}
-          />
         </>
       )}
     </div>
