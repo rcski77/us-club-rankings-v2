@@ -21,7 +21,8 @@ export default async function ClubGroupsPage({
     success?: string;
     mergeError?: string;
     teamsMoved?: string;
-    conflicts?: string;
+    yearsResolved?: string;
+    yearsOverridden?: string;
     combineError?: string;
     clubsCombined?: string;
     mergeTargetQ?: string;
@@ -37,7 +38,8 @@ export default async function ClubGroupsPage({
     success,
     mergeError,
     teamsMoved,
-    conflicts,
+    yearsResolved,
+    yearsOverridden,
     combineError,
     clubsCombined,
     mergeTargetQ,
@@ -162,12 +164,16 @@ export default async function ClubGroupsPage({
       {success === "merged" && (
         <p className={successBannerClass}>
           Merged, moving {teamsMoved ?? 0} team{teamsMoved === "1" ? "" : "s"}.
-          {conflicts && conflicts !== "0" && (
+          {yearsResolved && yearsResolved !== "0" && (
             <>
               {" "}
-              {conflicts} legacy annual-score row{conflicts === "1" ? "" : "s"} conflicted with an
-              existing year on the target club and were left on the original (now-retired) club for
-              manual review.
+              {yearsResolved} legacy annual-score year{yearsResolved === "1" ? "" : "s"} existed on
+              both clubs — the higher score won each time
+              {yearsOverridden && yearsOverridden !== "0" ? (
+                <> ({yearsOverridden} of them took the merged-in club&apos;s higher score).</>
+              ) : (
+                <> (the target club&apos;s own score was already higher every time).</>
+              )}
             </>
           )}
         </p>
@@ -188,7 +194,8 @@ export default async function ClubGroupsPage({
           Use when a club changed codes or a real-world club merger combined two clubs into one
           (e.g. two previously-separate clubs that merged under a new code). The source club&apos;s
           teams and history move to the target, and the source club is retired (kept for reference).
-          Future imports still using its old code resolve to the target automatically.
+          For a year where both clubs already have a legacy annual score, the higher of the two wins
+          on the target. Future imports still using its old code resolve to the target automatically.
         </p>
 
         {existingMerges.length > 0 && (
