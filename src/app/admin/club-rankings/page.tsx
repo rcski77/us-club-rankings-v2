@@ -56,7 +56,12 @@ export default async function ClubRankingsPage({
 
   return (
     <div>
-      <h1 className="mb-6 text-2xl font-semibold">Club Rankings</h1>
+      <div className="mb-6 flex items-center gap-3">
+        <h1 className="text-2xl font-semibold">Club Rankings</h1>
+        <Link href="/admin/club-rankings/five-year" prefetch={false} className="text-sm text-slate-500 underline">
+          5-Year Aggregate →
+        </Link>
+      </div>
 
       {recomputeStarted === "1" && (
         <p className={successBannerClass}>

@@ -62,6 +62,9 @@ model Club {
   importRows   ImportRow[]
   auditFlags   AuditFlag[]
   clubRankingResults ClubRankingResult[]
+  annualScores          ClubAnnualScore[]
+  annualAgeGroupScores  ClubAnnualAgeGroupScore[]
+  fiveYearRankingResults ClubFiveYearRankingResult[]
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
 
@@ -605,6 +608,93 @@ model ClubRankingResultContribution {
   countedInBest5      Boolean // false for the one dropped (lowest) age-group slot
 
   @@unique([clubRankingResultId, ageGroup])
+}
+
+// --- Legacy 5-year club ranking (historical seed + rolling aggregate) -------
+// Bridges legacy v1's already-computed club-ranking output (2021-2025, imported from
+// a hand-maintained workbook -- see prisma/importLegacyClubRankings.ts) into a real
+// computed "5-Year Aggregate" used for NIT invites/housing priority. Unlike
+// ClubRankingResult (Phase 7), which is computed from this app's own imported
+// TeamFinish/RankingResult data one Season at a time, these per-year totals for
+// 2021-2024 have no underlying event/division/team-finish data in this app at all --
+// the legacy workbook's own already-finalized per-year score is the ground truth for
+// those years, not something this app can recompute. `source` defaults to
+// "LEGACY_IMPORT" but is a plain String (not an enum) specifically to leave room for
+// a future "COMPUTED" value once enough of this app's own seasons exist to fold into
+// the rolling 5-year window without a schema change.
+model ClubAnnualScore {
+  id          String   @id @default(cuid())
+  clubId      String
+  club        Club     @relation(fields: [clubId], references: [id])
+  year        Int
+  totalPoints Float
+  legacyRank  Int? // the rank shown in the source workbook that year -- reference/QA
+  // only, never used by computeFiveYearClubRankingForYear (which always re-derives
+  // rank from totalPoints, same as every other ranking result in this app).
+  source    String   @default("LEGACY_IMPORT")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([clubId, year])
+  @@index([year])
+}
+
+// Per-age-group breakdown underlying a club's ClubAnnualScore for a given year --
+// only populated for 2025 so far (the only year the source workbook has this level of
+// detail for; see prisma/importLegacyClubRankings.ts). No Team FK: these historical
+// teams mostly don't correspond to any Team row this app has itself imported, so
+// teamName/teamCode are kept as plain reference strings rather than forcing a fuzzy
+// match into the Team table.
+model ClubAnnualAgeGroupScore {
+  id         String   @id @default(cuid())
+  clubId     String
+  club       Club     @relation(fields: [clubId], references: [id])
+  year       Int
+  ageGroup   Int
+  teamName   String?
+  teamCode   String?
+  rank       Int?
+  npsPoints  Int?
+  clubPoints Int? // already-computed rank -> points value from the source workbook,
+  // matches rankToPoints() in clubRanking.ts -- kept as imported rather than
+  // re-derived, since this is historical reference data, not something this app scores.
+  createdAt DateTime @default(now())
+
+  @@unique([clubId, year, ageGroup])
+}
+
+// Delete-and-replace-by-partition result of the recency-weighted 5-year blend (see
+// src/lib/ranking/fiveYearClubRanking.ts), partitioned by endYear (the window is
+// [endYear-4, endYear]) instead of seasonId -- ClubAnnualScore isn't season-scoped,
+// so there's no Season row to key off for the legacy years. Same audit-trail shape as
+// ClubRankingResult/ClubRankingResultContribution (prisma/CLAUDE.md).
+model ClubFiveYearRankingResult {
+  id               String   @id @default(cuid())
+  endYear          Int
+  clubId           String
+  club             Club     @relation(fields: [clubId], references: [id])
+  totalPoints      Float
+  rank             Int
+  algorithmVersion String   @default("phase-5yr-v1")
+  computedAt       DateTime @default(now())
+
+  contributions ClubFiveYearRankingResultContribution[]
+
+  @@unique([endYear, clubId])
+  @@index([endYear, rank])
+}
+
+model ClubFiveYearRankingResultContribution {
+  id                          String                    @id @default(cuid())
+  clubFiveYearRankingResultId String
+  clubFiveYearRankingResult   ClubFiveYearRankingResult @relation(fields: [clubFiveYearRankingResultId], references: [id], onDelete: Cascade)
+  year                        Int
+  weight                      Float // 0.05/0.15/0.20/0.25/0.35, oldest to newest
+  points                      Float // 0 when the club had no ClubAnnualScore that year
+  weightedPoints              Float
+  present                     Boolean // false when defaulted to 0 (no ClubAnnualScore row)
+
+  @@unique([clubFiveYearRankingResultId, year])
 }
 
 // --- Phase 2: CSV import pipeline (AES adapter, TEAM_FINISHES only) ---------

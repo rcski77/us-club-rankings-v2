@@ -1,0 +1,711 @@
+year,ageGroup,clubCode,teamName,teamCode,rank,npsPoints,clubPoints
+2025,12,frogsnt,MadFrog VBC 12 - 1,g12frogs1nt,1,645,100
+2025,12,tmdynha,Dynasty VB- KS 12 - 1,g12tmdyn1ha,2,600,99
+2025,12,afiveso,A5 Mizuno- GA 12 - 1,g12afive1so,3,595,98
+2025,12,srfsdsc,Surfside VBC- CA 12 - 1,g12srfsd1sc,3,595,98
+2025,12,excelnt,Excel Volleyball Club 12 - 1,g12excel1nt,5,580,96
+2025,12,cvbcoov,Cleveland Volleyball Company 12 - 1,g12cvbco1ov,6,573,95
+2025,12,milonsc,Mizuno LB- CA 12 - 1,g12milon1sc,7,570,94
+2025,12,coastsc,Coast VBC - CA 12 - 1,g12coast1sc,8,565,93
+2025,12,1unvbnt,1United 12 - 1,g121unvb1nt,9,560,92
+2025,12,sunshsc,Sunshine VBC- CA 12 - 1,g12sunsh1sc,9,560,92
+2025,12,txadvnt,TAV 12 - 1,g12txadv1nt,10,553,91
+2025,12,aperfls,Austin Performance 12 - 1,g12aperf1ls,11,548,90
+2025,12,premrgp,Premier - NE Volleyball 12 - 1,g12premr1gp,12,538,89
+2025,12,elevaov,Elevation - Sports Express 12 - 1,g12eleva1ov,13,528,88
+2025,12,mavbcha,Asics MAVS- KS 12 - 1,g12mavbc1ha,14,526,87
+2025,12,stormaz,AZ Storm 12 - 1,g12storm1az,15,525,86
+2025,12,skylnnt,Dallas Skyline Jr 12 - 1,g12skyln1nt,15,525,86
+2025,12,mlwstbg,Milwaukee Sting VBC 12 - 1,g12mlwst1bg,17,523,84
+2025,12,hpstlgw,HPSTL 12 - 1,g12hpstl1gw,18,510,83
+2025,12,sgeltsc,SG Elite VBC- CA 12 - 1,g12sgelt1sc,19,500,82
+2025,12,akivapr,KIVA- KY 12 - 1,g12akiva1pr,20,495,81
+2025,12,tsvbafl,Top Select- FL 12 - 1,g12tsvba1fl,20,495,81
+2025,12,alamols,Alamo VBA 12 - 1,g12alamo1ls,22,490,79
+2025,12,ojvbcde,Ozark Juniors VB- AR 12 - 1,g12ojvbc1de,22,490,79
+2025,12,vacessc,Vegas Aces 12 - 1,g12vaces1sc,22,490,79
+2025,12,eagmtnt,Eagle Mountain - TX 12 - 1,g12eagmt1nt,25,485,76
+2025,12,legvclk,Legacy VBC - MI 12 - 1,g12legvc1lk,25,485,76
+2025,12,mavbcha,Asics MAVS- KS 12 - 2,g12mavbc2ha,27,483,74
+2025,12,acdvpnc,Academy Palo Alto- CA 12 - 1,g12acdvp1nc,28,480,73
+2025,12,aretent,Arete Athletics 12 - 1,g12arete1nt,28,480,73
+2025,12,ccityho,CCVC- IN 12 - 1,g12ccity1ho,28,480,73
+2025,12,elevbrm,Elevation - CO 12 - 1,g12elevb1rm,28,480,73
+2025,12,pvakcha,PVA- MO 12 - 1,g12pvakc1ha,28,480,73
+2025,12,revolaz,Revolution - AZ 12 - 1,g12revol1az,28,480,73
+2025,12,rwdthgw,Rockwood Thunder 12 - 1,g12rwdth1gw,28,480,73
+2025,12,skyhigl,Sky High VBC- IL 12 - 2,g12skyhi2gl,28,480,73
+2025,12,tribefl,Tribe VB- FL 12 - 1,g12tribe1fl,28,480,73
+2025,12,otbvafl,OTVA- FL 12 - 1,g12otbva1fl,37,478,64
+2025,12,opremov,Ohio Premier VBC 12 - 1,g12oprem1ov,38,475,63
+2025,12,op2vbok,Oklahoma Peak Performance 12 - 1,g12op2vb1ok,38,475,63
+2025,12,sclegsc,SoCal Legends 12 - 1,g12scleg1sc,40,470,61
+2025,12,gjvbcfl,Gainesville Jrs- FL 12 - 1,g12gjvbc1fl,41,465,60
+2025,12,tavbjho,Boiler Jrs VBC- IN 12 - 1,g12tavbj1ho,42,463,59
+2025,12,nkyvcpr,NKYVC- KY 12 - 1,g12nkyvc1pr,42,463,59
+2025,12,alliagl,1st Alliance VBC- IL 12 - 1,g12allia1gl,44,460,57
+2025,12,laverls,LV 12 - 1,g12laver1ls,44,460,57
+2025,12,msprtov,Mintonette Sports 12 - 1,g12msprt1ov,44,460,57
+2025,12,powerha,KC Power- KS 12 - 1,g12power1ha,47,455,54
+2025,12,norcorm,NORCO- CO 12 - 1,g12norco1rm,47,455,54
+2025,12,azskyaz,AZ Sky 12 - 1,g12azsky1az,49,450,52
+2025,12,allvbso,Alliance VBC - TN 12 - 1,g12allvb1so,50,448,51
+2025,12,cvbcoov,Cleveland Volleyball Company 12 - 2,g12cvbco2ov,51,445,50
+2025,12,akivapr,KIVA- KY 12 - 2,g12akiva2pr,51,445,50
+2025,12,elitegp,Nebraska Elite 12 - 1,g12elite1gp,51,445,50
+2025,12,omnivaz,Omni 12 - 1,g12omniv1az,51,445,50
+2025,12,tavhols,TAV Houston 12 - 1,g12tavho1ls,51,445,50
+2025,12,miavafl,Miami VBA- FL 12 - 1,g12miava1fl,56,443,45
+2025,12,ajvbals,Austin Junior Volleyball 12 - 1,g12ajvba1ls,57,440,44
+2025,12,gpontfl,GP 12 Rox,g12gpont1fl,57,440,44
+2025,12,unionpr,UNION - IN 12 - 1,g12union1pr,57,440,44
+2025,12,excelnt,Excel Volleyball Club 12 - 2,g12excel2nt,60,435,41
+2025,12,acavcov,AVC - OH 12 - 1,g12acavc1ov,61,430,40
+2025,12,skylnnt,Dallas Skyline Jr 12 - 2,g12skyln2nt,61,430,40
+2025,12,frogsnt,MadFrog VBC 12 - 2,g12frogs2nt,61,430,40
+2025,12,chargok,Oklahoma Charge Volleyball 12 - 1,g12charg1ok,61,430,40
+2025,12,tristpr,Tri-State Elite- KY 12 - 1,g12trist1pr,61,430,40
+2025,12,elevaov,Elevation - Sports Express 12 - 2,g12eleva2ov,66,428,35
+2025,12,tavmsho,Monon Select VBC 12 - 1,g12tavms1ho,66,428,35
+2025,12,actyvsc,Actyve VBC- CA 12 - 1,g12actyv1sc,68,425,33
+2025,12,htidefl,High Tide VB - FL 12 - 1,g12htide1fl,68,425,33
+2025,12,pnadvnc,Panda VBC 12 - 1,g12pnadv1nc,68,425,33
+2025,12,sajvbls,SA Juniors 12 Adidas (LS),g12sajvb1ls,68,425,33
+2025,12,pinesfl,Legacy 12U (FL),g12pines1fl,72,420,29
+2025,12,lightfl,Lightning VBA- FL 12 - 1,g12light1fl,72,420,29
+2025,12,tolvcov,TVC - OH 12 - 1,g12tolvc1ov,72,420,29
+2025,12,tavbcho,The Academy - IN 12 - 1,g12tavbc1ho,75,418,26
+2025,12,ncvbacr,Academy - NC 12 - 1,g12ncvba1cr,76,415,25
+2025,12,fovbclk,Far Out- MI 12 - 1,g12fovbc1lk,76,415,25
+2025,12,frflynt,Frisco Flyers VBC 12 - 1,g12frfly1nt,76,415,25
+2025,12,invasha,Invasion 12 - 3,g12invas3ha,76,415,25
+2025,12,hoskyls,Houston Skyline Jr 12 - 1,g12hosky1ls,80,405,21
+2025,12,mvbacde,MVA - TN 12 - 1,g12mvbac1de,80,405,21
+2025,12,sealbsc,Seal Beach VBC- CA 12 - 1,g12sealb1sc,80,405,21
+2025,12,sunshsc,Sunshine VBC- CA 12 - 3,g12sunsh3sc,83,400,18
+2025,12,nkjvbpr,NKVB- KY 12 - 1,g12nkjvb1pr,84,395,17
+2025,12,otbvafl,OTVA- FL 12 - 2,g12otbva2fl,84,395,17
+2025,12,pohakha,Pohaku VBC 12 - 1,g12pohak1ha,84,395,17
+2025,12,revolaz,Revolution - AZ 12 - 2,g12revol2az,84,395,17
+2025,12,tsunaso,Tsunami VB GA 12 - 1,g12tsuna1so,84,395,17
+2025,12,kairono,Kairos VBC - SD 12 - 1,g12kairo1no,89,393,12
+2025,12,metroho,Metro VBC- IN 12 - 1,g12metro1ho,89,393,12
+2025,12,arvcasu,ARVC Adidas 12 - 1,g12arvca1su,91,390,10
+2025,12,houjrls,Houston Juniors 12 - 1,g12houjr1ls,91,390,10
+2025,12,munvbho,Munciana- IN 12 - 1,g12munvb1ho,91,390,10
+2025,12,1unvbnt,1United 12 - 2,g121unvb2nt,94,385,7
+2025,12,mouvinc,Mtn View VBC- CA 12 - 1,g12mouvi1nc,94,385,7
+2025,12,nolavby,Nola VB- LA 12 - 1,g12nolav1by,94,385,7
+2025,12,opremov,Ohio Premier VBC 12 - 2,g12oprem2ov,94,385,7
+2025,12,bosscov,Boss CLE 12 - 1,g12bossc1ov,98,380,3
+2025,12,tstlvsc,Tstreet LV 12-Laura,g12tstlv1sc,98,380,3
+2025,13,skylnnt,Dallas Skyline Jr 13 - 1,g13skyln1nt,1,660,100
+2025,13,milonsc,Mizuno LB- CA 13 - 1,g13milon1sc,2,620,99
+2025,13,tmdynha,Dynasty VB- KS 13 - 1,g13tmdyn1ha,3,615,98
+2025,13,legvclk,Legacy VBC - MI 13 - 1,g13legvc1lk,4,607,97
+2025,13,stormaz,AZ Storm 13 - 1,g13storm1az,5,600,96
+2025,13,afiveso,A5 Mizuno- GA 13 - 1,g13afive1so,6,588,95
+2025,13,tribefl,Tribe VB- FL 13 - 1,g13tribe1fl,7,583,94
+2025,13,1unvbnt,1United 13 - 1,g131unvb1nt,8,582,93
+2025,13,wvevbsc,Wave - CA 13 - 1,g13wvevb1sc,9,580,92
+2025,13,frogsnt,MadFrog VBC 13 - 1,g13frogs1nt,10,565,91
+2025,13,azskyaz,AZ Sky 13 - 1,g13azsky1az,11,563,90
+2025,13,mavbcha,Asics MAVS- KS 13 - 1,g13mavbc1ha,12,558,89
+2025,13,excelnt,Excel Volleyball Club 13 - 1,g13excel1nt,13,550,88
+2025,13,hpstlgw,HPSTL 13 - 1,g13hpstl1gw,14,548,87
+2025,13,elevaov,Elevation - Sports Express 13 - 1,g13eleva1ov,15,545,86
+2025,13,hoskyls,Houston Skyline Jr 13 - 1,g13hosky1ls,16,538,85
+2025,13,absolnc,Absolute VBC- CA 13 - 1,g13absol1nc,17,535,84
+2025,13,tavbjho,Boiler Jrs VBC- IN 13 - 1,g13tavbj1ho,18,530,83
+2025,13,fovbclk,Far Out- MI 13 - 1,g13fovbc1lk,18,530,83
+2025,13,atomcaz,Atomic VBC 13 - 1,g13atomc1az,20,528,81
+2025,13,askylls,Austin Skyline 13 - 1,g13askyl1ls,21,525,80
+2025,13,tsvbafl,Top Select- FL 13 - 1,g13tsvba1fl,21,525,80
+2025,13,alamols,Alamo VBA 13 - 1,g13alamo1ls,23,523,78
+2025,13,powerha,KC Power- KS 13 - 1,g13power1ha,23,523,78
+2025,13,mouvinc,Mtn View VBC- CA 13 - 1,g13mouvi1nc,23,523,78
+2025,13,pohakha,Pohaku VBC 13 - 1,g13pohak1ha,26,520,75
+2025,13,msprtov,Mintonette Sports 13 - 1,g13msprt1ov,27,517,74
+2025,13,wpvcbfl,Winter Park VBC- FL 13 - 1,g13wpvcb1fl,28,513,73
+2025,13,akivapr,KIVA- KY 13 - 1,g13akiva1pr,29,510,72
+2025,13,otbvafl,OTVA- FL 13 - 1,g13otbva1fl,30,505,71
+2025,13,otbvafl,OTVA- FL 13 - 2,g13otbva2fl,30,505,71
+2025,13,sgeltsc,SG Elite VBC- CA 13 - 1,g13sgelt1sc,30,505,71
+2025,13,sunshsc,Sunshine VBC- CA 13 - 1,g13sunsh1sc,33,500,68
+2025,13,alliagl,1st Alliance VBC- IL 13 - 1,g13allia1gl,34,497,67
+2025,13,fieldnt,Field House VBC 13 - 1,g13field1nt,35,495,66
+2025,13,txadvnt,TAV 13 - 1,g13txadv1nt,36,492,65
+2025,13,nkyvcpr,NKYVC- KY 13 - 1,g13nkyvc1pr,37,488,64
+2025,13,acdvpnc,Academy Palo Alto- CA 13 - 1,g13acdvp1nc,38,487,63
+2025,13,vcnebgp,VcNebraska 13 - 1,g13vcneb1gp,38,487,63
+2025,13,mavseha,MAVS 816 13-1 (HA),g13mavse1ha,40,485,61
+2025,13,ccityho,CCVC- IN 13 - 1,g13ccity1ho,41,482,60
+2025,13,houjrls,Houston Juniors 13 - 1,g13houjr1ls,41,482,60
+2025,13,afiveso,A5 Mizuno- GA 13 - 2,g13afive2so,43,480,58
+2025,13,mlwstbg,Milwaukee Sting VBC 13 - 2,g13mlwst2bg,43,480,58
+2025,13,nolavby,Nola VB- LA 13 - 1,g13nolav1by,43,480,58
+2025,13,gpontfl,GP 13 Rox (FL),g13gpont1fl,46,478,55
+2025,13,atprvnt,APV 13 - 1,g13atprv1nt,47,475,54
+2025,13,PCSTVSC,PCVC 13's,G13PCSTV1SC,47,475,54
+2025,13,phpvbho,Pineapple- IN 13 - 1,g13phpvb1ho,47,475,54
+2025,13,premrgp,Premier - NE Volleyball 13 - 1,g13premr1gp,47,475,54
+2025,13,revolaz,Revolution - AZ 13 - 1,g13revol1az,47,475,54
+2025,13,idcrsim,Idaho Crush VB- ID 13 - 1,g13idcrs1im,52,473,49
+2025,13,mlwstbg,Milwaukee Sting VBC 13 - 1,g13mlwst1bg,53,472,48
+2025,13,clubvim,Club V 13 - 1,g13clubv1im,54,470,47
+2025,13,legvclk,Legacy VBC - MI 13 - 2,g13legvc2lk,54,470,47
+2025,13,kairono,Kairos VBC - SD 13 - 1,g13kairo1no,56,467,45
+2025,13,frogsnt,MadFrog VBC 13 - 2,g13frogs2nt,57,465,44
+2025,13,neonegp,Nebraska One 13 - 1,g13neone1gp,57,465,44
+2025,13,opremov,Ohio Premier VBC 13 - 1,g13oprem1ov,57,465,44
+2025,13,vsionnc,Vision VBC- CA 13 - 1,g13vsion1nc,57,465,44
+2025,13,akivapr,KIVA- KY 13 - 2,g13akiva2pr,61,460,40
+2025,13,scvbcsc,S Cal VBC- CA 13 - 1,g13scvbc1sc,61,460,40
+2025,13,fcelibg,FC Elite 13 - 1,g13fceli1bg,63,457,38
+2025,13,frflynt,Frisco Flyers VBC 13 - 1,g13frfly1nt,64,455,37
+2025,13,hpstlgw,HPSTL 13 - 2,g13hpstl2gw,64,455,37
+2025,13,nkyvcpr,NKYVC- KY 13 - 2,g13nkyvc2pr,64,455,37
+2025,13,evbtcov,Elite Volleyball Training Center 13 - 1,g13evbtc1ov,67,453,34
+2025,13,rwdthgw,Rockwood Thunder 13 - 1,g13rwdth1gw,68,450,33
+2025,13,mievalk,Michigan Elite Volleyball Academy 13 - 1,g13mieva1lk,69,448,32
+2025,13,drivent,Drive Nation Volleyball Club 13 - 1,g13drive1nt,70,446,31
+2025,13,arvcasu,ARVC Adidas 13 - 1,g13arvca1su,71,445,30
+2025,13,athence,Athena VBC 13 - 1,g13athen1ce,71,445,30
+2025,13,coastsc,Coast VBC - CA 13 - 1,g13coast1sc,71,445,30
+2025,13,skylnnt,Dallas Skyline Jr 13 - 2,g13skyln2nt,71,445,30
+2025,13,excelnt,Excel Volleyball Club 13 - 2,g13excel2nt,71,445,30
+2025,13,pvakcha,PVA- MO 13 - 1,g13pvakc1ha,71,445,30
+2025,13,uvcepsu,915 United - TX 13 - 1,g13uvcep1su,77,440,24
+2025,13,cojrsrm,CoJo's 13 - 1,g13cojrs1rm,77,440,24
+2025,13,skylnfl,Jax's Skyline VBC - FL 13 - 1,g13skyln1fl,77,440,24
+2025,13,mometfl,Momentum VBA- FL 13 - 1,g13momet1fl,77,440,24
+2025,13,premrgp,Premier - NE Volleyball 13 - 2,g13premr2gp,77,440,24
+2025,13,txadvnt,TAV 13 - 2,g13txadv2nt,77,440,24
+2025,13,tavhols,TAV Houston 13 - 1,g13tavho1ls,77,440,24
+2025,13,stormaz,AZ Storm 13 - 2,g13storm2az,84,438,17
+2025,13,acavcov,AVC - OH 13 - 1,g13acavc1ov,85,437,16
+2025,13,ncvbacr,Academy - NC 13 - 1,g13ncvba1cr,86,436,15
+2025,13,miavafl,Miami VBA- FL 13 - 1,g13miava1fl,86,436,15
+2025,13,tavmsho,Monon Select 13E Cardinal (HO) (15),g13tavms1ho,88,435,13
+2025,13,tpfepsu,Texas Performance 13 - 1,g13tpfep1su,88,435,13
+2025,13,txunils,Texas United 13 - 1,g13txuni1ls,88,435,13
+2025,13,unionpr,UNION - IN 13 - 1,g13union1pr,88,435,13
+2025,13,actyvsc,Actyve VBC- CA 13 - 1,g13actyv1sc,92,430,9
+2025,13,aperfls,Austin Performance 13 - 1,g13aperf1ls,92,430,9
+2025,13,elevbrm,Elevation - CO 13 - 1,g13elevb1rm,92,430,9
+2025,13,tristpr,Tri-State Elite- KY 13 - 1,g13trist1pr,92,430,9
+2025,13,hpstlgw,HPSTL 13 - 3,g13hpstl3gw,96,425,5
+2025,13,op2vbok,Oklahoma Peak Performance 13 - 1,g13op2vb1ok,96,425,5
+2025,13,clmntsc,San Clemente VBC- CA 13 - 1,g13clmnt1sc,96,425,5
+2025,13,tejasnt,Tejas VBC 13 - 1,g13tejas1nt,96,425,5
+2025,13,trnglcr,Triangle VBC 13 - 1,g13trngl1cr,100,423,1
+2025,14,skylnnt,Dallas Skyline Jr 14 - 1,g14skyln1nt,1,655,100
+2025,14,afiveso,A5 Mizuno- GA 14 - 1,g14afive1so,2,625,99
+2025,14,frogsnt,MadFrog VBC 14 - 1,g14frogs1nt,3,612,98
+2025,14,legvclk,Legacy VBC - MI 14 - 1,g14legvc1lk,4,605,97
+2025,14,stormaz,AZ Storm 14 - 1,g14storm1az,5,600,96
+2025,14,tmdynha,Dynasty VB- KS 14 - 1,g14tmdyn1ha,5,600,96
+2025,14,coastsc,Coast VBC - CA 14 - 1,g14coast1sc,7,598,94
+2025,14,gpontfl,GP 14 Rox (FL),g14gpont1fl,8,597,93
+2025,14,powerha,KC Power- KS 14 - 1,g14power1ha,9,595,92
+2025,14,elevaov,Elevation - Sports Express 14 - 1,g14eleva1ov,10,580,91
+2025,14,otbvafl,OTVA- FL 14 - 1,g14otbva1fl,11,577,90
+2025,14,rwdthgw,Rockwood Thunder 14 - 1,g14rwdth1gw,12,570,89
+2025,14,tsvbafl,Top Select- FL 14 - 1,g14tsvba1fl,13,560,88
+2025,14,tribefl,Tribe VB- FL 14 - 1,g14tribe1fl,14,557,87
+2025,14,tavbjho,Boiler Jrs VBC- IN 14 - 1,g14tavbj1ho,15,555,86
+2025,14,hoskyls,Houston Skyline Jr 14 - 1,g14hosky1ls,15,555,86
+2025,14,milonsc,Mizuno LB- CA 14 - 1,g14milon1sc,17,548,84
+2025,14,1unvbnt,1United 14 - 1,g141unvb1nt,18,545,83
+2025,14,skylnnt,Dallas Skyline Jr 14 - 2,g14skyln2nt,18,545,83
+2025,14,drivent,Drive Nation Volleyball Club 14 - 1,g14drive1nt,18,545,83
+2025,14,ccityho,CCVC- IN 14 - 1,g14ccity1ho,21,542,80
+2025,14,metroch,Metro VBC- DC 14 - 1,g14metro1ch,21,542,80
+2025,14,acavcov,AVC - OH 14 - 1,g14acavc1ov,23,540,78
+2025,14,revolaz,Revolution - AZ 14 - 1,g14revol1az,23,540,78
+2025,14,tstrtsc,Tstreet Volleyball Club 14 - 1,g14tstrt1sc,23,540,78
+2025,14,houjrls,Houston Juniors 14 - 1,g14houjr1ls,26,537,75
+2025,14,fovbclk,Far Out- MI 14 - 1,g14fovbc1lk,27,532,74
+2025,14,txadvnt,TAV 14 - 1,g14txadv1nt,27,532,74
+2025,14,pvakcha,PVA- MO 14 - 1,g14pvakc1ha,29,530,72
+2025,14,mavbcha,Asics MAVS- KS 14 - 1,g14mavbc1ha,30,525,71
+2025,14,ajvbals,Austin Junior Volleyball 14 - 1,g14ajvba1ls,31,520,70
+2025,14,iautdia,Iowa United 141 Elite (IA) (56),g14iautd1ia,31,520,70
+2025,14,mdjrsch,MD JRS- MD 14 - 1,g14mdjrs1ch,31,520,70
+2025,14,trnglcr,Triangle VBC 14 - 1,g14trngl1cr,31,520,70
+2025,14,wvevbsc,Wave - CA 14 - 1,g14wvevb1sc,35,516,66
+2025,14,scvbcsc,S Cal VBC- CA 14 - 1,g14scvbc1sc,36,513,65
+2025,14,aperfls,Austin Performance 14 - 1,g14aperf1ls,37,510,64
+2025,14,premrgp,Premier - NE Volleyball 14 - 1,g14premr1gp,37,510,64
+2025,14,vsionnc,Vision VBC- CA 14 - 1,g14vsion1nc,37,510,64
+2025,14,gjvbcfl,Gainesville Jrs- FL 14 - 1,g14gjvbc1fl,40,505,61
+2025,14,frogsnt,MadFrog VBC 14 - 2,g14frogs2nt,40,505,61
+2025,14,msprtov,Mintonette Sports 14 - 1,g14msprt1ov,40,505,61
+2025,14,nkyvcpr,NKYVC- KY 14 - 1,g14nkyvc1pr,43,502,58
+2025,14,akivapr,KIVA- KY 14 - 1,g14akiva1pr,44,500,57
+2025,14,allvbso,Alliance VBC - TN 14 - 1,g14allvb1so,45,497,56
+2025,14,cvbcoov,Cleveland Volleyball Company 14 - 1,g14cvbco1ov,46,495,55
+2025,14,elevaov,Elevation - Sports Express 14 - 2,g14eleva2ov,46,495,55
+2025,14,nliteno,Mizuno N Lights- MN 14 - 1,g14nlite1no,46,495,55
+2025,14,omnivaz,Omni 14 - 1,g14omniv1az,46,495,55
+2025,14,PCSTVSC,PCVC 14's,G14PCSTV1SC,50,493,51
+2025,14,ncvbacr,Academy - NC 14 - 1,g14ncvba1cr,51,490,50
+2025,14,scvbcim,South County 14 - 1,g14scvbc1im,51,490,50
+2025,14,forcenc,SynergyForce- CA 14 - 1,g14force1nc,51,490,50
+2025,14,tristpr,Tri-State Elite- KY 14 - 1,g14trist1pr,51,490,50
+2025,14,hpstlgw,HPSTL 14 - 2,g14hpstl2gw,55,487,46
+2025,14,alliagl,1st Alliance VBC- IL 14 - 1,g14allia1gl,56,485,45
+2025,14,askylls,Austin Skyline 14 - 1,g14askyl1ls,56,485,45
+2025,14,idcrsim,Idaho Crush VB- ID 14 - 1,g14idcrs1im,56,485,45
+2025,14,sunshsc,Sunshine VBC- CA 14 - 1,g14sunsh1sc,59,483,42
+2025,14,azskyaz,AZ Sky 14 - 1,g14azsky1az,60,480,41
+2025,14,hpstlgw,HPSTL 14 - 1,g14hpstl1gw,60,480,41
+2025,14,kairono,Kairos VBC - SD 14 - 1,g14kairo1no,60,480,41
+2025,14,npjbece,NPJ Bend 14 National (CE),g14npjbe1ce,60,480,41
+2025,14,stvacls,South Texas Volleyball Academy 14 - 1,g14stvac1ls,60,480,41
+2025,14,tlgcyls,Texas Legacy Volleyball 14 - 1,g14tlgcy1ls,60,480,41
+2025,14,forzasc,Forza1- CA 14 - 1,g14forza1sc,66,478,35
+2025,14,excelnt,Excel Volleyball Club 14 - 1,g14excel1nt,67,477,34
+2025,14,208vbev,208 VBC - ID 14 - 1,g14208vb1ev,68,475,33
+2025,14,afiveso,A5 Mizuno- GA 14 - 2,g14afive2so,68,475,33
+2025,14,legvclk,Legacy VBC - MI 14 - 2,g14legvc2lk,68,475,33
+2025,14,nliteno,Mizuno N Lights- MN 14 - 2,g14nlite2no,68,475,33
+2025,14,tejasnt,Tejas VBC 14 - 1,g14tejas1nt,68,475,33
+2025,14,cjvvbcr,CJV - NC 14 - 1,g14cjvvb1cr,73,472,28
+2025,14,cojrsrm,CoJo's 14 - 1,g14cojrs1rm,73,472,28
+2025,14,clubvim,Club V 14 - 1,g14clubv1im,75,470,26
+2025,14,excelnt,Excel Volleyball Club 14 - 2,g14excel2nt,75,470,26
+2025,14,skylnfl,Jax's Skyline VBC - FL 14 - 1,g14skyln1fl,75,470,26
+2025,14,tavhols,TAV Houston 14 - 1,g14tavho1ls,75,470,26
+2025,14,parvbch,Paramount Vbc 14 - 1,g14parvb1ch,79,467,22
+2025,14,aretent,Arete Athletics 14 - 1,g14arete1nt,80,465,21
+2025,14,fleltfl,FEVA 14-White,g14flelt1fl,80,465,21
+2025,14,plscvsc,Pipeline 14-National (SC),g14plscv1sc,80,465,21
+2025,14,actyvsc,Actyve VBC- CA 14 - 1,g14actyv1sc,83,463,18
+2025,14,sgeltsc,SG Elite VBC- CA 14 - 1,g14sgelt1sc,83,463,18
+2025,14,elevbrm,Elevation - CO 14 - 1,g14elevb1rm,85,462,16
+2025,14,onevbaz,COV 14 - 1,g14onevb1az,86,460,15
+2025,14,fgsvafl,FL Gulfside VBA 14 - 1,g14fgsva1fl,86,460,15
+2025,14,mlwstbg,Milwaukee Sting VBC 14 - 1,g14mlwst1bg,86,460,15
+2025,14,tavmsho,Monon Select VBC 14 - 1,g14tavms1ho,86,460,15
+2025,14,sixpkia,Six Pack VBC 14 - 1,g14sixpk1ia,86,460,15
+2025,14,coastsc,Coast VBC - CA 14 - 2,g14coast2sc,91,458,10
+2025,14,tstrtsc,Tstreet Volleyball Club 14 - 2,g14tstrt2sc,91,458,10
+2025,14,FNESSGW,Finesse VBC - MO 14 - 1,G14FNESS1GW,93,455,8
+2025,14,movbagw,MOVA 14 - 1,g14movba1gw,93,455,8
+2025,14,npjvbce,North Pacific Juniors 14 - 1,g14npjvb1ce,93,455,8
+2025,14,otbvafl,OTVA- FL 14 - 2,g14otbva2fl,93,455,8
+2025,14,tstiesc,TStreet IE 14 - 1,g14tstie1sc,97,453,4
+2025,14,uvcepsu,915 United - TX 14 - 1,g14uvcep1su,98,452,3
+2025,14,absolnc,Absolute VBC- CA 14 - 1,g14absol1nc,99,450,2
+2025,14,jaxjrfl,JJVA - FL 14 - 1,g14jaxjr1fl,99,450,2
+2025,14,premrgp,Premier - NE Volleyball 14 - 2,g14premr2gp,99,450,2
+2025,14,skyhigl,Sky High VBC- IL 14 - 1,g14skyhi1gl,99,450,2
+2025,14,spvbcgl,Sports Perf- IL 14 - 1,g14spvbc1gl,99,450,2
+2025,14,starspm,Stars VBC 14 - 1,g14stars1pm,99,450,2
+2025,15,txadvnt,TAV 15 - 1,g15txadv1nt,1,663,100
+2025,15,skylnnt,Dallas Skyline Jr 15 - 1,g15skyln1nt,2,625,99
+2025,15,frogsnt,MadFrog VBC 15 - 1,g15frogs1nt,3,608,98
+2025,15,legvclk,Legacy VBC - MI 15 - 1,g15legvc1lk,4,607,97
+2025,15,alamols,Alamo VBA 15 - 1,g15alamo1ls,5,605,96
+2025,15,afiveso,A5 Mizuno- GA 15 - 1,g15afive1so,6,600,95
+2025,15,ccityho,CCVC- IN 15 - 1,g15ccity1ho,7,595,94
+2025,15,tribefl,Tribe VB- FL 15 - 1,g15tribe1fl,8,590,93
+2025,15,tstrtsc,Tstreet Volleyball Club 15 - 1,g15tstrt1sc,8,590,93
+2025,15,tmdynha,Dynasty VB- KS 15 - 1,g15tmdyn1ha,10,585,91
+2025,15,idcrsim,Idaho Crush VB- ID 15 - 1,g15idcrs1im,11,580,90
+2025,15,hoskyls,Houston Skyline Jr 15 - 1,g15hosky1ls,12,575,89
+2025,15,wvevbsc,Wave - CA 15 - 1,g15wvevb1sc,12,575,89
+2025,15,coastsc,Coast VBC - CA 15 - 1,g15coast1sc,14,570,87
+2025,15,kairono,Kairos VBC - SD 15 - 1,g15kairo1no,14,570,87
+2025,15,nliteno,Mizuno N Lights- MN 15 - 1,g15nlite1no,16,568,85
+2025,15,houjrls,Houston Juniors 15 - 1,g15houjr1ls,17,567,84
+2025,15,stormaz,AZ Storm 15 - 1,g15storm1az,18,565,83
+2025,15,hpstlgw,HPSTL 15 - 1,g15hpstl1gw,18,565,83
+2025,15,otbvafl,OTVA- FL 15 - 1,g15otbva1fl,18,565,83
+2025,15,omnivnc,OMNI 15 - 1,g15omniv1nc,21,560,80
+2025,15,ajvbals,Austin Junior Volleyball 15 - 1,g15ajvba1ls,22,550,79
+2025,15,excelnt,Excel Volleyball Club 15 - 1,g15excel1nt,22,550,79
+2025,15,absolnc,Absolute VBC- CA 15 - 1,g15absol1nc,24,545,77
+2025,15,mavbcha,Asics MAVS- KS 15 - 1,g15mavbc1ha,24,545,77
+2025,15,skylnnt,Dallas Skyline Jr 15 - 2,g15skyln2nt,24,545,77
+2025,15,tristpr,Tri-State Elite- KY 15 - 1,g15trist1pr,24,545,77
+2025,15,arvcasu,ARVC Adidas 15 - 1,g15arvca1su,28,543,73
+2025,15,ncvbacr,Academy - NC 15 - 1,g15ncvba1cr,29,540,72
+2025,15,acavcov,AVC - OH 15 - 1,g15acavc1ov,29,540,72
+2025,15,nkyvcpr,NKYVC- KY 15 - 1,g15nkyvc1pr,29,540,72
+2025,15,sgeltsc,SG Elite VBC- CA 15 - 1,g15sgelt1sc,29,540,72
+2025,15,alliagl,1st Alliance VBC- IL 15 - 1,g15allia1gl,33,535,68
+2025,15,munvbho,Munciana- IN 15 - 1,g15munvb1ho,33,535,68
+2025,15,adrvaia,Adrenaline VBA - IA 15 - 1,g15adrva1ia,35,530,66
+2025,15,clsvbim,Club Sand 15 Surf (IM),g15clsvb1im,35,530,66
+2025,15,akivapr,KIVA- KY 15 - 1,g15akiva1pr,35,530,66
+2025,15,mnselno,MN Select- MN 15 - 1,g15mnsel1no,35,530,66
+2025,15,tavhols,TAV Houston 15 - 1,g15tavho1ls,35,530,66
+2025,15,aretent,Arete Athletics 15 - 1,g15arete1nt,40,525,61
+2025,15,clubvim,Club V 15 - 1,g15clubv1im,40,525,61
+2025,15,powerha,KC Power- KS 15 - 1,g15power1ha,40,525,61
+2025,15,advergl,Adversity VBC - IL 15 - 1,g15adver1gl,43,520,58
+2025,15,elevaov,Elevation - Sports Express 15 - 1,g15eleva1ov,43,520,58
+2025,15,evavbho,Empowered- IN 15 - 1,g15evavb1ho,43,520,58
+2025,15,mlwstbg,Milwaukee Sting VBC 15 - 1,g15mlwst1bg,43,520,58
+2025,15,msprtov,Mintonette Sports 15 - 1,g15msprt1ov,43,520,58
+2025,15,parvbch,Paramount Vbc 15 - 1,g15parvb1ch,43,520,58
+2025,15,premrgp,Premier - NE Volleyball 15 - 1,g15premr1gp,49,515,52
+2025,15,unionpr,UNION - IN 15 - 1,g15union1pr,49,515,52
+2025,15,metroch,Metro VBC- DC 15 - 1,g15metro1ch,51,512,50
+2025,15,aspiraz,Aspire Volleyball - AZ 15 - 1,g15aspir1az,52,510,49
+2025,15,ojvbcde,Ozark Juniors VB- AR 15 - 1,g15ojvbc1de,52,510,49
+2025,15,pvakcha,PVA- MO 15 - 1,g15pvakc1ha,52,510,49
+2025,15,alliagl,1st Alliance VBC- IL 15 - 2,g15allia2gl,55,505,46
+2025,15,azskyaz,AZ Sky 15 - 1,g15azsky1az,55,505,46
+2025,15,cojrsrm,CoJo's 15 - 1,g15cojrs1rm,55,505,46
+2025,15,msprtov,Mintonette Sports 15 - 2,g15msprt2ov,55,505,46
+2025,15,afiveso,A5 Mizuno- GA 15 - 2,g15afive2so,59,500,42
+2025,15,milonsc,Mizuno LB- CA 15 - 1,g15milon1sc,59,500,42
+2025,15,sunshsc,Sunshine VBC- CA 15 - 1,g15sunsh1sc,59,500,42
+2025,15,tsntsha,Topeka Saints- KS 15 - 1,g15tsnts1ha,59,500,42
+2025,15,twskyls,TW Skyline 15 Royal (LS) (20),g15twsky1ls,63,498,38
+2025,15,cjvvbcr,CJV - NC 15 - 1,g15cjvvb1cr,64,495,37
+2025,15,mvbacde,MVA - TN 15 - 1,g15mvbac1de,64,495,37
+2025,15,scvbcsc,S Cal VBC- CA 15 - 1,g15scvbc1sc,64,495,37
+2025,15,tlgcyls,Texas Legacy Volleyball 15 - 1,g15tlgcy1ls,67,493,34
+2025,15,allvbso,Alliance VBC - TN 15 - 1,g15allvb1so,68,490,33
+2025,15,blstlgw,Blue Steel VBC- IL 15 - 1,g15blstl1gw,68,490,33
+2025,15,fovbclk,Far Out- MI 15 - 1,g15fovbc1lk,68,490,33
+2025,15,vsionnc,Vision VBC- CA 15 - 1,g15vsion1nc,68,490,33
+2025,15,op2vbok,Oklahoma Peak Performance 15 - 1,g15op2vb1ok,72,488,29
+2025,15,acavcov,AVC - OH 15 - 2,g15acavc2ov,73,485,28
+2025,15,bosscov,Boss CLE 15 - 1,g15bossc1ov,73,485,28
+2025,15,cnvbcha,Club North 15 - 1,g15cnvbc1ha,73,485,28
+2025,15,livwraz,Livewire - AZ 15 - 1,g15livwr1az,73,485,28
+2025,15,mlwstbg,Milwaukee Sting VBC 15 - 2,g15mlwst2bg,73,485,28
+2025,15,npjvbce,North Pacific Juniors 15 - 1,g15npjvb1ce,73,485,28
+2025,15,otbvafl,OTVA- FL 15 - 2,g15otbva2fl,73,485,28
+2025,15,spserah,SASVBC- HI 15 - 1,g15spser1ah,73,485,28
+2025,15,txadvnt,TAV 15 - 2,g15txadv2nt,73,485,28
+2025,15,vavbcnc,VVA 15-1 (NC) (1),g15vavbc1nc,73,485,28
+2025,15,actyvsc,Actyve VBC- CA 15 - 1,g15actyv1sc,83,480,18
+2025,15,hoskyls,Houston Skyline Jr 15 - 2,g15hosky2ls,83,480,18
+2025,15,rwdthgw,Rockwood Thunder 15 - 1,g15rwdth1gw,83,480,18
+2025,15,savbcsc,SAVC - CA 15 - 1,g15savbc1sc,83,480,18
+2025,15,stvacls,South Texas Volleyball Academy 15 - 1,g15stvac1ls,83,480,18
+2025,15,spvbcgl,Sports Perf- IL 15 - 1,g15spvbc1gl,83,480,18
+2025,15,aperfls,Austin Performance 15 - 1,g15aperf1ls,89,478,12
+2025,15,norcorm,NORCO- CO 15 - 1,g15norco1rm,90,475,11
+2025,15,pwrpxia,Power Plex VBC- IA 15 - 1,g15pwrpx1ia,90,475,11
+2025,15,vcnebgp,VcNebraska 15 - 1,g15vcneb1gp,90,475,11
+2025,15,drivent,Drive Nation Volleyball Club 15 - 1,g15drive1nt,93,470,8
+2025,15,tmdynha,Dynasty VB- KS 15 - 2,g15tmdyn2ha,93,470,8
+2025,15,houjrls,Houston Juniors 15 - 2,g15houjr2ls,93,470,8
+2025,15,sajvbls,SA Juniors 15 Adidas (LS),g15sajvb1ls,93,470,8
+2025,15,tribefl,Tribe VB- FL 15 - 2,g15tribe2fl,93,470,8
+2025,15,jrvbcbg,Wisconsin Jr 15 - 1,g15jrvbc1bg,93,470,8
+2025,15,lightfl,Lightning VBA- FL 15 - 1,g15light1fl,99,467,2
+2025,15,atomcaz,Atomic VBC 15 - 1,g15atomc1az,100,465,1
+2025,15,iautdia,Iowa United 151 Elite (IA) (127),g15iautd1ia,100,465,1
+2025,15,premrgp,Premier - NE Volleyball 15 - 2,g15premr2gp,100,465,1
+2025,16,txadvnt,TAV 16 - 1,g16txadv1nt,1,643,100
+2025,16,stormaz,AZ Storm 16 - 1,g16storm1az,2,635,99
+2025,16,legvclk,Legacy VBC - MI 16 - 1,g16legvc1lk,3,615,98
+2025,16,revolaz,Revolution - AZ 16 - 1,g16revol1az,3,615,98
+2025,16,tstrtsc,Tstreet Volleyball Club 16 - 1,g16tstrt1sc,5,608,96
+2025,16,clubvim,Club V 16 - 1,g16clubv1im,6,605,95
+2025,16,frogsnt,MadFrog VBC 16 - 1,g16frogs1nt,6,605,95
+2025,16,afiveso,A5 Mizuno- GA 16 - 1,g16afive1so,8,595,93
+2025,16,vsionnc,Vision VBC- CA 16 - 1,g16vsion1nc,9,592,92
+2025,16,wvevbsc,Wave - CA 16 - 1,g16wvevb1sc,10,585,91
+2025,16,milonsc,Mizuno LB- CA 16 - 1,g16milon1sc,11,582,90
+2025,16,tristpr,Tri-State Elite- KY 16 - 1,g16trist1pr,12,580,89
+2025,16,vcnebgp,VcNebraska 16 - 1,g16vcneb1gp,13,568,88
+2025,16,wpvcbfl,Winter Park VBC- FL 16 - 1,g16wpvcb1fl,14,567,87
+2025,16,drivent,Drive Nation Volleyball Club 16 - 1,g16drive1nt,15,560,86
+2025,16,hoskyls,Houston Skyline Jr 16 - 1,g16hosky1ls,15,560,86
+2025,16,nliteno,Mizuno N Lights- MN 16 - 1,g16nlite1no,15,560,86
+2025,16,chargok,Oklahoma Charge Volleyball 16 - 1,g16charg1ok,15,560,86
+2025,16,1unvbnt,1United 16 - 1,g161unvb1nt,19,558,82
+2025,16,forzasc,Forza1- CA 16 - 1,g16forza1sc,19,558,82
+2025,16,tsvbafl,Top Select- FL 16 - 1,g16tsvba1fl,21,557,80
+2025,16,rwdthgw,Rockwood Thunder 16 - 1,g16rwdth1gw,22,555,79
+2025,16,otbvafl,OTVA- FL 16 - 1,g16otbva1fl,23,554,78
+2025,16,acavcov,AVC - OH 16 - 1,g16acavc1ov,24,552,77
+2025,16,forznsc,Forza1 North- CA 16 - 1,g16forzn1sc,25,550,76
+2025,16,kairono,Kairos VBC - SD 16 - 1,g16kairo1no,25,550,76
+2025,16,txadvnt,TAV 16 - 2,g16txadv2nt,25,550,76
+2025,16,azskyaz,AZ Sky 16 - 1,g16azsky1az,28,545,73
+2025,16,msprtov,Mintonette Sports 16 - 1,g16msprt1ov,29,542,72
+2025,16,alliagl,1st Alliance VBC- IL 16 - 1,g16allia1gl,30,540,71
+2025,16,tmdynha,Dynasty VB- KS 16 - 1,g16tmdyn1ha,30,540,71
+2025,16,mhypefl,Miami Hype VBC- FL 16 - 1,g16mhype1fl,32,537,69
+2025,16,cityvsc,City 16 - 1,g16cityv1sc,33,535,68
+2025,16,skylnnt,Dallas Skyline Jr 16 - 1,g16skyln1nt,33,535,68
+2025,16,ccityho,CCVC- IN 16 - 1,g16ccity1ho,35,532,66
+2025,16,absolnc,Absolute VBC- CA 16 - 1,g16absol1nc,36,530,65
+2025,16,elevaov,Elevation - Sports Express 16 - 1,g16eleva1ov,36,530,65
+2025,16,ievbcgl,Illini Elite 16 - 1,g16ievbc1gl,36,530,65
+2025,16,npjvbce,North Pacific Juniors 16 - 1,g16npjvb1ce,36,530,65
+2025,16,hpstlgw,HPSTL 16 - 1,g16hpstl1gw,40,529,61
+2025,16,fcelibg,FC Elite 16 - 1,g16fceli1bg,41,525,60
+2025,16,neonegp,Nebraska One 16 - 1,g16neone1gp,41,525,60
+2025,16,nkyvcpr,NKYVC- KY 16 - 1,g16nkyvc1pr,41,525,60
+2025,16,parvbch,Paramount Vbc 16 - 1,g16parvb1ch,41,525,60
+2025,16,powerha,KC Power- KS 16 - 1,g16power1ha,45,520,56
+2025,16,tavbcho,The Academy - IN 16 - 1,g16tavbc1ho,46,517,55
+2025,16,alliagl,1st Alliance VBC- IL 16 - 2,g16allia2gl,47,515,54
+2025,16,allvbso,Alliance VBC - TN 16 - 1,g16allvb1so,47,515,54
+2025,16,premrgp,Premier - NE Volleyball 16 - 1,g16premr1gp,47,515,54
+2025,16,skyhigl,Sky High VBC- IL 16 - 1,g16skyhi1gl,47,515,54
+2025,16,tavhols,TAV Houston 16 - 1,g16tavho1ls,47,515,54
+2025,16,aretent,Arete Athletics 16 - 1,g16arete1nt,52,510,49
+2025,16,dakwaps,DaKine Warriors 16 Surf (PS),g16dakwa1ps,52,510,49
+2025,16,excelnt,Excel Volleyball Club 16 - 1,g16excel1nt,52,510,49
+2025,16,idcrsim,Idaho Crush VB- ID 16 - 1,g16idcrs1im,52,510,49
+2025,16,munvbho,Munciana- IN 16 - 1,g16munvb1ho,52,510,49
+2025,16,chargok,Oklahoma Charge Volleyball 16 - 4,g16charg4ok,52,510,49
+2025,16,pevbant,Peak VA 16 Blue (NT),g16pevba1nt,52,510,49
+2025,16,ncvbacr,Academy - NC 16 - 1,g16ncvba1cr,59,507,42
+2025,16,houjrls,Houston Juniors 16 - 1,g16houjr1ls,59,507,42
+2025,16,gpontfl,GP 16 Rox (FL),g16gpont1fl,61,505,40
+2025,16,mievalk,Michigan Elite Volleyball Academy 16 - 1,g16mieva1lk,62,502,39
+2025,16,ajvbals,Austin Junior Volleyball 16 - 1,g16ajvba1ls,63,500,38
+2025,16,caruncr,Carolina Union Vbc 16 - 1,g16carun1cr,63,500,38
+2025,16,msprtov,Mintonette Sports 16 - 2,g16msprt2ov,63,500,38
+2025,16,pvakcha,PVA- MO 16 - 1,g16pvakc1ha,63,500,38
+2025,16,aspiraz,Aspire Volleyball - AZ 16 - 1,g16aspir1az,67,498,34
+2025,16,iautdia,Iowa United 16 - 1,g16iautd1ia,68,495,33
+2025,16,frogsnt,MadFrog VBC 16 - 2,g16frogs2nt,68,495,33
+2025,16,norcorm,NORCO- CO 16 - 1,g16norco1rm,68,495,33
+2025,16,scvbcsc,S Cal VBC- CA 16 - 1,g16scvbc1sc,68,495,33
+2025,16,phpvbho,PineappleHP 16-1 (HO) (39),g16phpvb1ho,72,492,29
+2025,16,POHAKHA,Pohaku VBC 16 - 1,G16POHAK1HA,72,492,29
+2025,16,tribefl,Tribe VB- FL 16 - 1,g16tribe1fl,72,492,29
+2025,16,afiveso,A5 Mizuno- GA 16 - 2,g16afive2so,75,490,26
+2025,16,cojrsrm,CoJo's 16 - 1,g16cojrs1rm,75,490,26
+2025,16,premrnt,Premier- TX 16 - 1,g16premr1nt,75,490,26
+2025,16,stvacls,South Texas Volleyball Academy 16 - 1,g16stvac1ls,75,490,26
+2025,16,onevbaz,COV 16 - 1,g16onevb1az,79,488,22
+2025,16,pghelke,PGH Elite VBA - PA 16 - 1,g16pghel1ke,80,487,21
+2025,16,sajvbls,SA Juniors 16 Adidas (LS),g16sajvb1ls,81,485,20
+2025,16,trnglcr,Triangle VBC 16 - 1,g16trngl1cr,81,485,20
+2025,16,advergl,Adversity VBC - IL 16 - 1,g16adver1gl,83,482,18
+2025,16,aperfls,Austin Performance 16 - 1,g16aperf1ls,84,480,17
+2025,16,clubvim,Club V 16 - 2,g16clubv2im,84,480,17
+2025,16,hnlvbah,HNL Volleyball 16 Black (AH) (74),g16hnlvb1ah,84,480,17
+2025,16,akivapr,KIVA- KY 16 - 1,g16akiva1pr,84,480,17
+2025,16,nliteno,Mizuno N Lights- MN 16 - 2,g16nlite2no,84,480,17
+2025,16,coastsc,Coast VBC - CA 16 - 1,g16coast1sc,89,475,12
+2025,16,fovbclk,Far Out- MI 16 - 1,g16fovbc1lk,89,475,12
+2025,16,skylnfl,Jax's Skyline VBC - FL 16 - 1,g16skyln1fl,89,475,12
+2025,16,sunshsc,Sunshine VBC- CA 16 - 2,g16sunsh2sc,89,475,12
+2025,16,actyvsc,Actyve VBC- CA 16 - 1,g16actyv1sc,93,472,8
+2025,16,legvclk,Legacy VBC - MI 16 - 2,g16legvc2lk,94,470,7
+2025,16,mlwstbg,Milwaukee Sting VBC 16 - 1,g16mlwst1bg,94,470,7
+2025,16,spserah,SASVBC- HI 16 - 1,G16spser1ah,94,470,7
+2025,16,txadvnt,TAV 16 - 3,g16txadv3nt,94,470,7
+2025,16,mavbcha,Asics MAVS- KS 16 - 1,g16mavbc1ha,98,467,3
+2025,16,tavbjho,Boiler Jrs VBC- IN 16 - 1,g16tavbj1ho,99,465,2
+2025,16,elevaov,Elevation - Sports Express 16 - 2,g16eleva2ov,99,465,2
+2025,16,lexvbpr,Lexington UVBC- KY 16 - 1,g16lexvb1pr,99,465,2
+2025,16,otbvafl,OTVA- FL 16 - 2,g16otbva2fl,99,465,2
+2025,16,otbvafl,OTVA- FL 16 - 3,g16otbva3fl,99,465,2
+2025,16,premrgp,Premier - NE Volleyball 16 - 2,g16premr2gp,99,465,2
+2025,16,unitesc,UA- CA 16 - 1,g16unite1sc,99,465,2
+2025,17,txadvnt,TAV 17 - 1,g17txadv1nt,1,662,100
+2025,17,hoskyls,Houston Skyline Jr 17 - 1,g17hosky1ls,2,630,99
+2025,17,wpvcbfl,Winter Park VBC- FL 17 - 1,g17wpvcb1fl,3,622,98
+2025,17,afiveso,A5 Mizuno- GA 17 - 1,g17afive1so,4,610,97
+2025,17,skylnnt,Dallas Skyline Jr 17 - 1,g17skyln1nt,5,605,96
+2025,17,scvbcsc,S Cal VBC- CA 17 - 1,g17scvbc1sc,5,605,96
+2025,17,frogsnt,MadFrog VBC 17 - 1,g17frogs1nt,7,602,94
+2025,17,metroch,Metro VBC- DC 17 - 1,g17metro1ch,8,585,93
+2025,17,alliagl,1st Alliance VBC- IL 17 - 1,g17allia1gl,9,580,92
+2025,17,askylls,Austin Skyline 17 - 1,g17askyl1ls,9,580,92
+2025,17,clubvim,Club V 17 - 1,g17clubv1im,9,580,92
+2025,17,legvclk,Legacy VBC - MI 17 - 1,g17legvc1lk,9,580,92
+2025,17,msprtov,Mintonette Sports 17 - 1,g17msprt1ov,9,580,92
+2025,17,wvevbsc,Wave - CA 17 - 1,g17wvevb1sc,14,575,87
+2025,17,idcrsim,Idaho Crush VB- ID 17 - 1,g17idcrs1im,15,570,86
+2025,17,mlwstbg,Milwaukee Sting VBC 17 - 1,g17mlwst1bg,15,570,86
+2025,17,vsionnc,Vision VBC- CA 17 - 1,g17vsion1nc,15,570,86
+2025,17,stormaz,AZ Storm 17 - 1,g17storm1az,18,562,83
+2025,17,phpvbho,PineappleHP 17-1 (HO) (29),g17phpvb1ho,19,560,82
+2025,17,tavbjho,Boiler Jrs VBC- IN 17 - 1,g17tavbj1ho,20,555,81
+2025,17,nkyvcpr,NKYVC- KY 17 - 1,g17nkyvc1pr,20,555,81
+2025,17,powerha,KC Power- KS 17 - 1,g17power1ha,22,552,79
+2025,17,tribefl,Tribe VB- FL 17 - 1,g17tribe1fl,22,552,79
+2025,17,azskyaz,AZ Sky 17 - 1,g17azsky1az,24,550,77
+2025,17,elevaov,Elevation - Sports Express 17 - 1,g17eleva1ov,25,545,76
+2025,17,houjrls,Houston Juniors 17 - 1,g17houjr1ls,25,545,76
+2025,17,premrgp,Premier - NE Volleyball 17 - 1,g17premr1gp,25,545,76
+2025,17,coastsc,Coast VBC - CA 17 - 1,g17coast1sc,28,540,73
+2025,17,gpontfl,GP 17 Rox (FL),g17gpont1fl,28,540,73
+2025,17,ievbcgl,Illini Elite 17 - 1,g17ievbc1gl,28,540,73
+2025,17,mavbcha,Asics MAVS- KS 17 - 1,g17mavbc1ha,31,537,70
+2025,17,pohakha,Pohaku VBC 17 - 1,g17pohak1ha,31,537,70
+2025,17,akivapr,KIVA- KY 17 - 1,g17akiva1pr,33,535,68
+2025,17,milonsc,Mizuno LB- CA 17 - 1,g17milon1sc,34,532,67
+2025,17,1unvbnt,1United 17 - 1,g171unvb1nt,35,530,66
+2025,17,ncvbacr,Academy - NC 17 - 1,g17ncvba1cr,35,530,66
+2025,17,excelnt,Excel Volleyball Club 17 - 1,g17excel1nt,35,530,66
+2025,17,tolvcov,TVC - OH 17 - 1,g17tolvc1ov,35,530,66
+2025,17,msprtov,Mintonette Sports 17 - 2,g17msprt2ov,39,525,62
+2025,17,op2vbok,Oklahoma Peak Performance 17 - 1,g17op2vb1ok,40,520,61
+2025,17,sudnips,SIVBC 17 Storm (PS),g17sudni1ps,41,517,60
+2025,17,mnselno,MN Select- MN 17 - 1,g17mnsel1no,42,515,59
+2025,17,forznsc,Forza1 North- CA 17 - 1,g17forzn1sc,43,512,58
+2025,17,mievalk,Michigan Elite Volleyball Academy 17 - 1,g17mieva1lk,44,510,57
+2025,17,nliteno,Mizuno N Lights- MN 17 - 1,g17nlite1no,44,510,57
+2025,17,hsvbals,Houston Stellar 17 - 1,g17hsvba1ls,46,505,55
+2025,17,rwdthgw,Rockwood Thunder 17 - 1,g17rwdth1gw,46,505,55
+2025,17,forcenc,SynergyForce- CA 17 - 1,g17force1nc,46,505,55
+2025,17,txadvnt,TAV 17 - 2,g17txadv2nt,46,505,55
+2025,17,tavhols,TAV Houston 17 - 1,g17tavho1ls,46,505,55
+2025,17,ecpwrke,EC Power 17 - 1,g17ecpwr1ke,51,500,50
+2025,17,frvbcrm,Front Range VBC- CO 17 - 1,g17frvbc1rm,51,500,50
+2025,17,stvacls,South Texas Volleyball Academy 17 - 1,g17stvac1ls,51,500,50
+2025,17,trnglcr,Triangle VBC 17 - 1,g17trngl1cr,51,500,50
+2025,17,nonamfl,No Name- FL 17 - 1,g17nonam1fl,55,497,46
+2025,17,brusasc,BRUSA 17-1 William (SC),g17brusa1sc,56,495,45
+2025,17,tmdynha,Dynasty VB- KS 17 - 1,g17tmdyn1ha,56,495,45
+2025,17,fightha,Fight Club- KS 17 - 1,g17fight1ha,56,495,45
+2025,17,revbcho,Rev 17 - 1,g17revbc1ho,56,495,45
+2025,17,revolaz,Revolution - AZ 17 - 1,g17revol1az,56,495,45
+2025,17,starspm,Stars VBC 17 - 1,g17stars1pm,56,495,45
+2025,17,tavbcho,The Academy - IN 17 - 1,g17tavbc1ho,56,495,45
+2025,17,jtaavfl,Jupiter VBC- FL 17 - 1,g17jtaav1fl,63,492,38
+2025,17,norcorm,NORCO- CO 17 - 1,g17norco1rm,63,492,38
+2025,17,afiveso,A5 Mizuno- GA 17 - 2,g17afive2so,65,490,36
+2025,17,kairono,Kairos VBC - SD 17 - 1,g17kairo1no,65,490,36
+2025,17,sunshsc,Sunshine VBC- CA 17 - 1,g17sunsh1sc,65,490,36
+2025,17,tristpr,Tri-State Elite- KY 17 - 1,g17trist1pr,65,490,36
+2025,17,athence,Athena VBC 17 - 1,g17athen1ce,69,485,32
+2025,17,hpstlgw,HPSTL 17 - 1,g17hpstl1gw,69,485,32
+2025,17,integnt,Integrity VBC - TX 17 - 1,g17integ1nt,69,485,32
+2025,17,legvclk,Legacy VBC - MI 17 - 2,g17legvc2lk,69,485,32
+2025,17,otbvafl,OTVA- FL 17 - 1,g17otbva1fl,69,485,32
+2025,17,tstrtsc,Tstreet Volleyball Club 17 - 1,g17tstrt1sc,69,485,32
+2025,17,unionpr,UNION - IN 17 - 1,g17union1pr,69,485,32
+2025,17,kuikaah,Ku Ikahi VBC- HI 17 - 1,g17kuika1ah,76,482,25
+2025,17,a4volsc,A4 VBC - CA 17 - 1,g17a4vol1sc,77,480,24
+2025,17,acavcov,AVC - OH 17 - 1,g17acavc1ov,77,480,24
+2025,17,clubvim,Club V 17 - 2,g17clubv2im,77,480,24
+2025,17,cojrsrm,CoJo's 17 - 1,g17cojrs1rm,77,480,24
+2025,17,cpavbev,College Preparatory Academy 17 - 1,g17cpavb1ev,77,480,24
+2025,17,frogsnt,MadFrog VBC 17 - 2,g17frogs2nt,77,480,24
+2025,17,otbvafl,OTVA- FL 17 - 3,g17otbva3fl,77,480,24
+2025,17,wvevbsc,Wave - CA 17 - 2,g17wvevb2sc,77,480,24
+2025,17,arvcasu,ARVC Adidas 17 - 1,g17arvca1su,85,475,16
+2025,17,coastsc,Coast VBC - CA 17 - 2,g17coast2sc,85,475,16
+2025,17,skylnnt,Dallas Skyline Jr 17 - 2,g17skyln2nt,85,475,16
+2025,17,mlwstbg,Milwaukee Sting VBC 17 - 2,g17mlwst2bg,85,475,16
+2025,17,mlwstbg,Milwaukee Sting VBC 17 - 4,g17mlwst4bg,85,475,16
+2025,17,ojvbcde,Ozark Juniors VB- AR 17 - 1,g17ojvbc1de,85,475,16
+2025,17,absolnc,Absolute VBC- CA 17 - 1,g17absol1nc,91,470,10
+2025,17,alamols,Alamo VBA 17 - 1,g17alamo1ls,91,470,10
+2025,17,avatxls,AVA of Texas 17 - 1,g17avatx1ls,91,470,10
+2025,17,ccityho,CCVC- IN 17 - 1,g17ccity1ho,91,470,10
+2025,17,hoskyls,Houston Skyline Jr 17 - 2,g17hosky2ls,91,470,10
+2025,17,npjvbce,North Pacific Juniors 17 - 1,g17npjvb1ce,91,470,10
+2025,17,rhvbcso,Rhythm 171 (SO) (16),g17rhvbc1so,91,470,10
+2025,17,txtorls,Texas Tornados 17 - 1,g17txtor1ls,91,470,10
+2025,17,tivbcho,TI Elite- IN 17 - 1,g17tivbc1ho,91,470,10
+2025,17,trnglcr,Triangle VBC 17 - 2,g17trngl2cr,91,470,10
+2025,18,stormaz,AZ Storm 18 - 1,g18storm1az,1,635,100
+2025,18,wvevbsc,Wave - CA 18 - 1,g18wvevb1sc,1,635,100
+2025,18,coastsc,Coast VBC - CA 18 - 1,g18coast1sc,3,625,98
+2025,18,clubvim,Club V 18 - 1,g18clubv1im,4,613,97
+2025,18,munvbho,Munciana- IN 18 - 1,g18munvb1ho,5,605,96
+2025,18,alliagl,1st Alliance VBC- IL 18 - 1,g18allia1gl,6,602,95
+2025,18,spvbcgl,Sports Perf- Illinois 18 - 1,g18spvbc1gl,7,595,94
+2025,18,tribefl,Tribe VB- FL 18 - 1,g18tribe1fl,8,585,93
+2025,18,NPJVBCE,North Pacific Juniors 18 - 1,G18NPJVB1CE,9,583,92
+2025,18,cojrsrm,CoJo's 18 - 1,g18cojrs1rm,10,575,91
+2025,18,mievalk,Michigan Elite Volleyball Academy 18 - 1,g18mieva1lk,10,575,91
+2025,18,akivapr,KIVA- KY 18 - 1,g18akiva1pr,12,572,89
+2025,18,fcelibg,FC Elite 18 - 1,g18fceli1bg,13,570,88
+2025,18,norcanc,NorCal VBC- CA 18 - 1,g18norca1nc,14,568,87
+2025,18,houjrls,Houston Juniors 18 - 1,g18houjr1ls,15,565,86
+2025,18,ccityho,CCVC- IN 18 - 1,g18ccity1ho,16,562,85
+2025,18,mavbcha,Asics MAVS- KS 18 - 1,g18mavbc1ha,17,560,84
+2025,18,drivent,Drive Nation Volleyball Club 18 - 1,g18drive1nt,17,560,84
+2025,18,excelnt,Excel Volleyball Club 18 - 1,g18excel1nt,17,560,84
+2025,18,skylnnt,Dallas Skyline Jr 18 - 1,g18skyln1nt,20,555,81
+2025,18,hoskyls,Houston Skyline Jr 18 - 1,g18hosky1ls,20,555,81
+2025,18,savbcsc,SAVC - CA 18 - 1,g18savbc1sc,20,555,81
+2025,18,rwdthgw,Rockwood Thunder 18 - 1,g18rwdth1gw,23,550,78
+2025,18,vcnebgp,VcNebraska 18 - 1,g18vcneb1gp,23,550,78
+2025,18,adrvaia,Adrenaline VBA - IA 18 - 1,g18adrva1ia,25,547,76
+2025,18,nkyvcpr,NKYVC- KY 18 - 1,g18nkyvc1pr,25,547,76
+2025,18,acavcov,AVC - OH 18 - 1,g18acavc1ov,27,545,74
+2025,18,powerha,KC Power- KS 18 - 1,g18power1ha,27,545,74
+2025,18,mlwstbg,Milwaukee Sting VBC 18 - 1,g18mlwst1bg,27,545,74
+2025,18,txadvnt,TAV 18 - 1,g18txadv1nt,27,545,74
+2025,18,vsionnc,Vision VBC- CA 18 - 1,g18vsion1nc,31,543,70
+2025,18,fovbclk,Far Out- MI 18 - 1,g18fovbc1lk,32,540,69
+2025,18,milonsc,Mizuno LB- CA 18 - 1,g18milon1sc,32,540,69
+2025,18,powerok,Tulsa Power 18 - 1,g18power1ok,32,540,69
+2025,18,legvclk,Legacy VBC - MI 18 - 1,g18legvc1lk,35,535,66
+2025,18,otbvafl,OTVA- FL 18 - 1,g18otbva1fl,35,535,66
+2025,18,pvakcha,PVA- MO 18 - 1,g18pvakc1ha,35,535,66
+2025,18,caruncr,Carolina Union Vbc 18 - 1,g18carun1cr,38,530,63
+2025,18,frogsnt,MadFrog VBC 18 - 1,g18frogs1nt,38,530,63
+2025,18,metroch,Metro VBC- DC 18 - 1,g18metro1ch,38,530,63
+2025,18,tristpr,Tri-State Elite- KY 18 - 1,g18trist1pr,38,530,63
+2025,18,srfsdsc,Surfside VBC- CA 18 - 1,G18srfsd1sc,42,525,59
+2025,18,afiveso,A5 Mizuno- GA 18 - 1,g18afive1so,43,520,58
+2025,18,ajvbals,Austin Junior Volleyball 18 - 1,g18ajvba1ls,43,520,58
+2025,18,azskyaz,AZ Sky 18 - 1,g18azsky1az,43,520,58
+2025,18,msprtov,Mintonette Sports 18 - 1,g18msprt1ov,43,520,58
+2025,18,premrgp,Premier - NE Volleyball 18 - 1,g18premr1gp,43,520,58
+2025,18,afiveso,A5 Mizuno- GA 18 - 2,g18afive2so,48,515,53
+2025,18,mavseha,MAVS 816 18-1,g18mavse1ha,49,513,52
+2025,18,elevaov,Elevation - Sports Express 18 - 1,g18eleva1ov,50,510,51
+2025,18,premrnt,Premier- TX 18 - 1,g18premr1nt,50,510,51
+2025,18,mancefl,PVA 18 - 1,g18mance1fl,50,510,51
+2025,18,spvbcgl,Sports Perf- IL 18 - 2,g18spvbc2gl,50,510,51
+2025,18,tavbcho,The Academy - IN 18 - 1,g18tavbc1ho,50,510,51
+2025,18,onevbaz,COV 18 - 1,g18onevb1az,55,505,46
+2025,18,gpontfl,GP 18 Rox,g18gpont1fl,55,505,46
+2025,18,otbvafl,OTVA- FL 18 - 2,g18otbva2fl,55,505,46
+2025,18,alliagl,1st Alliance VBC- IL 18 - 2,g18allia2gl,58,500,43
+2025,18,ievbcgl,Illini Elite 18 - 1,g18ievbc1gl,58,500,43
+2025,18,starspm,Stars VBC 18 - 1,g18stars1pm,58,500,43
+2025,18,aperfls,Austin Performance 18 - 1,g18aperf1ls,61,495,40
+2025,18,forzasc,Forza1- CA 18 - 1,g18forza1sc,62,490,39
+2025,18,sealbsc,Seal Beach VBC- CA 18 - 1,g18sealb1sc,62,490,39
+2025,18,trnglcr,Triangle VBC 18 - 1,g18trngl1cr,62,490,39
+2025,18,nonamfl,No Name- FL 18 - 1,g18nonam1fl,65,487,36
+2025,18,a4volsc,A4 VBC - CA 18 - 1,g18a4vol1sc,66,485,35
+2025,18,mnselno,MN Select- MN 18 - 1,g18mnsel1no,66,485,35
+2025,18,tstrtsc,Tstreet Volleyball Club 18 - 1,g18tstrt1sc,66,485,35
+2025,18,alamols,Alamo VBA 18 - 1,g18alamo1ls,69,480,32
+2025,18,rvjrsod,Coastal RVJ - VA 18 - 1,g18rvjrs1od,69,480,32
+2025,18,kairono,Kairos VBC - SD 18 - 1,g18kairo1no,69,480,32
+2025,18,legacsc,Legacy VBC - SCa 18 - 1,G18legac1sc,69,480,32
+2025,18,premrov,Premier VBC - OH 18 - 1,g18premr1ov,69,480,32
+2025,18,tpfepsu,Texas Performance 18 - 1,g18tpfep1su,69,480,32
+2025,18,kokrono,Kokoro Volleyball 18 - 1,g18kokro1no,75,477,26
+2025,18,clubvim,Club V 18 - 2,g18clubv2im,76,475,25
+2025,18,ktvbcso,K2 18 - 1,g18ktvbc1so,76,475,25
+2025,18,akivapr,KIVA- KY 18 - 2,g18akiva2pr,76,475,25
+2025,18,revolaz,Revolution - AZ 18 - 1,g18revol1az,76,475,25
+2025,18,threefl,305 VBC - FL 18 - 1,g18three1fl,80,470,21
+2025,18,ncvbacr,Academy - NC 18 - 1,g18ncvba1cr,80,470,21
+2025,18,advergl,Adversity VBC - IL 18 - 1,g18adver1gl,80,470,21
+2025,18,tmdynha,Dynasty VB- KS 18 - 1,g18tmdyn1ha,80,470,21
+2025,18,skylnfl,Jax's Skyline VBC - FL 18 - 1,g18skyln1fl,80,470,21
+2025,18,mavaspr,MidAmerica VBA- KY 18 - 1,g18mavas1pr,80,470,21
+2025,18,opuvbfl,Ocala Power VBA- FL 18 - 1,g18opuvb1fl,80,470,21
+2025,18,op2vbok,Oklahoma Peak Performance 18 - 1,g18op2vb1ok,80,470,21
+2025,18,parvbch,Paramount Vbc 18 - 1,g18parvb1ch,80,470,21
+2025,18,pwrpxia,Power Plex VBC- IA 18 - 1,g18pwrpx1ia,89,465,12
+2025,18,vejvbch,VA Elite 18 - 1,g18vejvb1ch,89,465,12
+2025,18,fmvbcde,501 Volley - AR 18 - 1,g18fmvbc1de,91,460,10
+2025,18,excelnt,Excel Volleyball Club 18 - 2,g18excel2nt,91,460,10
+2025,18,mivbalk,MVA - MI 18 - 1,g18mivba1lk,91,460,10
+2025,18,sunshsc,Sunshine VBC- CA 18 - 1,g18sunsh1sc,91,460,10
+2025,18,modvbgl,MOD Elite G18 Blue (GL) (10),g18modvb1gl,95,457,6
+2025,18,bakvcsc,Bakersfield VBC - CA 18 - 1,g18bakvc1sc,96,455,5
+2025,18,motvpbg,Motion Volleyball Program 18 - 1,g18motvp1bg,96,455,5
+2025,18,premrgp,Premier - NE Volleyball 18 - 2,g18premr2gp,96,455,5
+2025,18,vcutdgl,VC United - IL 18 - 1,g18vcutd1gl,96,455,5
