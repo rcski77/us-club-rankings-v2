@@ -747,6 +747,24 @@ confirmed as in-scope for the "combine for club rankings" request — a real gap
 grouped club's history predates this app's own computed rankings, flagged for a
 follow-up if it comes up.
 
+**Club ranking groups extended to the 5-year aggregate (2026-08-06, follow-up same
+day).** The gap immediately above came up for real: real FORZA1/FORZA1 NORTH data
+(now combined via a ranking group) correctly showed one row on `/admin/club-rankings`
+(current season) but still showed two separate rows on
+`/admin/club-rankings/five-year`. `computeFiveYearClubRankingForYear()`
+(`computeFiveYearClubRanking.ts`) now redirects each `ClubAnnualScore.clubId` through
+`rankingGroupPrimaryClubId` before rolling it up into `pointsByClub`, mirroring
+`computeClubRankingForSeason()`'s own redirect — same pattern, this file just hadn't
+been touched when ranking groups first shipped. Where both the primary and a member
+have a real score for the same year, the higher one wins (not summed — same "best of
+the two" rule the merge-conflict fix above just established, consistent since these
+are already-final best-5-of-6-derived scores, not raw additive points, and matches
+how a group's current-season score already picks each age group's single best team
+across members rather than combining them). Verified against real dev data: recomputing
+the 2022-2026 window collapsed FORZA1/FORZA1 NORTH from two rows to one
+("FORZA1 26.48 ...", `FORZA1 NORTH` no longer appearing) with no change to any other
+club's total.
+
 **Merge/ranking-group admin UI moved off every club's own page, same day.** The
 initial version of both features above put their action UI (search box, candidate
 checkboxes, submit) directly on `/admin/clubs/[clubId]` — live on every one of the
