@@ -1,0 +1,182 @@
+import { prisma } from "@/lib/prisma";
+import Link from "next/link";
+import { brand } from "@/lib/brand";
+import { tableWrapClass, thClass, tdClass, numThClass, numTdClass, tbodyClass, RankBadge } from "@/lib/publicUi";
+import { FIVE_YEAR_WEIGHTS } from "@/lib/ranking/fiveYearClubRanking";
+import { DEFAULT_PAGE_SIZE, Pagination, parsePage } from "../../Pagination";
+
+const SOURCES = [
+  { value: "NPS", label: "NPS" },
+  { value: "COMBINED", label: "Combined" },
+] as const;
+
+export default async function PublicFiveYearClubRankingsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ endYear?: string; page?: string }>;
+}) {
+  const { endYear: endYearParam, page: pageParam } = await searchParams;
+  const page = parsePage(pageParam);
+
+  const [availableYearRows, seasons] = await Promise.all([
+    prisma.clubFiveYearRankingResult.findMany({
+      distinct: ["endYear"],
+      select: { endYear: true },
+      orderBy: { endYear: "desc" },
+    }),
+    // Just to link the NPS/Combined pills back with a real season id, same convention
+    // as /rankings/club-rankings itself.
+    prisma.season.findMany({ orderBy: { startDate: "desc" } }),
+  ]);
+  const availableYears = availableYearRows.map((y) => y.endYear);
+  const defaultSeason = seasons.find((s) => s.isActive) ?? seasons[0];
+  const endYear = Number(endYearParam) || availableYears[0];
+
+  return (
+    <div>
+      <h1 className="mb-6 text-2xl font-semibold">Club Rankings</h1>
+
+      <div className="mb-6 flex flex-wrap gap-2">
+        {defaultSeason &&
+          SOURCES.map((s) => (
+            <Link
+              key={s.value}
+              href={`/rankings/club-rankings?${new URLSearchParams({ season: defaultSeason.id, source: s.value })}`}
+              className="rounded-full border border-slate-200 px-4 py-1.5 text-sm text-slate-600 transition-colors hover:border-slate-300 hover:bg-slate-50"
+            >
+              {s.label}
+            </Link>
+          ))}
+        <span
+          className="rounded-full px-4 py-1.5 text-sm font-semibold text-white shadow-sm"
+          style={{ backgroundColor: brand.purple }}
+        >
+          5-Year Aggregate
+        </span>
+      </div>
+
+      {availableYears.length === 0 || !endYear ? (
+        <p className="text-sm text-slate-500">No 5-year rankings available yet.</p>
+      ) : (
+        <>
+          <p className="mb-4 text-sm text-slate-500">
+            Recency-weighted blend of each year&apos;s club-level score (
+            {FIVE_YEAR_WEIGHTS.map((w) => `${w * 100}%`).join(" / ")}, oldest to newest) — used for NIT invites
+            and housing priority.
+          </p>
+
+          {availableYears.length > 1 && (
+            <div className="mb-6 flex flex-wrap gap-2">
+              {availableYears.map((y) => (
+                <Link
+                  key={y}
+                  href={`/rankings/club-rankings/five-year?${new URLSearchParams({ endYear: String(y) })}`}
+                  className={
+                    y === endYear
+                      ? "rounded-full px-4 py-1.5 text-sm font-semibold text-white shadow-sm"
+                      : "rounded-full border border-slate-200 px-4 py-1.5 text-sm text-slate-600 transition-colors hover:border-slate-300 hover:bg-slate-50"
+                  }
+                  style={y === endYear ? { backgroundColor: brand.teal } : undefined}
+                >
+                  {y - 4}–{y}
+                </Link>
+              ))}
+            </div>
+          )}
+
+          <FiveYearClubRankingTable endYear={endYear} page={page} />
+        </>
+      )}
+    </div>
+  );
+}
+
+async function FiveYearClubRankingTable({ endYear, page }: { endYear: number; page: number }) {
+  const totalCount = await prisma.clubFiveYearRankingResult.count({ where: { endYear } });
+  const results = await prisma.clubFiveYearRankingResult.findMany({
+    where: { endYear },
+    include: { club: true, contributions: { orderBy: { year: "asc" } } },
+    orderBy: { rank: "asc" },
+    skip: (page - 1) * DEFAULT_PAGE_SIZE,
+    take: DEFAULT_PAGE_SIZE,
+  });
+  const computedAt = results[0]?.computedAt;
+  const years = Array.from({ length: FIVE_YEAR_WEIGHTS.length }, (_, i) => endYear - (FIVE_YEAR_WEIGHTS.length - 1 - i));
+
+  return (
+    <>
+      {computedAt && (
+        <p className="mb-4 text-sm text-slate-500">
+          Computed{" "}
+          {computedAt.toLocaleString("en-US", { timeZone: "America/New_York", timeZoneName: "short" })}
+        </p>
+      )}
+
+      <div className={tableWrapClass}>
+        <table className="w-full border-collapse text-sm">
+          <thead>
+            <tr style={{ backgroundColor: brand.purple }}>
+              <th className={numThClass}>Rank</th>
+              <th className={thClass}>Club</th>
+              <th className={numThClass}>5-Year Total</th>
+              {years.map((y, i) => (
+                <th key={y} className={numThClass}>
+                  {y} ({FIVE_YEAR_WEIGHTS[i] * 100}%)
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody className={tbodyClass}>
+            {results.map((r) => {
+              const byYear = new Map(r.contributions.map((c) => [c.year, c]));
+              return (
+                <tr key={r.id} className="relative cursor-pointer">
+                  <td className={numTdClass}>
+                    <RankBadge rank={r.rank} />
+                  </td>
+                  <td className={`${tdClass} max-w-[180px] truncate font-medium text-slate-900`}>
+                    <Link href={`/rankings/clubs/${r.club.id}`} className="after:absolute after:inset-0 hover:underline">
+                      {r.club.name}
+                    </Link>
+                  </td>
+                  <td className={`${numTdClass} font-semibold`} style={{ color: brand.purple }}>
+                    {r.totalPoints.toFixed(2)}
+                  </td>
+                  {years.map((y) => {
+                    const c = byYear.get(y);
+                    if (!c || !c.present) {
+                      return (
+                        <td key={y} className={`${numTdClass} text-slate-400`}>
+                          —
+                        </td>
+                      );
+                    }
+                    return (
+                      <td key={y} className={numTdClass}>
+                        {c.points.toFixed(2)}
+                      </td>
+                    );
+                  })}
+                </tr>
+              );
+            })}
+            {results.length === 0 && (
+              <tr>
+                <td className={tdClass} colSpan={3 + years.length}>
+                  No 5-year ranking available for {endYear - 4}–{endYear}.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+      <Pagination
+        page={page}
+        totalCount={totalCount}
+        pageSize={DEFAULT_PAGE_SIZE}
+        basePath="/rankings/club-rankings/five-year"
+        baseParams={new URLSearchParams({ endYear: String(endYear) })}
+      />
+    </>
+  );
+}
