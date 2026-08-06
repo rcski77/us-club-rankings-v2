@@ -57,6 +57,29 @@ model Club {
   state        String?
   zip          String?
   isActive     Boolean       @default(true)
+  mergedIntoClubId String?   // set when this club's history was merged into another
+  // Club (e.g. a real-world club merger under a new code, or an admin-corrected
+  // duplicate) -- see mergeClubsIntoTarget() in src/lib/club/mergeClubs.ts. The row
+  // itself is kept (not deleted) for audit trail/FK integrity on historical
+  // ImportRow/AuditFlag references; isActive is set to false alongside this so it
+  // drops out of normal club lists. Import resolution (resolve.ts) follows this
+  // pointer so a stray import row still using this club's old external code resolves
+  // to the surviving club instead of resurrecting this one.
+  mergedInto       Club?     @relation("ClubMerge", fields: [mergedIntoClubId], references: [id])
+  mergedClubs      Club[]    @relation("ClubMerge")
+  rankingGroupPrimaryClubId String? // set when this club stays fully independent
+  // (its own teams, its own imports, its own detail page) but its results should
+  // roll up into another club's ClubRankingResult for club-rankings purposes only --
+  // e.g. two active locations of one real program, each with its own external code
+  // (the "FORZA1 / FORZA1 NORTH" case). Unlike mergedIntoClubId, nothing else about
+  // this club changes: isActive stays true, Team rows stay put, and import
+  // resolution does NOT redirect through this pointer (each location keeps matching
+  // its own code). Only computeClubRankingForSeason() reads it, to fold this club's
+  // best-per-age-group teams into the target's rollup instead of publishing a
+  // separate (weaker, partial) ClubRankingResult for this club. Null on the target
+  // club itself and on every club not in a ranking group.
+  rankingGroupPrimary Club?  @relation("ClubRankingGroup", fields: [rankingGroupPrimaryClubId], references: [id])
+  rankingGroupMembers Club[] @relation("ClubRankingGroup")
   teams        Team[]
   contacts     ClubContact[]
   importRows   ImportRow[]

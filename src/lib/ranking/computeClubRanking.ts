@@ -47,15 +47,31 @@ export async function computeClubRankingForSeason(seasonId: string, source: Club
       where: { id: { in: [...ranksByTeam.keys()] } },
       select: { id: true, clubId: true },
     });
+
+    // A club with rankingGroupPrimaryClubId set stays fully independent (own teams,
+    // own imports) but its teams' best finishes should fold into another club's
+    // rollup instead of publishing their own separate, partial ClubRankingResult --
+    // see the field's comment on Club. Resolved per age-group batch (not once
+    // up front) since it's cheap and keeps this loop self-contained.
+    const clubIds = [...new Set(teams.map((t) => t.clubId).filter((id): id is string => id !== null))];
+    const clubs = clubIds.length
+      ? await prisma.club.findMany({
+          where: { id: { in: clubIds } },
+          select: { id: true, rankingGroupPrimaryClubId: true },
+        })
+      : [];
+    const rankingClubId = new Map(clubs.map((c) => [c.id, c.rankingGroupPrimaryClubId ?? c.id]));
+
     for (const team of teams) {
       if (!team.clubId) continue; // unlinked team -- no club to roll up into
+      const targetClubId = rankingClubId.get(team.clubId) ?? team.clubId;
       const rank = ranksByTeam.get(team.id)!;
-      const entry = bestByClub.get(team.clubId) ?? {};
+      const entry = bestByClub.get(targetClubId) ?? {};
       const existing = entry[ageGroup];
       if (!existing || rank < existing.rank) {
         entry[ageGroup] = { teamId: team.id, rank };
       }
-      bestByClub.set(team.clubId, entry);
+      bestByClub.set(targetClubId, entry);
     }
   }
 

@@ -1,42 +1,18 @@
 import { prisma } from "@/lib/prisma";
-import { notFound, redirect } from "next/navigation";
-import { revalidatePath } from "next/cache";
+import { notFound } from "next/navigation";
 import Link from "next/link";
 import {
   inputClass,
   selectClass,
   primaryButtonClass,
+  smallSecondaryButtonClass,
   errorBannerClass,
   successBannerClass,
   tableClass,
   thClass,
   tdClass,
 } from "@/lib/ui";
-
-async function updateClub(clubId: string, formData: FormData) {
-  "use server";
-
-  const name = String(formData.get("name") ?? "").trim();
-  const regionId = String(formData.get("regionId") ?? "") || null;
-  const externalCode = String(formData.get("externalCode") ?? "").trim() || null;
-  const city = String(formData.get("city") ?? "").trim() || null;
-  const state = String(formData.get("state") ?? "").trim() || null;
-  const zip = String(formData.get("zip") ?? "").trim() || null;
-  const isActive = formData.get("isActive") === "on";
-
-  if (!name) {
-    redirect(`/admin/clubs/${clubId}?error=invalid`);
-  }
-
-  await prisma.club.update({
-    where: { id: clubId },
-    data: { name, regionId, externalCode, city, state, zip, isActive },
-  });
-
-  revalidatePath(`/admin/clubs/${clubId}`);
-  revalidatePath("/admin/clubs");
-  redirect(`/admin/clubs/${clubId}?success=1`);
-}
+import { updateClub, leaveRankingGroup } from "./actions";
 
 export default async function ClubDetailPage({
   params,
@@ -55,6 +31,10 @@ export default async function ClubDetailPage({
       include: {
         region: true,
         contacts: true,
+        mergedInto: true,
+        mergedClubs: { include: { region: true }, orderBy: { name: "asc" } },
+        rankingGroupPrimary: true,
+        rankingGroupMembers: { include: { region: true }, orderBy: { name: "asc" } },
         teams: {
           include: { seasons: { include: { season: true }, orderBy: { season: { startDate: "desc" } } } },
           orderBy: { name: "asc" },
@@ -67,6 +47,7 @@ export default async function ClubDetailPage({
   if (!club) notFound();
 
   const updateClubWithId = updateClub.bind(null, clubId);
+  const leaveRankingGroupWithId = leaveRankingGroup.bind(null, clubId);
 
   const sortedTeams = [...club.teams].sort((a, b) => {
     const aTs = activeSeason ? a.seasons.find((ts) => ts.seasonId === activeSeason.id) : undefined;
@@ -89,62 +70,168 @@ export default async function ClubDetailPage({
 
       {error === "invalid" && <p className={errorBannerClass}>Club name is required.</p>}
       {success === "1" && <p className={successBannerClass}>Club saved.</p>}
+      {success === "removed_from_group" && (
+        <p className={successBannerClass}>
+          Removed from the ranking group — this club will score on its own again next recompute.
+        </p>
+      )}
 
-      <section className="mb-8 max-w-lg">
-        <h2 className="mb-2 text-lg font-medium">Edit club</h2>
-        <form action={updateClubWithId} className="flex flex-col gap-3">
-          <label className="flex flex-col gap-1 text-sm">
-            Name
-            <input name="name" defaultValue={club.name} required className={inputClass} />
-          </label>
-          <label className="flex flex-col gap-1 text-sm">
-            Region
-            <select name="regionId" className={selectClass} defaultValue={club.regionId ?? ""}>
-              <option value="">(none)</option>
-              {regions.map((r) => (
-                <option key={r.id} value={r.id}>
-                  {r.code} — {r.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="flex flex-col gap-1 text-sm">
-            External code
-            <input
-              name="externalCode"
-              defaultValue={club.externalCode ?? ""}
-              placeholder="frogs"
-              className={`${inputClass} w-32`}
-            />
-          </label>
-          <div className="flex gap-3">
+      {club.mergedInto && (
+        <p className="mb-6 rounded bg-amber-50 p-3 text-sm text-amber-800">
+          This club was merged into{" "}
+          <Link href={`/admin/clubs/${club.mergedInto.id}`} prefetch={false} className="underline">
+            {club.mergedInto.name}
+          </Link>
+          . It&apos;s kept for historical reference only — edit actions here are disabled. Manage
+          merges from{" "}
+          <Link href="/admin/club-groups" className="underline">
+            Club Groups
+          </Link>
+          .
+        </p>
+      )}
+
+      {club.rankingGroupPrimary && (
+        <div className="mb-6 flex flex-wrap items-center gap-3 rounded bg-blue-50 p-3 text-sm text-blue-800">
+          <span>
+            This club&apos;s results are combined with{" "}
+            <Link href={`/admin/clubs/${club.rankingGroupPrimary.id}`} prefetch={false} className="underline">
+              {club.rankingGroupPrimary.name}
+            </Link>{" "}
+            for club rankings — it stays fully active otherwise (own teams, own imports), it just
+            won&apos;t get its own separate Club Rankings entry.
+          </span>
+          <form action={leaveRankingGroupWithId}>
+            <button type="submit" className={smallSecondaryButtonClass}>
+              Remove from ranking group
+            </button>
+          </form>
+        </div>
+      )}
+
+      {!club.mergedInto && (
+        <section className="mb-8 max-w-lg">
+          <h2 className="mb-2 text-lg font-medium">Edit club</h2>
+          <form action={updateClubWithId} className="flex flex-col gap-3">
             <label className="flex flex-col gap-1 text-sm">
-              City
-              <input name="city" defaultValue={club.city ?? ""} className={inputClass} />
+              Name
+              <input name="name" defaultValue={club.name} required className={inputClass} />
             </label>
             <label className="flex flex-col gap-1 text-sm">
-              State
+              Region
+              <select name="regionId" className={selectClass} defaultValue={club.regionId ?? ""}>
+                <option value="">(none)</option>
+                {regions.map((r) => (
+                  <option key={r.id} value={r.id}>
+                    {r.code} — {r.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="flex flex-col gap-1 text-sm">
+              External code
               <input
-                name="state"
-                defaultValue={club.state ?? ""}
-                maxLength={2}
-                className={`${inputClass} w-16`}
+                name="externalCode"
+                defaultValue={club.externalCode ?? ""}
+                placeholder="frogs"
+                className={`${inputClass} w-32`}
               />
             </label>
-            <label className="flex flex-col gap-1 text-sm">
-              Zip
-              <input name="zip" defaultValue={club.zip ?? ""} className={`${inputClass} w-24`} />
+            <div className="flex gap-3">
+              <label className="flex flex-col gap-1 text-sm">
+                City
+                <input name="city" defaultValue={club.city ?? ""} className={inputClass} />
+              </label>
+              <label className="flex flex-col gap-1 text-sm">
+                State
+                <input
+                  name="state"
+                  defaultValue={club.state ?? ""}
+                  maxLength={2}
+                  className={`${inputClass} w-16`}
+                />
+              </label>
+              <label className="flex flex-col gap-1 text-sm">
+                Zip
+                <input name="zip" defaultValue={club.zip ?? ""} className={`${inputClass} w-24`} />
+              </label>
+            </div>
+            <label className="flex items-center gap-2 text-sm">
+              <input name="isActive" type="checkbox" defaultChecked={club.isActive} />
+              Active
             </label>
-          </div>
-          <label className="flex items-center gap-2 text-sm">
-            <input name="isActive" type="checkbox" defaultChecked={club.isActive} />
-            Active
-          </label>
-          <button type="submit" className={`${primaryButtonClass} self-start`}>
-            Save
-          </button>
-        </form>
-      </section>
+            <button type="submit" className={`${primaryButtonClass} self-start`}>
+              Save
+            </button>
+          </form>
+        </section>
+      )}
+
+      {club.mergedClubs.length > 0 && (
+        <section className="mb-8">
+          <h2 className="mb-2 text-lg font-medium">Clubs merged into this one</h2>
+          <table className={`${tableClass} max-w-2xl`}>
+            <thead>
+              <tr>
+                <th className={thClass}>Name</th>
+                <th className={thClass}>Region</th>
+                <th className={thClass}>External code</th>
+              </tr>
+            </thead>
+            <tbody>
+              {club.mergedClubs.map((c) => (
+                <tr key={c.id}>
+                  <td className={tdClass}>
+                    <Link href={`/admin/clubs/${c.id}`} prefetch={false} className="text-slate-900 underline">
+                      {c.name}
+                    </Link>
+                  </td>
+                  <td className={tdClass}>{c.region?.code ?? ""}</td>
+                  <td className={tdClass}>{c.externalCode ?? ""}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </section>
+      )}
+
+      {club.rankingGroupMembers.length > 0 && (
+        <section className="mb-8">
+          <h2 className="mb-2 text-lg font-medium">Clubs combined with this one for rankings</h2>
+          <table className={`${tableClass} max-w-2xl`}>
+            <thead>
+              <tr>
+                <th className={thClass}>Name</th>
+                <th className={thClass}>Region</th>
+                <th className={thClass}>External code</th>
+              </tr>
+            </thead>
+            <tbody>
+              {club.rankingGroupMembers.map((c) => (
+                <tr key={c.id}>
+                  <td className={tdClass}>
+                    <Link href={`/admin/clubs/${c.id}`} prefetch={false} className="text-slate-900 underline">
+                      {c.name}
+                    </Link>
+                  </td>
+                  <td className={tdClass}>{c.region?.code ?? ""}</td>
+                  <td className={tdClass}>{c.externalCode ?? ""}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </section>
+      )}
+
+      {!club.mergedInto && !club.rankingGroupPrimary && club.mergedClubs.length === 0 && (
+        <p className="mb-8 text-sm text-slate-500">
+          To merge another club into this one, or combine it with another club for rankings, use{" "}
+          <Link href="/admin/club-groups" className="underline">
+            Club Groups
+          </Link>
+          .
+        </p>
+      )}
 
       <h2 className="mb-2 text-lg font-medium">Teams</h2>
       {activeSeason && (

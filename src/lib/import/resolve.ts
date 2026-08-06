@@ -28,7 +28,12 @@ type DivisionRef = {
 type RegionRef = { id: string; code: string };
 type TeamSeasonRef = { teamId: string; externalTeamCode: string | null; ageGroup: number };
 type TeamRef = { id: string; lineageKey: string | null };
-type ClubRef = { id: string; externalCode: string | null; regionId: string | null };
+type ClubRef = {
+  id: string;
+  externalCode: string | null;
+  regionId: string | null;
+  mergedIntoClubId: string | null;
+};
 
 type ResolveContext = {
   // A structural key (ageGroup/gender/tierLabel/tierLevel) can legitimately collide
@@ -311,6 +316,12 @@ function resolveRow(row: RowInput, ctx: ResolveContext) {
       if (inRegion.length === 1) {
         clubMatchType = "EXISTING";
         matchedClubId = inRegion[0].id;
+        if (inRegion[0].mergedIntoClubId) {
+          matchedClubId = inRegion[0].mergedIntoClubId;
+          messages.push(
+            `Club code "${decoded.clubExternalCode}" belongs to a club that was merged -- resolved to the surviving club.`,
+          );
+        }
       } else if (inRegion.length > 1) {
         clubMatchType = "AMBIGUOUS";
         escalate(
@@ -328,11 +339,16 @@ function resolveRow(row: RowInput, ctx: ResolveContext) {
       }
     } else if (candidates.length === 1) {
       clubMatchType = "EXISTING";
-      matchedClubId = candidates[0].id;
+      matchedClubId = candidates[0].mergedIntoClubId ?? candidates[0].id;
       escalate(
         "WARNING",
         `Region unresolved; matched club "${decoded.clubExternalCode}" by code alone.`,
       );
+      if (candidates[0].mergedIntoClubId) {
+        messages.push(
+          `Club code "${decoded.clubExternalCode}" belongs to a club that was merged -- resolved to the surviving club.`,
+        );
+      }
     } else if (candidates.length > 1) {
       clubMatchType = "AMBIGUOUS";
       escalate(
