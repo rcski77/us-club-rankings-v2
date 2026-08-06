@@ -134,6 +134,7 @@ async function FiveYearClubRankingTable({ endYear }: { endYear: number }) {
             <tr style={{ backgroundColor: brand.purple }}>
               <th className={numThClass}>Rank</th>
               <th className={thClass}>Club</th>
+              <th className={thClass}>State</th>
               <th className={numThClass}>5-Year Total</th>
               {years.map((y, i) => (
                 <th key={y} className={numThClass}>
@@ -155,6 +156,7 @@ async function FiveYearClubRankingTable({ endYear }: { endYear: number }) {
                       {r.club.name}
                     </Link>
                   </td>
+                  <td className={tdClass}>{r.club.state ?? "—"}</td>
                   <td className={`${numTdClass} font-semibold`} style={{ color: brand.purple }}>
                     {r.totalPoints.toFixed(2)}
                   </td>
@@ -178,7 +180,7 @@ async function FiveYearClubRankingTable({ endYear }: { endYear: number }) {
             })}
             {results.length === 0 && (
               <tr>
-                <td className={tdClass} colSpan={3 + years.length}>
+                <td className={tdClass} colSpan={4 + years.length}>
                   No 5-year ranking available for {endYear - 4}–{endYear}.
                 </td>
               </tr>
