@@ -4,6 +4,7 @@ import Link from "next/link";
 import {
   primaryButtonClass,
   successBannerClass,
+  errorBannerClass,
   inputClass,
   secondaryButtonClass,
   tableClass,
@@ -14,6 +15,7 @@ import {
 import {
   computeFiveYearClubRankingForYear,
   syncClubAnnualScoreFromSeason,
+  LEGACY_IMPORT_ALGORITHM_VERSION,
 } from "@/lib/ranking/computeFiveYearClubRanking";
 import { FIVE_YEAR_WEIGHTS } from "@/lib/ranking/fiveYearClubRanking";
 import { SubmitButton } from "@/components/SubmitButton";
@@ -29,7 +31,12 @@ async function recomputeFiveYearRanking(formData: FormData) {
   const endYear = Number(formData.get("endYear"));
   if (!endYear) redirect("/admin/club-rankings/five-year");
 
-  await computeFiveYearClubRankingForYear(endYear);
+  const result = await computeFiveYearClubRankingForYear(endYear);
+  if (!result.ok) {
+    redirect(
+      `/admin/club-rankings/five-year?${new URLSearchParams({ endYear: String(endYear), error: "legacy_window" })}`,
+    );
+  }
 
   redirect(`/admin/club-rankings/five-year?${new URLSearchParams({ endYear: String(endYear), recomputed: "1" })}`);
 }
@@ -50,9 +57,15 @@ async function syncSeason(formData: FormData) {
 export default async function FiveYearClubRankingsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ endYear?: string; recomputed?: string; synced?: string; syncedSource?: string }>;
+  searchParams: Promise<{
+    endYear?: string;
+    recomputed?: string;
+    synced?: string;
+    syncedSource?: string;
+    error?: string;
+  }>;
 }) {
-  const { endYear: endYearParam, recomputed, synced, syncedSource } = await searchParams;
+  const { endYear: endYearParam, recomputed, synced, syncedSource, error } = await searchParams;
 
   // Offer every endYear that either has ClubAnnualScore data to compute from, or
   // already has a computed result -- whichever is more, defaulting to the latest.
@@ -81,6 +94,7 @@ export default async function FiveYearClubRankingsPage({
     orderBy: { rank: "asc" },
   });
   const computedAt = results[0]?.computedAt;
+  const isLegacyWindow = results.some((r) => r.algorithmVersion === LEGACY_IMPORT_ALGORITHM_VERSION);
   const years = Array.from({ length: FIVE_YEAR_WEIGHTS.length }, (_, i) => endYear - (FIVE_YEAR_WEIGHTS.length - 1 - i));
 
   return (
@@ -126,6 +140,13 @@ export default async function FiveYearClubRankingsPage({
         </Link>
       </p>
 
+      {error === "legacy_window" && (
+        <p className={errorBannerClass}>
+          {endYear} is a legacy-imported window (from the workbook&apos;s &quot;5 Year to Publish&quot; sheet) —
+          there&apos;s no underlying 2017-2020 data in this app to recompute it from, so recompute is disabled to
+          avoid overwriting it with an incomplete result.
+        </p>
+      )}
       {recomputed === "1" && <p className={successBannerClass}>5-year ranking recomputed for {endYear}.</p>}
       {synced === "1" && (
         <p className={successBannerClass}>
@@ -153,10 +174,16 @@ export default async function FiveYearClubRankingsPage({
 
         <form action={recomputeFiveYearRanking}>
           <input type="hidden" name="endYear" value={endYear} />
-          <SubmitButton className={primaryButtonClass} pendingText="Recomputing…">
+          <SubmitButton className={primaryButtonClass} pendingText="Recomputing…" disabled={isLegacyWindow}>
             Recompute {endYear - 4}–{endYear}
           </SubmitButton>
         </form>
+        {isLegacyWindow && (
+          <p className="pb-2 text-xs text-slate-500">
+            Legacy-imported window — see &quot;5 Year to Publish&quot; in the source workbook. Not recomputable
+            (no underlying 2017-2020 data in this app).
+          </p>
+        )}
       </div>
 
       {seasons.length > 0 && (

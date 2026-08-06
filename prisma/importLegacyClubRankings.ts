@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { parse } from "csv-parse/sync";
 import { PrismaClient } from "../src/generated/prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
-import { uniqueSlug } from "../src/lib/slug";
+import { createLegacyClubResolver } from "./legacyClubResolver";
 
 // Imports the legacy v1 5-year club ranking workbook's already-computed output
 // (2021-2025 per-club-per-year totals, plus the 2025 per-age-group breakdown) as
@@ -35,15 +35,6 @@ type AgeGroupScoreRow = {
   clubPoints: string;
 };
 
-function decodeClubCode(code: string): { externalCode: string; regionCode: string } | null {
-  const trimmed = code.trim();
-  if (trimmed.length !== 7) return null;
-  return {
-    externalCode: trimmed.slice(0, 5).toLowerCase(),
-    regionCode: trimmed.slice(5, 7).toUpperCase(),
-  };
-}
-
 async function main() {
   const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
   const prisma = new PrismaClient({ adapter });
@@ -62,65 +53,11 @@ async function main() {
     skip_empty_lines: true,
   });
 
-  const regions = await prisma.region.findMany();
-  const regionByCode = new Map(regions.map((r) => [r.code, r]));
-
-  // clubCode (7-char) -> resolved Club.id, built up as rows are processed so repeat
-  // codes within/across both CSVs only hit the DB once each.
-  const clubIdByCode = new Map<string, string>();
-  let clubsMatched = 0;
-  let clubsCreated = 0;
-  const unresolvedRegionCodes = new Set<string>();
-  const skippedRows: string[] = [];
-
-  async function resolveClub(
-    clubCode: string,
-    nameHint: string | undefined,
-    stateHint: string | undefined,
-  ): Promise<string | null> {
-    const cached = clubIdByCode.get(clubCode);
-    if (cached) return cached;
-
-    const decoded = decodeClubCode(clubCode);
-    if (!decoded) {
-      skippedRows.push(`Malformed club code "${clubCode}" (expected 7 chars)`);
-      return null;
-    }
-
-    const region = regionByCode.get(decoded.regionCode);
-    if (!region) {
-      unresolvedRegionCodes.add(decoded.regionCode);
-      skippedRows.push(`Unresolved region code "${decoded.regionCode}" for club code "${clubCode}"`);
-      return null;
-    }
-
-    const existing = await prisma.club.findUnique({
-      where: { externalCode_regionId: { externalCode: decoded.externalCode, regionId: region.id } },
-    });
-    if (existing) {
-      clubIdByCode.set(clubCode, existing.id);
-      clubsMatched += 1;
-      return existing.id;
-    }
-
-    const name = nameHint?.trim() || clubCode;
-    const slug = await uniqueSlug(name, async (candidate) => {
-      const found = await prisma.club.findUnique({ where: { slug: candidate } });
-      return found !== null;
-    });
-    const created = await prisma.club.create({
-      data: {
-        name,
-        slug,
-        externalCode: decoded.externalCode,
-        regionId: region.id,
-        state: stateHint?.trim() || null,
-      },
-    });
-    clubIdByCode.set(clubCode, created.id);
-    clubsCreated += 1;
-    return created.id;
-  }
+  // Keep the whole resolver object (not destructured counters) -- clubsMatched/
+  // clubsCreated/etc. mutate internally as resolveClub() runs, so they need to be
+  // read off the same reference at the end, not copied by value up front.
+  const resolver = createLegacyClubResolver(prisma);
+  const { resolveClub } = resolver;
 
   let annualScoresWritten = 0;
   for (const row of annualRows) {
@@ -192,14 +129,14 @@ async function main() {
 
   console.log(`\nAnnual scores: ${annualScoresWritten}/${annualRows.length} rows written`);
   console.log(`Age-group scores: ${ageGroupScoresWritten}/${ageGroupRows.length} rows written`);
-  console.log(`Clubs matched to existing rows: ${clubsMatched}`);
-  console.log(`Clubs newly created: ${clubsCreated}`);
-  if (unresolvedRegionCodes.size > 0) {
-    console.log(`Unresolved region codes: ${[...unresolvedRegionCodes].join(", ")}`);
+  console.log(`Clubs matched to existing rows: ${resolver.clubsMatched}`);
+  console.log(`Clubs newly created: ${resolver.clubsCreated}`);
+  if (resolver.unresolvedRegionCodes.size > 0) {
+    console.log(`Unresolved region codes: ${[...resolver.unresolvedRegionCodes].join(", ")}`);
   }
-  if (skippedRows.length > 0) {
-    console.log(`\n${skippedRows.length} rows skipped, e.g.:`);
-    for (const msg of skippedRows.slice(0, 20)) console.log(`  - ${msg}`);
+  if (resolver.skippedRows.length > 0) {
+    console.log(`\n${resolver.skippedRows.length} rows skipped, e.g.:`);
+    for (const msg of resolver.skippedRows.slice(0, 20)) console.log(`  - ${msg}`);
   }
 }
 

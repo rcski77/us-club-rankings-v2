@@ -18,6 +18,7 @@
     "db:seed-demo": "tsx prisma/seedDemo.ts",
     "db:seed-point-templates": "tsx prisma/seedPointTemplates.ts",
     "db:import-legacy-club-rankings": "tsx prisma/importLegacyClubRankings.ts",
+    "db:import-legacy-five-year-rankings": "tsx prisma/importLegacyFiveYearRankings.ts",
     "backtest:elo": "tsx prisma/backtestElo.ts",
     "analyze:elite-threshold": "tsx prisma/analyzeEliteThreshold.ts"
   },

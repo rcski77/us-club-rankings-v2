@@ -4,6 +4,12 @@ import { computeFiveYearClubScore, rankFiveYearClubs, FIVE_YEAR_WEIGHTS } from "
 import type { ClubRankingSource } from "@/generated/prisma/enums";
 
 const ALGORITHM_VERSION = "phase-5yr-v1";
+// Marks a ClubFiveYearRankingResult row written directly by
+// prisma/importLegacyFiveYearRankings.ts (the legacy workbook's already-final
+// 2021-2024 windows -- no underlying 2017-2020 data exists in this app to recompute
+// them from) rather than by computeFiveYearClubRankingForYear below. Exported so the
+// import script and this file share one literal instead of two that could drift.
+export const LEGACY_IMPORT_ALGORITHM_VERSION = "legacy-import";
 
 /**
  * Folds a real computed season (this app's own ClubRankingResult, not the legacy
@@ -72,8 +78,28 @@ export async function syncClubAnnualScoreFromSeason(
  * from whichever ClubAnnualScore rows exist in that window -- legacy-imported for
  * 2021-2025 today (see prisma/importLegacyClubRankings.ts), with room for future
  * years to add their own rows (source: "COMPUTED") without any change here.
+ *
+ * Refuses to run against an endYear that's a legacy-imported window (2021-2024 --
+ * see prisma/importLegacyFiveYearRankings.ts): this app only has real ClubAnnualScore
+ * data starting 2021, so "recomputing" e.g. 2022 would use just two real years
+ * (2021-2022) padded with three 0s for 2018-2020's missing data, silently producing a
+ * wrong result that looks plausible. Server-side, not just a UI affordance -- see the
+ * admin page's own disabled-button treatment for the same guard.
  */
-export async function computeFiveYearClubRankingForYear(endYear: number) {
+export async function computeFiveYearClubRankingForYear(
+  endYear: number,
+): Promise<{ ok: true } | { ok: false; reason: string }> {
+  const existingLegacyRow = await prisma.clubFiveYearRankingResult.findFirst({
+    where: { endYear, algorithmVersion: LEGACY_IMPORT_ALGORITHM_VERSION },
+    select: { id: true },
+  });
+  if (existingLegacyRow) {
+    return {
+      ok: false,
+      reason: `${endYear} is a legacy-imported window with no underlying 2017-2020 data in this app to recompute it from.`,
+    };
+  }
+
   const years = Array.from({ length: FIVE_YEAR_WEIGHTS.length }, (_, i) => endYear - (FIVE_YEAR_WEIGHTS.length - 1 - i));
 
   const scores = await prisma.clubAnnualScore.findMany({
@@ -128,4 +154,6 @@ export async function computeFiveYearClubRankingForYear(endYear: number) {
       ),
     });
   });
+
+  return { ok: true };
 }
