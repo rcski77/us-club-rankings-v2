@@ -60,6 +60,12 @@ export default async function PublicClubRankingsPage({
                 {s.label}
               </Link>
             ))}
+            <Link
+              href="/rankings/club-rankings/five-year"
+              className="rounded-full border border-slate-200 px-4 py-1.5 text-sm text-slate-600 transition-colors hover:border-slate-300 hover:bg-slate-50"
+            >
+              5-Year Aggregate
+            </Link>
           </div>
 
           <ClubRankingTable seasonId={season.id} source={source} page={page} />

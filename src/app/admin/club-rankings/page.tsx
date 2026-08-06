@@ -56,7 +56,44 @@ export default async function ClubRankingsPage({
 
   return (
     <div>
-      <h1 className="mb-6 text-2xl font-semibold">Club Rankings</h1>
+      <h1 className="mb-2 text-2xl font-semibold">Club Rankings</h1>
+
+      {/* Same tab row as /admin/club-rankings/five-year -- see that page's own tab
+          row for why 5-Year Aggregate is styled as never-active here (different
+          route, not a season+source view). */}
+      <div className="mb-4 flex gap-1 border-b">
+        {SOURCES.map((s) => (
+          <Link
+            key={s.value}
+            href={`/admin/club-rankings?${new URLSearchParams({
+              season: season?.id ?? "",
+              source: s.value,
+            })}`}
+            prefetch={false}
+            className={
+              s.value === source
+                ? "border-b-2 border-slate-900 px-3 py-2 text-sm font-medium text-slate-900"
+                : "border-b-2 border-transparent px-3 py-2 text-sm text-slate-500 hover:text-slate-900"
+            }
+          >
+            {s.label}
+          </Link>
+        ))}
+        <Link
+          href="/admin/club-rankings/five-year"
+          prefetch={false}
+          className="border-b-2 border-transparent px-3 py-2 text-sm text-slate-500 hover:text-slate-900"
+        >
+          5-Year Aggregate →
+        </Link>
+      </div>
+
+      <p className="mb-6 text-sm text-slate-500">
+        {source === "NPS"
+          ? "Rolls up the season's NPS Rankings (points-based finishes) into a per-club score."
+          : "Rolls up the season's Combined Rankings (50% NPS rank + 50% Power Avg Rank) into a per-club score."}{" "}
+        Run Team Rankings&apos; own recompute first if those look stale.
+      </p>
 
       {recomputeStarted === "1" && (
         <p className={successBannerClass}>
@@ -85,29 +122,6 @@ export default async function ClubRankingsPage({
                 Recompute {source === "NPS" ? "NPS" : "Combined"} club rankings
               </SubmitButton>
             </form>
-            <p className="pb-2 text-xs text-slate-500">
-              {source === "NPS"
-                ? "Rolls up the season's NPS Rankings (points-based finishes) into a per-club score."
-                : "Rolls up the season's Combined Rankings (50% NPS rank + 50% Power Avg Rank) into a per-club score."}{" "}
-              Run Team Rankings&apos; own recompute first if those look stale.
-            </p>
-          </div>
-
-          <div className="mb-6 flex gap-1 border-b">
-            {SOURCES.map((s) => (
-              <Link
-                key={s.value}
-                href={`/admin/club-rankings?${new URLSearchParams({ season: season.id, source: s.value })}`}
-                prefetch={false}
-                className={
-                  s.value === source
-                    ? "border-b-2 border-slate-900 px-3 py-2 text-sm font-medium text-slate-900"
-                    : "border-b-2 border-transparent px-3 py-2 text-sm text-slate-500 hover:text-slate-900"
-                }
-              >
-                {s.label}
-              </Link>
-            ))}
           </div>
 
           <ClubRankingTable seasonId={season.id} source={source} />
