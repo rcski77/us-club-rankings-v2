@@ -3,6 +3,7 @@ import Link from "next/link";
 import { brand } from "@/lib/brand";
 import { tableWrapClass, thClass, tdClass, numThClass, numTdClass, tbodyClass, RankBadge } from "@/lib/publicUi";
 import { FIVE_YEAR_WEIGHTS } from "@/lib/ranking/fiveYearClubRanking";
+import { LEGACY_IMPORT_ALGORITHM_VERSION } from "@/lib/ranking/computeFiveYearClubRanking";
 
 // Only the top 100 gets published (NIT invites/housing priority), same cap the
 // legacy workbook's own published sheets used -- unlike /rankings/club-rankings
@@ -24,7 +25,14 @@ export default async function PublicFiveYearClubRankingsPage({
   const { endYear: endYearParam } = await searchParams;
 
   const [availableYearRows, seasons] = await Promise.all([
+    // Excludes legacy-imported windows (2021-2024, from the workbook's own "5 Year to
+    // Publish" sheet -- see importLegacyFiveYearRankings.ts) -- those have no
+    // per-year contributions to show in the breakdown table below, so this page (the
+    // full single-window view) only ever offers windows this app itself computed.
+    // The rank-history view (five-year/history) is where the legacy windows still
+    // show up, since that one only ever needs rank+total per column, not a breakdown.
     prisma.clubFiveYearRankingResult.findMany({
+      where: { algorithmVersion: { not: LEGACY_IMPORT_ALGORITHM_VERSION } },
       distinct: ["endYear"],
       select: { endYear: true },
       orderBy: { endYear: "desc" },
