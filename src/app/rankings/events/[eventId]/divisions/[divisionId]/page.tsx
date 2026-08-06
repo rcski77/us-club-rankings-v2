@@ -75,11 +75,11 @@ export default async function PublicDivisionDetailPage({
               {finishes.map((f) => {
                 const elo = eloSummaries.get(f.team.id);
                 return (
-                  <tr key={f.id} className="relative cursor-pointer">
+                  <tr key={f.id} className="cursor-pointer">
                     <td className={numTdClass}>
                       <RankBadge rank={f.rank} />
                     </td>
-                    <td className={primaryTdClass}>
+                    <td className={`${primaryTdClass} relative`}>
                       <Link
                         href={`/rankings/teams/${f.team.id}`}
                         className="after:absolute after:inset-0 hover:underline"

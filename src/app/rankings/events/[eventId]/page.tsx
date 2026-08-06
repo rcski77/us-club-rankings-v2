@@ -55,8 +55,8 @@ export default async function PublicEventDetailPage({
           </thead>
           <tbody className={tbodyClass}>
             {event.divisions.map((d) => (
-              <tr key={d.id} className="relative cursor-pointer">
-                <td className={primaryTdClass}>
+              <tr key={d.id} className="cursor-pointer">
+                <td className={`${primaryTdClass} relative`}>
                   <Link
                     href={`/rankings/events/${event.id}/divisions/${d.id}`}
                     className="after:absolute after:inset-0 hover:underline"

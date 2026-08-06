@@ -147,11 +147,11 @@ async function ClubRankingTable({
                       (c) => c.rank !== null && c.rank <= 100,
                     ).length;
                     return (
-                      <tr key={r.id} className="relative cursor-pointer">
+                      <tr key={r.id} className="cursor-pointer">
                         <td className={numTdClass}>
                           <RankBadge rank={r.rank} />
                         </td>
-                        <td className={`${tdClass} max-w-[180px] truncate font-medium text-slate-900`}>
+                        <td className={`${tdClass} relative max-w-[180px] truncate font-medium text-slate-900`}>
                           <Link href={`/rankings/clubs/${r.club.id}`} className="after:absolute after:inset-0 hover:underline">
                             {r.club.name}
                           </Link>
