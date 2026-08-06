@@ -120,6 +120,12 @@ export default async function FiveYearClubRankingsPage({
         renormalized weight.
       </p>
 
+      <p className="mb-6 text-sm">
+        <Link href="/admin/club-rankings/five-year/history" prefetch={false} className="text-slate-500 underline">
+          View 5-year rank history across every computed window →
+        </Link>
+      </p>
+
       {recomputed === "1" && <p className={successBannerClass}>5-year ranking recomputed for {endYear}.</p>}
       {synced === "1" && (
         <p className={successBannerClass}>

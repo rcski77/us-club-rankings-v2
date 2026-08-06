@@ -65,6 +65,12 @@ export default async function PublicFiveYearClubRankingsPage({
             and housing priority.
           </p>
 
+          <p className="mb-6 text-sm">
+            <Link href="/rankings/club-rankings/five-year/history" className="underline" style={{ color: brand.purple }}>
+              View rank history across every computed window →
+            </Link>
+          </p>
+
           {availableYears.length > 1 && (
             <div className="mb-6 flex flex-wrap gap-2">
               {availableYears.map((y) => (
