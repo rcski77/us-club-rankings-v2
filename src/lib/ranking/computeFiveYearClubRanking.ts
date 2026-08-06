@@ -5,6 +5,59 @@ import { computeFiveYearClubScore, rankFiveYearClubs, FIVE_YEAR_WEIGHTS } from "
 const ALGORITHM_VERSION = "phase-5yr-v1";
 
 /**
+ * Folds a real computed season (this app's own ClubRankingResult, not the legacy
+ * workbook) into ClubAnnualScore as a "COMPUTED" row per club, keyed by the season's
+ * ending year (season.endDate's year -- e.g. "2025-2026" ends in 2026) -- this is the
+ * "future COMPUTED value" ClubAnnualScore.source's own comment already anticipated,
+ * so computeFiveYearClubRankingForYear needs no change to pick up new seasons as they
+ * happen; it only ever reads ClubAnnualScore.
+ *
+ * Always uses the NPS ranking (not Combined) -- NPS is what's verified to reproduce
+ * the legacy per-year methodology exactly (see clubRanking.ts's computeClubScore),
+ * so this keeps the 5-year blend on the same footing year to year rather than mixing
+ * two different per-team ranking sources across the window.
+ *
+ * Never overwrites a LEGACY_IMPORT row -- those are 2021-2025's ground truth from the
+ * source workbook and have no underlying event data in this app to recompute from;
+ * only a year with no legacy row (or a previous COMPUTED row, safe to refresh) gets
+ * written.
+ */
+export async function syncClubAnnualScoreFromSeason(seasonId: string) {
+  const season = await prisma.season.findUniqueOrThrow({ where: { id: seasonId } });
+  const year = season.endDate.getFullYear();
+
+  const results = await prisma.clubRankingResult.findMany({
+    where: { seasonId, source: "NPS" },
+    select: { clubId: true, totalPoints: true, rank: true },
+  });
+
+  const existing = await prisma.clubAnnualScore.findMany({
+    where: { year, clubId: { in: results.map((r) => r.clubId) } },
+    select: { clubId: true, source: true },
+  });
+  const legacyClubIds = new Set(existing.filter((e) => e.source === "LEGACY_IMPORT").map((e) => e.clubId));
+
+  let written = 0;
+  for (const r of results) {
+    if (legacyClubIds.has(r.clubId)) continue;
+    await prisma.clubAnnualScore.upsert({
+      where: { clubId_year: { clubId: r.clubId, year } },
+      update: { totalPoints: r.totalPoints, legacyRank: r.rank, source: "COMPUTED" },
+      create: {
+        clubId: r.clubId,
+        year,
+        totalPoints: r.totalPoints,
+        legacyRank: r.rank,
+        source: "COMPUTED",
+      },
+    });
+    written += 1;
+  }
+
+  return { year, written, skippedLegacy: legacyClubIds.size };
+}
+
+/**
  * Recomputes the 5-year aggregate club ranking for the window [endYear-4, endYear],
  * from whichever ClubAnnualScore rows exist in that window -- legacy-imported for
  * 2021-2025 today (see prisma/importLegacyClubRankings.ts), with room for future

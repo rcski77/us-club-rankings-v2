@@ -11,7 +11,10 @@ import {
   tdClass,
   stripedTbodyClass,
 } from "@/lib/ui";
-import { computeFiveYearClubRankingForYear } from "@/lib/ranking/computeFiveYearClubRanking";
+import {
+  computeFiveYearClubRankingForYear,
+  syncClubAnnualScoreFromSeason,
+} from "@/lib/ranking/computeFiveYearClubRanking";
 import { FIVE_YEAR_WEIGHTS } from "@/lib/ranking/fiveYearClubRanking";
 import { SubmitButton } from "@/components/SubmitButton";
 
@@ -25,12 +28,22 @@ async function recomputeFiveYearRanking(formData: FormData) {
   redirect(`/admin/club-rankings/five-year?${new URLSearchParams({ endYear: String(endYear), recomputed: "1" })}`);
 }
 
+async function syncSeason(formData: FormData) {
+  "use server";
+  const seasonId = String(formData.get("seasonId") ?? "");
+  if (!seasonId) redirect("/admin/club-rankings/five-year");
+
+  const { year } = await syncClubAnnualScoreFromSeason(seasonId);
+
+  redirect(`/admin/club-rankings/five-year?${new URLSearchParams({ endYear: String(year), synced: "1" })}`);
+}
+
 export default async function FiveYearClubRankingsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ endYear?: string; recomputed?: string }>;
+  searchParams: Promise<{ endYear?: string; recomputed?: string; synced?: string }>;
 }) {
-  const { endYear: endYearParam, recomputed } = await searchParams;
+  const { endYear: endYearParam, recomputed, synced } = await searchParams;
 
   // Offer every endYear that either has ClubAnnualScore data to compute from, or
   // already has a computed result -- whichever is more, defaulting to the latest.
@@ -99,6 +112,12 @@ export default async function FiveYearClubRankingsPage({
       </p>
 
       {recomputed === "1" && <p className={successBannerClass}>5-year ranking recomputed for {endYear}.</p>}
+      {synced === "1" && (
+        <p className={successBannerClass}>
+          Season synced into {endYear}&apos;s annual scores — click &quot;Recompute&quot; below to fold it into
+          the 5-year total.
+        </p>
+      )}
 
       <div className="mb-6 flex items-end gap-3">
         <form method="get" className="flex items-end gap-3">
@@ -124,6 +143,36 @@ export default async function FiveYearClubRankingsPage({
           </SubmitButton>
         </form>
       </div>
+
+      {seasons.length > 0 && (
+        <details className="mb-6 rounded border p-3 text-sm">
+          <summary className="cursor-pointer font-medium text-slate-700">
+            Add a new year — sync a season&apos;s club rankings
+          </summary>
+          <p className="mt-2 mb-3 text-xs text-slate-500">
+            2021-2025 came from the legacy workbook import; a real season computed by this app (once it has its
+            own NPS club rankings) folds in the same way — syncing writes that season&apos;s NPS totals into{" "}
+            <code className="text-xs">ClubAnnualScore</code> under the season&apos;s ending year (e.g. &quot;2025-2026&quot;
+            → 2026), making that year selectable above. Run Club Rankings&apos; own NPS recompute first if it
+            looks stale.
+          </p>
+          <form action={syncSeason} className="flex items-end gap-3">
+            <label className="flex flex-col gap-1 text-sm">
+              Season
+              <select name="seasonId" defaultValue={defaultSeason?.id} className={inputClass}>
+                {seasons.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.label} (ends {s.endDate.getFullYear()})
+                  </option>
+                ))}
+              </select>
+            </label>
+            <SubmitButton className={secondaryButtonClass} pendingText="Syncing…">
+              Sync season
+            </SubmitButton>
+          </form>
+        </details>
+      )}
 
       {computedAt && (
         <p className="mb-4 text-sm text-slate-500">
