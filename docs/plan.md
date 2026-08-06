@@ -684,6 +684,39 @@ renders correctly against real dev data on both tabs, visually consistent with
 `/rankings/team-rankings`, dropped (best-5-of-6) age-group cells struck through
 same as the admin view.
 
+**Club merge — annual score conflict resolution fixed (2026-08-06, same day).**
+Surfaced by a real discrepancy: the SC Rockstar LOVB merge (two real predecessor
+clubs, Mizuno Long Beach and SCVC, each with real 2021-2025 legacy `ClubAnnualScore`
+history) produced *different* results on dev vs. prod for the same merge — dev showed
+Mizuno Long Beach's numbers surviving, prod showed SCVC's. Root cause: the original
+`mergeClubsIntoTarget()` resolved a conflicting year (both target and a source club
+already having a row for it) by leaving the loser's row orphaned on the retired
+source club based on whichever row a plain `findMany` happened to return first —
+effectively arbitrary, environment-dependent, and with no lasting visibility once the
+one-time success banner was gone. Per explicit user decision, changed to a
+deterministic rule: **the higher of the two `totalPoints` (or `clubPoints` for the
+per-age-group breakdown) wins and is written onto the target's row**; the loser's row
+stays as-is on the retired club (audit trail, not deleted). Every conflicting year is
+now returned as a `ClubMergeYearResolution` (`src/lib/club/mergeClubs.ts`) regardless
+of which side won, and the `/admin/club-groups` success banner reports both counts
+("N years existed on both clubs, M of them took the merged-in club's higher score")
+instead of the old vague "left for manual review" wording — nothing is silently
+dropped now. New one-off `prisma/reconcileMergedClubAnnualScores.ts` (idempotent, safe
+to re-run) retroactively re-applies the same "higher wins" rule to every
+already-completed merge's still-orphaned rows, since fixing the function going
+forward doesn't touch data merges already wrote. Run against dev during this fix: 1
+row changed (a 2025/age-17 `ClubAnnualAgeGroupScore` breakdown row on SC Rockstar that
+the old logic had resolved to the lower value, 67 -> 96) — the top-level 2021-2025
+`ClubAnnualScore` totals happened to already be correct on dev (Mizuno's data had won
+every year there already). **Still needs to be run against prod** (`./run-prod-script.sh
+prisma/reconcileMergedClubAnnualScores.ts`, from the homelab host — this session has
+no direct prod DB access) followed by a 5-year aggregate recompute
+(`/admin/club-rankings/five-year`) to pick up whatever changes it reports, since prod
+is the environment confirmed showing the wrong (SCVC-sourced) numbers today. Verified
+the fix end-to-end in the browser against two disposable test clubs with a deliberately
+conflicting year (50 vs. 80): merge correctly kept 80 on the target and reported "1
+year existed on both, 1 took the merged-in club's higher score."
+
 **Club ranking groups (2026-08-06, same day as the merge mechanism above).** A
 second, non-destructive mechanism alongside `mergedIntoClubId` for a related but
 different real case: **FORZA1 / FORZA1 NORTH**, two active locations of one real

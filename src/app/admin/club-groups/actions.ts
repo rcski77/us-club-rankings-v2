@@ -32,10 +32,12 @@ export async function mergeClubs(formData: FormData) {
   }
 
   revalidateClubPaths();
+  const overridden = result.annualScoresOverridden + result.annualAgeGroupScoresOverridden;
   const params = new URLSearchParams({
     success: "merged",
     teamsMoved: String(result.teamsMoved),
-    conflicts: String(result.conflicts.length),
+    yearsResolved: String(result.yearResolutions.length),
+    yearsOverridden: String(overridden),
   });
   redirect(`/admin/club-groups?${params.toString()}`);
 }
