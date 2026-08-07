@@ -1,4 +1,4 @@
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { verifyPassword } from "@/lib/password";
@@ -8,6 +8,7 @@ import {
   deleteSessionByToken,
   hashSessionToken,
 } from "@/lib/session";
+import { isLoginRateLimited } from "@/lib/loginRateLimit";
 import type { UserRole, UserStatus } from "@/generated/prisma/enums";
 
 export type SessionUser = {
@@ -17,6 +18,13 @@ export type SessionUser = {
   role: UserRole;
   status: UserStatus;
 };
+
+// Login rate-limiting: 5 wrong passwords in a row locks the account out entirely
+// (no further password checks, right or wrong) for 15 minutes, not just failed
+// attempts past that point -- this is what actually stops a brute-force loop,
+// rather than just failing it slightly slower.
+const MAX_FAILED_LOGIN_ATTEMPTS = 5;
+const LOCKOUT_DURATION_MS = 15 * 60 * 1000;
 
 // Read-only cookie access -- safe from Server Components as well as Server
 // Actions/Route Handlers, unlike signIn/signOut below. Doesn't filter on
@@ -42,13 +50,49 @@ export async function auth(): Promise<{ user: SessionUser } | null> {
 // Only callable from a Server Action/Route Handler (cookie mutation). Mirrors
 // the old authorize()'s rule: DISABLED can't sign in at all; PENDING can (they
 // just land on /pending until approved).
-export async function signIn(email: string, password: string): Promise<{ ok: true } | { ok: false }> {
+export async function signIn(
+  email: string,
+  password: string,
+): Promise<{ ok: true } | { ok: false; reason: "invalid" | "locked" | "rate_limited" }> {
+  // Checked first, before any DB lookup -- this is the layer that catches a
+  // script cycling through many different emails, which the per-account
+  // lockout below can't (it only trips once one specific account has racked
+  // up failures).
+  const forwardedFor = (await headers()).get("x-forwarded-for");
+  const ip = forwardedFor?.split(",")[0]?.trim() || "unknown";
+  if (isLoginRateLimited(ip)) return { ok: false, reason: "rate_limited" };
+
   const user = await prisma.user.findUnique({ where: { email } });
-  if (!user) return { ok: false };
+  if (!user) return { ok: false, reason: "invalid" };
+
+  if (user.lockedUntil && user.lockedUntil > new Date()) {
+    return { ok: false, reason: "locked" };
+  }
 
   const passwordValid = await verifyPassword(password, user.passwordHash);
-  if (!passwordValid) return { ok: false };
-  if (user.status === "DISABLED") return { ok: false };
+  if (!passwordValid) {
+    // Atomic increment, not read-then-write, so concurrent failed attempts
+    // can't race past MAX_FAILED_LOGIN_ATTEMPTS without tripping the lockout.
+    const { failedLoginAttempts } = await prisma.user.update({
+      where: { id: user.id },
+      data: { failedLoginAttempts: { increment: 1 } },
+      select: { failedLoginAttempts: true },
+    });
+    if (failedLoginAttempts >= MAX_FAILED_LOGIN_ATTEMPTS) {
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { failedLoginAttempts: 0, lockedUntil: new Date(Date.now() + LOCKOUT_DURATION_MS) },
+      });
+      return { ok: false, reason: "locked" };
+    }
+    return { ok: false, reason: "invalid" };
+  }
+
+  if (user.status === "DISABLED") return { ok: false, reason: "invalid" };
+
+  if (user.failedLoginAttempts !== 0 || user.lockedUntil !== null) {
+    await prisma.user.update({ where: { id: user.id }, data: { failedLoginAttempts: 0, lockedUntil: null } });
+  }
 
   const { token, expiresAt } = await createSessionRecord(user.id);
   const cookieStore = await cookies();

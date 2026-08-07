@@ -14,7 +14,7 @@ export default async function LoginPage({
       <h1 className="mb-6 text-2xl font-semibold">Sign in</h1>
       {registered && (
         <p className="mb-4 rounded bg-green-50 p-3 text-sm text-green-700">
-          Account created. Sign in to see your approval status.
+          A request has been sent to an admin for approval.
         </p>
       )}
       {error === "disabled" && (
@@ -23,7 +23,17 @@ export default async function LoginPage({
           this is a mistake.
         </p>
       )}
-      {error && error !== "disabled" && (
+      {error === "locked" && (
+        <p className="mb-4 rounded bg-red-50 p-3 text-sm text-red-700">
+          Too many failed sign-in attempts. Try again in 15 minutes.
+        </p>
+      )}
+      {error === "rate_limited" && (
+        <p className="mb-4 rounded bg-red-50 p-3 text-sm text-red-700">
+          Too many sign-in attempts from your network. Try again in a minute.
+        </p>
+      )}
+      {error && error !== "disabled" && error !== "locked" && error !== "rate_limited" && (
         <p className="mb-4 rounded bg-red-50 p-3 text-sm text-red-700">
           Invalid email or password.
         </p>
@@ -35,7 +45,7 @@ export default async function LoginPage({
           const password = String(formData.get("password") ?? "");
           const result = await signIn(email, password);
           if (!result.ok) {
-            const params = new URLSearchParams({ error: "CredentialsSignin" });
+            const params = new URLSearchParams({ error: result.reason });
             if (callbackUrl) params.set("callbackUrl", callbackUrl);
             redirect(`/login?${params.toString()}`);
           }

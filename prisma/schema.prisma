@@ -122,15 +122,20 @@ enum UserStatus {
 }
 
 model User {
-  id            String        @id @default(cuid())
-  email         String        @unique
-  name          String?
-  passwordHash  String // scrypt-hashed, format "salt:hash" (see src/lib/password.ts)
-  role          UserRole      @default(PENDING)
-  status        UserStatus    @default(PENDING)
-  createdAt     DateTime      @default(now())
-  importBatches ImportBatch[]
-  sessions      Session[]
+  id                  String        @id @default(cuid())
+  email               String        @unique
+  name                String?
+  passwordHash        String // scrypt-hashed, format "salt:hash" (see src/lib/password.ts)
+  role                UserRole      @default(PENDING)
+  status              UserStatus    @default(PENDING)
+  // Login rate-limiting (see src/auth.ts's signIn) -- failedLoginAttempts resets to 0
+  // on any successful login or once it trips lockedUntil; lockedUntil blocks further
+  // password checks entirely (not just failing them) until it's in the past.
+  failedLoginAttempts Int           @default(0)
+  lockedUntil         DateTime?
+  createdAt           DateTime      @default(now())
+  importBatches       ImportBatch[]
+  sessions            Session[]
 }
 
 // Hand-rolled DB-backed session (not Auth.js's built-in "database" strategy -- Auth.js
