@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
+import { requireSuperAdmin } from "@/lib/authz";
 import { notFound, redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import Link from "next/link";
@@ -99,6 +100,7 @@ async function addEventSchedule(eventId: string, formData: FormData) {
 async function deleteEventSchedule(eventId: string, scheduleId: string) {
   "use server";
 
+  await requireSuperAdmin(`/admin/events/${eventId}`);
   await prisma.eventSchedule.delete({ where: { id: scheduleId } });
 
   revalidatePath(`/admin/events/${eventId}`);
@@ -173,6 +175,7 @@ async function startImportForAllSchedules(eventId: string, formData: FormData) {
 async function deleteEvent(eventId: string) {
   "use server";
 
+  await requireSuperAdmin(`/admin/events/${eventId}`);
   await prisma.$transaction(async (tx) => {
     const batches = await tx.importBatch.findMany({ where: { eventId }, select: { id: true } });
     const divisions = await tx.division.findMany({ where: { eventId }, select: { id: true } });
@@ -229,6 +232,8 @@ export default async function EventDetailPage({
 }) {
   const { eventId } = await params;
   const { error, success } = await searchParams;
+  const session = await auth();
+  const isSuperAdmin = session?.user.role === "SUPER_ADMIN";
 
   const event = await prisma.event.findUnique({
     where: { id: eventId },
@@ -278,6 +283,9 @@ export default async function EventDetailPage({
       {error === "invalid-schedule" && (
         <p className={errorBannerClass}>A schedule URL and platform are both required.</p>
       )}
+      {error === "forbidden" && (
+        <p className={errorBannerClass}>Only super admins can delete records.</p>
+      )}
       {success === "1" && <p className={successBannerClass}>Event saved.</p>}
       {success === "imports-started" && (
         <p className={successBannerClass}>Started one import per schedule link below.</p>
@@ -311,11 +319,13 @@ export default async function EventDetailPage({
                     <td className={tdClass}>{s.source}</td>
                     <td className={`${tdClass} max-w-[20rem] truncate text-xs text-slate-500`}>{s.url}</td>
                     <td className={tdClass}>
-                      <form action={deleteWithIds}>
-                        <button type="submit" className={smallSecondaryButtonClass}>
-                          Remove
-                        </button>
-                      </form>
+                      {isSuperAdmin && (
+                        <form action={deleteWithIds}>
+                          <button type="submit" className={smallSecondaryButtonClass}>
+                            Remove
+                          </button>
+                        </form>
+                      )}
                     </td>
                   </tr>
                 );
@@ -591,20 +601,22 @@ export default async function EventDetailPage({
         </button>
       </form>
 
-      <section className="mt-10 border-t border-slate-200 pt-6">
-        <h2 className="mb-2 text-lg font-medium text-red-700">Danger zone</h2>
-        <p className="mb-3 text-xs text-slate-500">
-          Permanently deletes this event and everything under it: divisions, team
-          finishes, point bands, schedule links, and import batches. Use this to clean
-          up a duplicate or mistakenly-created event. This cannot be undone.
-        </p>
-        <DeleteEventButton
-          action={deleteEventWithId}
-          eventName={event.name}
-          divisionCount={event.divisions.length}
-          finishCount={finishCount}
-        />
-      </section>
+      {isSuperAdmin && (
+        <section className="mt-10 border-t border-slate-200 pt-6">
+          <h2 className="mb-2 text-lg font-medium text-red-700">Danger zone</h2>
+          <p className="mb-3 text-xs text-slate-500">
+            Permanently deletes this event and everything under it: divisions, team
+            finishes, point bands, schedule links, and import batches. Use this to
+            clean up a duplicate or mistakenly-created event. This cannot be undone.
+          </p>
+          <DeleteEventButton
+            action={deleteEventWithId}
+            eventName={event.name}
+            divisionCount={event.divisions.length}
+            finishCount={finishCount}
+          />
+        </section>
+      )}
     </div>
   );
 }

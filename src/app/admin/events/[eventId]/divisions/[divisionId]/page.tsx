@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { auth } from "@/auth";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import {
@@ -38,6 +39,8 @@ export default async function DivisionDetailPage({
 }) {
   const { eventId, divisionId } = await params;
   const { error } = await searchParams;
+  const session = await auth();
+  const isSuperAdmin = session?.user.role === "SUPER_ADMIN";
 
   // `templates` doesn't depend on `division`, so fetch them concurrently.
   const [division, templates] = await Promise.all([
@@ -111,6 +114,9 @@ export default async function DivisionDetailPage({
         <p className={errorBannerClass}>
           Apply a point template or add at least one band before confirming.
         </p>
+      )}
+      {error === "forbidden" && (
+        <p className={errorBannerClass}>Only super admins can delete records.</p>
       )}
       {error === "division-invalid" && (
         <p className={errorBannerClass}>Name, age group, and tier are required.</p>
@@ -223,7 +229,7 @@ export default async function DivisionDetailPage({
                     </form>
                   )}
                 </td>
-                {!isConfirmed && (
+                {!isConfirmed && isSuperAdmin && (
                   <td className={tdClass}>
                     <form
                       action={async () => {
@@ -369,7 +375,7 @@ export default async function DivisionDetailPage({
                 <td className={tdClass}>{f.team.seasons[0]?.ageGroup}u</td>
                 <td className={tdClass}>{f.ignoreAge ? "Yes" : ""}</td>
                 <td className={tdClass}>{f.points ?? ""}</td>
-                {!isConfirmed && (
+                {!isConfirmed && isSuperAdmin && (
                   <td className={tdClass}>
                     <form
                       action={async () => {

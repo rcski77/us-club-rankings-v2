@@ -89,5 +89,10 @@ callback (see `events/new/page.tsx`).
 Next.js 16 renamed the `middleware.ts` file convention to `proxy.ts` (deprecation:
 "the term middleware is often confused with Express.js middleware"). This project's
 `src/proxy.ts` is that file — if you're looking for route-gating logic and don't find
-a `middleware.ts`, that's why. It's intentionally Edge-safe (no Prisma import) — see
-its top comment and `src/auth.config.ts` (the Prisma-free base auth config it uses).
+a `middleware.ts`, that's why. Unlike the old `middleware.ts`, `proxy.ts` always runs
+on the Node.js runtime (Edge Runtime isn't supported there anymore), so — unlike
+`src/auth.config.ts`, which stays Prisma-free on purpose — `proxy.ts` itself imports
+Prisma directly: it re-checks the signed-in user's status against the DB on every
+`/admin/*` request (the JWT's `status` is only as fresh as their last login) so a
+super admin deactivating a user takes effect on that user's very next request, not
+just their next sign-in.

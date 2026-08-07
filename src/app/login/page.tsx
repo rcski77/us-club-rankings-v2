@@ -18,7 +18,13 @@ export default async function LoginPage({
           Account created. Sign in to see your approval status.
         </p>
       )}
-      {error && (
+      {error === "disabled" && (
+        <p className="mb-4 rounded bg-red-50 p-3 text-sm text-red-700">
+          Your account has been deactivated. Contact a super admin if you think
+          this is a mistake.
+        </p>
+      )}
+      {error && error !== "disabled" && (
         <p className="mb-4 rounded bg-red-50 p-3 text-sm text-red-700">
           Invalid email or password.
         </p>

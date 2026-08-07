@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { recomputeRankingsForDivision } from "@/lib/ranking/computeRanking";
 import { resolvePoints } from "@/lib/scoring/resolvePoints";
 import { computeDivisionScoringSuggestion } from "@/lib/rating/computeDivisionScoringSuggestion";
+import { requireSuperAdmin } from "@/lib/authz";
 import { redirect } from "next/navigation";
 
 function divisionPath(eventId: string, divisionId: string) {
@@ -89,6 +90,7 @@ export async function addDivisionBand(eventId: string, divisionId: string, formD
 }
 
 export async function removeDivisionBand(eventId: string, divisionId: string, bandId: string) {
+  await requireSuperAdmin(divisionPath(eventId, divisionId));
   await prisma.divisionPointBand.delete({ where: { id: bandId } });
   redirect(divisionPath(eventId, divisionId));
 }
@@ -207,6 +209,7 @@ export async function searchAvailableTeams(divisionId: string, query: string) {
 }
 
 export async function removeTeamFinish(eventId: string, divisionId: string, finishId: string) {
+  await requireSuperAdmin(divisionPath(eventId, divisionId));
   await prisma.teamFinish.delete({ where: { id: finishId } });
   redirect(divisionPath(eventId, divisionId));
 }
