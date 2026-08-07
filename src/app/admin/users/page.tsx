@@ -40,6 +40,20 @@ async function reactivateUser(userId: string) {
   revalidatePath("/admin/users");
 }
 
+// Distinct from reactivateUser: this clears a *login* lockout (5 wrong
+// passwords in a row, see src/auth.ts's signIn) rather than an admin
+// deactivation. Orthogonal to `status` -- a user can be locked out while
+// still ACTIVE, and this is the only way to lift that early instead of
+// waiting out the 15-minute timer.
+async function unlockUser(userId: string) {
+  "use server";
+  const session = await auth();
+  if (session?.user.role !== "SUPER_ADMIN") throw new Error("Forbidden");
+
+  await prisma.user.update({ where: { id: userId }, data: { failedLoginAttempts: 0, lockedUntil: null } });
+  revalidatePath("/admin/users");
+}
+
 async function createUser(formData: FormData) {
   "use server";
   const session = await auth();
@@ -76,6 +90,8 @@ export default async function AdminUsersPage({
   const users = await prisma.user.findMany({ orderBy: { createdAt: "desc" } });
   const pending = users.filter((u) => u.status === "PENDING");
   const others = users.filter((u) => u.status !== "PENDING");
+  const now = new Date();
+  const isLockedOut = (u: (typeof users)[number]) => u.lockedUntil !== null && u.lockedUntil > now;
 
   return (
     <div>
@@ -125,8 +141,21 @@ export default async function AdminUsersPage({
               <span>
                 {u.name ? `${u.name} — ` : ""}
                 {u.email}
+                {isLockedOut(u) && " — locked out"}
               </span>
               <div className="flex gap-2">
+                {isLockedOut(u) && (
+                  <form
+                    action={async () => {
+                      "use server";
+                      await unlockUser(u.id);
+                    }}
+                  >
+                    <button type="submit" className="rounded border px-2 py-1 text-xs">
+                      Unlock
+                    </button>
+                  </form>
+                )}
                 <form
                   action={async () => {
                     "use server";
@@ -165,46 +194,61 @@ export default async function AdminUsersPage({
                 {u.name ? `${u.name} — ` : ""}
                 {u.email} ({u.role}, {u.status})
                 {u.id === session.user.id && " — you"}
+                {isLockedOut(u) && " — locked out"}
               </span>
-              {u.status === "DISABLED" && u.role === "PENDING" && (
-                <form
-                  action={async () => {
-                    "use server";
-                    await updateUser(u.id, "ACTIVE", "ADMIN");
-                  }}
-                >
-                  <button type="submit" className="rounded border px-2 py-1 text-xs">
-                    Re-enable as Admin
-                  </button>
-                </form>
-              )}
-              {u.status === "DISABLED" && u.role !== "PENDING" && (
-                <form
-                  action={async () => {
-                    "use server";
-                    await reactivateUser(u.id);
-                  }}
-                >
-                  <button type="submit" className="rounded border px-2 py-1 text-xs">
-                    Reactivate
-                  </button>
-                </form>
-              )}
-              {u.status === "ACTIVE" && u.id !== session.user.id && (
-                <form
-                  action={async () => {
-                    "use server";
-                    await deactivateUser(u.id);
-                  }}
-                >
-                  <button
-                    type="submit"
-                    className="rounded border border-red-300 px-2 py-1 text-xs text-red-700"
+              <div className="flex gap-2">
+                {isLockedOut(u) && (
+                  <form
+                    action={async () => {
+                      "use server";
+                      await unlockUser(u.id);
+                    }}
                   >
-                    Deactivate
-                  </button>
-                </form>
-              )}
+                    <button type="submit" className="rounded border px-2 py-1 text-xs">
+                      Unlock
+                    </button>
+                  </form>
+                )}
+                {u.status === "DISABLED" && u.role === "PENDING" && (
+                  <form
+                    action={async () => {
+                      "use server";
+                      await updateUser(u.id, "ACTIVE", "ADMIN");
+                    }}
+                  >
+                    <button type="submit" className="rounded border px-2 py-1 text-xs">
+                      Re-enable as Admin
+                    </button>
+                  </form>
+                )}
+                {u.status === "DISABLED" && u.role !== "PENDING" && (
+                  <form
+                    action={async () => {
+                      "use server";
+                      await reactivateUser(u.id);
+                    }}
+                  >
+                    <button type="submit" className="rounded border px-2 py-1 text-xs">
+                      Reactivate
+                    </button>
+                  </form>
+                )}
+                {u.status === "ACTIVE" && u.id !== session.user.id && (
+                  <form
+                    action={async () => {
+                      "use server";
+                      await deactivateUser(u.id);
+                    }}
+                  >
+                    <button
+                      type="submit"
+                      className="rounded border border-red-300 px-2 py-1 text-xs text-red-700"
+                    >
+                      Deactivate
+                    </button>
+                  </form>
+                )}
+              </div>
             </li>
           ))}
         </ul>

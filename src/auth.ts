@@ -58,8 +58,16 @@ export async function signIn(
   // script cycling through many different emails, which the per-account
   // lockout below can't (it only trips once one specific account has racked
   // up failures).
-  const forwardedFor = (await headers()).get("x-forwarded-for");
-  const ip = forwardedFor?.split(",")[0]?.trim() || "unknown";
+  //
+  // CF-Connecting-IP over X-Forwarded-For: this app's only public ingress is a
+  // Cloudflare Tunnel (see docker-compose.prod.yml's header comment), and
+  // Cloudflare's edge sets CF-Connecting-IP to the real visitor IP, overwriting
+  // any client-supplied value -- unlike X-Forwarded-For, which a client talking
+  // to the app directly (e.g. local dev) could set to anything. Falls back to
+  // X-Forwarded-For/"unknown" so local dev still buckets somehow, just not
+  // meaningfully -- there's no real attacker to rate-limit there.
+  const h = await headers();
+  const ip = h.get("cf-connecting-ip") || h.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
   if (isLoginRateLimited(ip)) return { ok: false, reason: "rate_limited" };
 
   const user = await prisma.user.findUnique({ where: { email } });
