@@ -1,5 +1,4 @@
 import { signIn } from "@/auth";
-import { AuthError } from "next-auth";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 
@@ -15,10 +14,26 @@ export default async function LoginPage({
       <h1 className="mb-6 text-2xl font-semibold">Sign in</h1>
       {registered && (
         <p className="mb-4 rounded bg-green-50 p-3 text-sm text-green-700">
-          Account created. Sign in to see your approval status.
+          A request has been sent to an admin for approval.
         </p>
       )}
-      {error && (
+      {error === "disabled" && (
+        <p className="mb-4 rounded bg-red-50 p-3 text-sm text-red-700">
+          Your account has been deactivated. Contact a super admin if you think
+          this is a mistake.
+        </p>
+      )}
+      {error === "locked" && (
+        <p className="mb-4 rounded bg-red-50 p-3 text-sm text-red-700">
+          Too many failed sign-in attempts. Try again in 15 minutes.
+        </p>
+      )}
+      {error === "rate_limited" && (
+        <p className="mb-4 rounded bg-red-50 p-3 text-sm text-red-700">
+          Too many sign-in attempts from your network. Try again in a minute.
+        </p>
+      )}
+      {error && error !== "disabled" && error !== "locked" && error !== "rate_limited" && (
         <p className="mb-4 rounded bg-red-50 p-3 text-sm text-red-700">
           Invalid email or password.
         </p>
@@ -26,20 +41,15 @@ export default async function LoginPage({
       <form
         action={async (formData) => {
           "use server";
-          try {
-            await signIn("credentials", {
-              email: formData.get("email"),
-              password: formData.get("password"),
-              redirectTo: callbackUrl ?? "/admin",
-            });
-          } catch (err) {
-            if (err instanceof AuthError) {
-              const params = new URLSearchParams({ error: "CredentialsSignin" });
-              if (callbackUrl) params.set("callbackUrl", callbackUrl);
-              redirect(`/login?${params.toString()}`);
-            }
-            throw err;
+          const email = String(formData.get("email") ?? "");
+          const password = String(formData.get("password") ?? "");
+          const result = await signIn(email, password);
+          if (!result.ok) {
+            const params = new URLSearchParams({ error: result.reason });
+            if (callbackUrl) params.set("callbackUrl", callbackUrl);
+            redirect(`/login?${params.toString()}`);
           }
+          redirect(callbackUrl ?? "/admin");
         }}
         className="flex flex-col gap-4"
       >

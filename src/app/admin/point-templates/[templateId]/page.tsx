@@ -1,4 +1,6 @@
 import { prisma } from "@/lib/prisma";
+import { auth } from "@/auth";
+import { requireSuperAdmin } from "@/lib/authz";
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import { refreshMaxPoints } from "@/lib/pointTemplates";
@@ -40,6 +42,7 @@ async function addBand(templateId: string, formData: FormData) {
 
 async function removeBand(templateId: string, bandId: string) {
   "use server";
+  await requireSuperAdmin(`/admin/point-templates/${templateId}`);
   await prisma.pointTemplateBand.delete({ where: { id: bandId } });
   await refreshMaxPoints(templateId);
   redirect(`/admin/point-templates/${templateId}`);
@@ -63,6 +66,8 @@ export default async function PointTemplateDetailPage({
 }) {
   const { templateId } = await params;
   const { error } = await searchParams;
+  const session = await auth();
+  const isSuperAdmin = session?.user.role === "SUPER_ADMIN";
 
   const template = await prisma.pointTemplate.findUnique({
     where: { id: templateId },
@@ -103,6 +108,9 @@ export default async function PointTemplateDetailPage({
       {error === "duplicate" && (
         <p className={errorBannerClass}>A band already starts at that rank.</p>
       )}
+      {error === "forbidden" && (
+        <p className={errorBannerClass}>Only super admins can delete records.</p>
+      )}
 
       <table className={`${tableClass} mb-6`}>
         <thead>
@@ -120,16 +128,18 @@ export default async function PointTemplateDetailPage({
               <td className={tdClass}>{b.toRank === 0 ? "+" : b.toRank}</td>
               <td className={tdClass}>{b.points}</td>
               <td className={tdClass}>
-                <form
-                  action={async () => {
-                    "use server";
-                    await removeBand(templateId, b.id);
-                  }}
-                >
-                  <button type="submit" className={smallSecondaryButtonClass}>
-                    Remove
-                  </button>
-                </form>
+                {isSuperAdmin && (
+                  <form
+                    action={async () => {
+                      "use server";
+                      await removeBand(templateId, b.id);
+                    }}
+                  >
+                    <button type="submit" className={smallSecondaryButtonClass}>
+                      Remove
+                    </button>
+                  </form>
+                )}
               </td>
             </tr>
           ))}

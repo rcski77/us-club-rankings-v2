@@ -71,11 +71,13 @@ team's matches before querying that season's rating history).
 
 ## Auth / session shape
 
-`session.user` (from `../../auth.ts` / `../../auth.config.ts`) has `id`, `email`,
-`role` (`SUPER_ADMIN | ADMIN | PENDING`), `status` (`PENDING | ACTIVE | DISABLED`)
-baked into the JWT at login — no DB lookup needed to check role/status in a page or
-action. `layout.tsx` gates on `status === "ACTIVE"`; individual pages/actions that need
-`SUPER_ADMIN` (currently just `users/page.tsx`) check `session.user.role` directly.
+`session.user` (from `await auth()` in `../../auth.ts`) has `id`, `email`, `role`
+(`SUPER_ADMIN | ADMIN | PENDING`), `status` (`PENDING | ACTIVE | DISABLED`). Sessions
+are hand-rolled and DB-backed (see `../../lib/session.ts`), not Auth.js/JWT — `auth()`
+does one Prisma read (`Session` joined to `User`) per call, so role/status are always
+live, never stale. `layout.tsx` gates on `status === "ACTIVE"`; individual
+pages/actions that need `SUPER_ADMIN` check `session.user.role` directly (see
+`users/page.tsx`, and `../../lib/authz.ts`'s `requireSuperAdmin()` for delete actions).
 
 ## Naming/slug generation
 
@@ -89,5 +91,13 @@ callback (see `events/new/page.tsx`).
 Next.js 16 renamed the `middleware.ts` file convention to `proxy.ts` (deprecation:
 "the term middleware is often confused with Express.js middleware"). This project's
 `src/proxy.ts` is that file — if you're looking for route-gating logic and don't find
-a `middleware.ts`, that's why. It's intentionally Edge-safe (no Prisma import) — see
-its top comment and `src/auth.config.ts` (the Prisma-free base auth config it uses).
+a `middleware.ts`, that's why. Unlike the old `middleware.ts`, `proxy.ts` always runs
+on the Node.js runtime (Edge Runtime isn't supported there anymore), so it's safe for
+it to import Prisma directly and do its own session lookup (`Session` row + joined
+`User.status`) on every `/admin/*` request — same query `auth()` does, duplicated here
+because proxy.ts reads the cookie off the raw request rather than via `next/headers`.
+See `../../lib/session.ts` for the shared cookie name/token-hashing helpers both sides
+use, and `../../auth.ts` for why this is hand-rolled instead of Auth.js: Auth.js
+refuses database sessions with a Credentials-only provider (forces JWT), which can't
+be revoked before it expires — deactivating a user needs to take effect on their very
+next request, not just their next sign-in.

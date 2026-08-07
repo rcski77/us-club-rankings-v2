@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { auth } from "@/auth";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { suggestClubName } from "@/lib/import/clubNameSuggestion";
@@ -55,6 +56,8 @@ export default async function ImportBatchPage({
 }) {
   const { batchId } = await params;
   const { error, reason, success, filter } = await searchParams;
+  const session = await auth();
+  const isSuperAdmin = session?.user.role === "SUPER_ADMIN";
   // Defaults to the attention-only view -- with real-sized data (1000+ rows) rendering
   // every row's forms in one table was the other unaddressed half of the page-lockup
   // bug, so "All" is now an explicit opt-in (?filter=all) rather than the default.
@@ -70,7 +73,15 @@ export default async function ImportBatchPage({
   if (!batch) notFound();
 
   if (batch.importType === "MATCH_RESULTS") {
-    return <MatchResultsBatchView batch={batch} error={error} reason={reason} success={success} />;
+    return (
+      <MatchResultsBatchView
+        batch={batch}
+        error={error}
+        reason={reason}
+        success={success}
+        isSuperAdmin={isSuperAdmin}
+      />
+    );
   }
 
   const allRows = batch.files.flatMap((f) =>
@@ -195,7 +206,7 @@ export default async function ImportBatchPage({
         <h1 className="text-2xl font-semibold">
           {batch.event.season.label} — {batch.event.name}
         </h1>
-        {!isCommitted && (
+        {!isCommitted && isSuperAdmin && (
           <form action={deleteWithId}>
             <SubmitButton
               className="rounded border border-red-300 px-3 py-1.5 text-sm text-red-700 hover:bg-red-50"
@@ -218,6 +229,9 @@ export default async function ImportBatchPage({
 
       {error === "delete-committed" && (
         <p className={errorBannerClass}>Committed imports can&apos;t be deleted.</p>
+      )}
+      {error === "forbidden" && (
+        <p className={errorBannerClass}>Only super admins can delete records.</p>
       )}
       {error === "upload-invalid" && <p className={errorBannerClass}>Select a file to upload.</p>}
       {error === "upload-duplicate" && (
@@ -676,11 +690,13 @@ async function MatchResultsBatchView({
   error,
   reason,
   success,
+  isSuperAdmin,
 }: {
   batch: MatchResultsBatch;
   error?: string;
   reason?: string;
   success?: string;
+  isSuperAdmin: boolean;
 }) {
   const isCommitted = batch.status === "COMMITTED";
   const summary = batch.summaryJson as
@@ -731,7 +747,7 @@ async function MatchResultsBatchView({
         <h1 className="text-2xl font-semibold">
           {batch.event.season.label} — {batch.event.name} (Match Results)
         </h1>
-        {!isCommitted && (
+        {!isCommitted && isSuperAdmin && (
           <form action={deleteWithId}>
             <SubmitButton
               className="rounded border border-red-300 px-3 py-1.5 text-sm text-red-700 hover:bg-red-50"
@@ -755,6 +771,9 @@ async function MatchResultsBatchView({
 
       {error === "delete-committed" && (
         <p className={errorBannerClass}>Committed imports can&apos;t be deleted.</p>
+      )}
+      {error === "forbidden" && (
+        <p className={errorBannerClass}>Only super admins can delete records.</p>
       )}
       {error === "no-schedule-url" && (
         <p className={errorBannerClass}>

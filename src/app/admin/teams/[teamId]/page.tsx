@@ -1,4 +1,6 @@
 import { prisma } from "@/lib/prisma";
+import { auth } from "@/auth";
+import { requireSuperAdmin } from "@/lib/authz";
 import { notFound, redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import Link from "next/link";
@@ -53,6 +55,7 @@ async function addTeamSeason(teamId: string, formData: FormData) {
 
 async function removeTeamSeason(teamId: string, teamSeasonId: string) {
   "use server";
+  await requireSuperAdmin(`/admin/teams/${teamId}`);
   await prisma.teamSeason.delete({ where: { id: teamSeasonId } });
   revalidatePath(`/admin/teams/${teamId}`);
 }
@@ -66,6 +69,8 @@ export default async function TeamDetailPage({
 }) {
   const { teamId } = await params;
   const { error, season: seasonParam } = await searchParams;
+  const session = await auth();
+  const isSuperAdmin = session?.user.role === "SUPER_ADMIN";
 
   // team, clubs, seasons, and matchSeasonRows don't depend on each other's results, so
   // they run as one batch instead of several sequential round trips. matchSeasonRows
@@ -241,6 +246,9 @@ export default async function TeamDetailPage({
       {error === "season-exists" && (
         <p className={errorBannerClass}>This team is already enrolled in that season.</p>
       )}
+      {error === "forbidden" && (
+        <p className={errorBannerClass}>Only super admins can delete records.</p>
+      )}
 
       <section className="mb-8 max-w-lg">
         <h2 className="mb-2 text-lg font-medium">Edit team</h2>
@@ -281,16 +289,18 @@ export default async function TeamDetailPage({
                   {ts.externalTeamCode ?? ""}
                 </td>
                 <td className={tdClass}>
-                  <form
-                    action={async () => {
-                      "use server";
-                      await removeTeamSeason(teamId, ts.id);
-                    }}
-                  >
-                    <button type="submit" className={smallSecondaryButtonClass}>
-                      Remove
-                    </button>
-                  </form>
+                  {isSuperAdmin && (
+                    <form
+                      action={async () => {
+                        "use server";
+                        await removeTeamSeason(teamId, ts.id);
+                      }}
+                    >
+                      <button type="submit" className={smallSecondaryButtonClass}>
+                        Remove
+                      </button>
+                    </form>
+                  )}
                 </td>
               </tr>
             ))}

@@ -1,4 +1,14 @@
 # Deploy on a homelab Docker host:
+#
+#   Public exposure: a Cloudflare Tunnel (cloudflared, run on the host, not part of
+#   this compose file) is the *only* path from the public internet to `app`'s
+#   published port -- there's no other reverse proxy or direct port-forward. This
+#   matters for src/auth.ts's login rate-limiter: Cloudflare's edge sets
+#   CF-Connecting-IP to the real visitor IP and overwrites any client-supplied value,
+#   so it's safe to trust for that one port -- if this app is ever additionally
+#   exposed some other way (direct port-forward, a different reverse proxy), that
+#   header stops being trustworthy and the rate-limiter needs revisiting.
+#
 #   1. Copy this repo to the host (or build+push the image elsewhere).
 #   2. Create a `.env.prod` next to this file (see .env.prod.example).
 #   3. docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --build

@@ -1,6 +1,7 @@
 "use server";
 
 import { prisma } from "@/lib/prisma";
+import { requireSuperAdmin } from "@/lib/authz";
 import { redirect } from "next/navigation";
 import { parseAesCsv } from "@/lib/import/aesCsv";
 import { parseAesEventIdFromUrl } from "@/lib/import/aesEventId";
@@ -557,6 +558,7 @@ export async function toggleRowExclude(batchId: string, rowId: string, formData:
 // COMMITTED batches are the durable audit trail for real TeamFinish data that's
 // already live -- never deletable from here.
 export async function deleteBatch(batchId: string) {
+  await requireSuperAdmin(batchPath(batchId));
   const batch = await prisma.importBatch.findUniqueOrThrow({ where: { id: batchId } });
   if (batch.status === "COMMITTED") {
     redirect(batchPath(batchId, { error: "delete-committed" }));

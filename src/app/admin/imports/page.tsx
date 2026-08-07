@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
+import { requireSuperAdmin } from "@/lib/authz";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import {
@@ -42,6 +43,7 @@ async function startImportBatch(formData: FormData) {
 async function deleteImportBatch(batchId: string) {
   "use server";
 
+  await requireSuperAdmin("/admin/imports");
   const batch = await prisma.importBatch.findUnique({ where: { id: batchId } });
   if (!batch || batch.status === "COMMITTED") {
     redirect("/admin/imports?error=delete-committed");
@@ -69,6 +71,8 @@ export default async function ImportsPage({
   searchParams: Promise<{ error?: string; success?: string }>;
 }) {
   const { error, success } = await searchParams;
+  const session = await auth();
+  const isSuperAdmin = session?.user.role === "SUPER_ADMIN";
 
   // batches and events don't depend on each other's results.
   const [batches, events] = await Promise.all([
@@ -91,6 +95,9 @@ export default async function ImportsPage({
       {error === "invalid" && <p className={errorBannerClass}>Select an event to import into.</p>}
       {error === "delete-committed" && (
         <p className={errorBannerClass}>Committed imports can&apos;t be deleted.</p>
+      )}
+      {error === "forbidden" && (
+        <p className={errorBannerClass}>Only super admins can delete records.</p>
       )}
       {success === "deleted" && <p className={successBannerClass}>Import deleted.</p>}
 
@@ -134,7 +141,7 @@ export default async function ImportsPage({
                 <td className={tdClass}>{summaryText}</td>
                 <td className={tdClass}>{b.createdAt.toISOString().slice(0, 10)}</td>
                 <td className={tdClass}>
-                  {b.status !== "COMMITTED" && (
+                  {b.status !== "COMMITTED" && isSuperAdmin && (
                     <form action={deleteWithId}>
                       <SubmitButton className={smallSecondaryButtonClass} pendingText="Deleting…">
                         Delete
