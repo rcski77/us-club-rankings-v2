@@ -130,6 +130,22 @@ model User {
   status        UserStatus    @default(PENDING)
   createdAt     DateTime      @default(now())
   importBatches ImportBatch[]
+  sessions      Session[]
+}
+
+// Hand-rolled DB-backed session (not Auth.js's built-in "database" strategy -- Auth.js
+// refuses that strategy with a Credentials-only provider; see src/lib/session.ts).
+// Only tokenHash is stored, never the raw cookie value, so reading this table can't be
+// replayed as a valid session the way a leaked plaintext token could.
+model Session {
+  id        String   @id @default(cuid())
+  tokenHash String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
 }
 
 // Team is a persistent identity (a program's squad), independent of season -- it can

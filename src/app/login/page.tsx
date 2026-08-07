@@ -1,5 +1,4 @@
 import { signIn } from "@/auth";
-import { AuthError } from "next-auth";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 
@@ -32,20 +31,15 @@ export default async function LoginPage({
       <form
         action={async (formData) => {
           "use server";
-          try {
-            await signIn("credentials", {
-              email: formData.get("email"),
-              password: formData.get("password"),
-              redirectTo: callbackUrl ?? "/admin",
-            });
-          } catch (err) {
-            if (err instanceof AuthError) {
-              const params = new URLSearchParams({ error: "CredentialsSignin" });
-              if (callbackUrl) params.set("callbackUrl", callbackUrl);
-              redirect(`/login?${params.toString()}`);
-            }
-            throw err;
+          const email = String(formData.get("email") ?? "");
+          const password = String(formData.get("password") ?? "");
+          const result = await signIn(email, password);
+          if (!result.ok) {
+            const params = new URLSearchParams({ error: "CredentialsSignin" });
+            if (callbackUrl) params.set("callbackUrl", callbackUrl);
+            redirect(`/login?${params.toString()}`);
           }
+          redirect(callbackUrl ?? "/admin");
         }}
         className="flex flex-col gap-4"
       >

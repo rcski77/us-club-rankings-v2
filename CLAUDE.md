@@ -22,7 +22,10 @@ Subdirectory conventions: [`prisma/CLAUDE.md`](prisma/CLAUDE.md) (schema/seeding
 ## Stack
 
 Next.js 16 (App Router, Turbopack) + TypeScript + Tailwind + PostgreSQL + Prisma 7,
-Auth.js (Credentials provider, JWT sessions). Local dev Postgres runs in Docker
+hand-rolled Credentials auth with DB-backed sessions (not Auth.js — see
+`src/lib/session.ts` and `src/auth.ts`; Auth.js refuses database sessions with a
+Credentials-only provider, forcing JWT, which can't be revoked before it expires).
+Local dev Postgres runs in Docker
 (`docker-compose.yml`). Explicitly **not** using `prisma-client-js`'s auto-connect —
 Prisma 7's newer `prisma-client` generator requires an explicit `@prisma/adapter-pg`
 driver adapter everywhere a `PrismaClient` is constructed (see `src/lib/prisma.ts`).

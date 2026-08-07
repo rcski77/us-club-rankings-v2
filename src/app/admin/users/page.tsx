@@ -1,6 +1,7 @@
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { hashPassword } from "@/lib/password";
+import { deleteAllSessionsForUser } from "@/lib/session";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import type { UserRole, UserStatus } from "@/generated/prisma/enums";
@@ -12,6 +13,10 @@ async function updateUser(userId: string, status: UserStatus, role: UserRole) {
   if (session?.user.role !== "SUPER_ADMIN") throw new Error("Forbidden");
 
   await prisma.user.update({ where: { id: userId }, data: { status, role } });
+  // Covers "Reject" (pending -> DISABLED) the same way deactivateUser covers an
+  // already-active user -- a DISABLED user shouldn't keep whatever session they
+  // signed in with before being rejected/disabled.
+  if (status === "DISABLED") await deleteAllSessionsForUser(userId);
   revalidatePath("/admin/users");
 }
 
@@ -22,6 +27,7 @@ async function deactivateUser(userId: string) {
   if (session.user.id === userId) redirect("/admin/users?error=self-deactivate");
 
   await prisma.user.update({ where: { id: userId }, data: { status: "DISABLED" } });
+  await deleteAllSessionsForUser(userId);
   revalidatePath("/admin/users");
 }
 
