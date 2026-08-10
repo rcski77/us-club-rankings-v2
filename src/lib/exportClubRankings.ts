@@ -1,0 +1,243 @@
+import ExcelJS from "exceljs";
+import { prisma } from "@/lib/prisma";
+import { FIVE_YEAR_WEIGHTS } from "@/lib/ranking/fiveYearClubRanking";
+
+// Generates the "N Rankings for Publish.xlsx" workbook staff have historically
+// hand-built each year (two sheets: "5 Year Ranking" and "1 Year Ranking") straight
+// from this app's own data, so publishing no longer means manually retyping a legacy
+// spreadsheet. Column shape on both sheets is identical -- year-by-year rank/points
+// for the club's trailing 5 calendar years, Club, State -- because both are ultimately
+// reading the same underlying per-year numbers (ClubAnnualScore); only the sheets'
+// *sort order* and *row inclusion* differ (5-year weighted rank vs. that single year's
+// own rank/qualification tier). See docs/domain-notes.md for the ranking methodology
+// this reproduces in prose form on each sheet.
+
+const PUBLISHED_RANK_LIMIT = 100; // same cap as /rankings/club-rankings/five-year (public)
+
+type YearCell = { points: number; rank: number | null };
+
+export type ClubRankingsExportResult =
+  | { ok: true; buffer: Buffer }
+  | { ok: false; reason: string };
+
+export async function buildClubRankingsWorkbook(endYear: number): Promise<ClubRankingsExportResult> {
+  const years = Array.from({ length: 5 }, (_, i) => endYear - (4 - i)); // oldest -> newest
+
+  const fiveYearResults = await prisma.clubFiveYearRankingResult.findMany({
+    where: { endYear, rank: { lte: PUBLISHED_RANK_LIMIT } },
+    include: { club: true },
+    orderBy: { rank: "asc" },
+  });
+  if (fiveYearResults.length === 0) {
+    return {
+      ok: false,
+      reason: `No 5-year ranking computed for ${endYear - 4}–${endYear} yet — run "Recompute" on the 5-Year Aggregate page first.`,
+    };
+  }
+
+  // --- Per-year rank/points, collapsed onto each club's ranking-group primary club --
+  // same "member club's score redirects to the group's primary club, higher of the two
+  // wins on a shared year" rule computeFiveYearClubRankingForYear applies for the
+  // 5-year *total*; applied here per-cell so a merged club's per-year Rank and Points
+  // always come from the same underlying row (never rank from one club, points from
+  // another). legacyRank is trusted as-is (see its schema comment: populated for both
+  // legacy-imported and this-app-computed years, not just legacy ones) rather than
+  // re-derived, since it's exactly the "this year's own published rank" value both
+  // sheets need and computeFiveYearClubRankingForYear never recomputes it itself.
+  const annualScores = await prisma.clubAnnualScore.findMany({
+    where: { year: { in: years } },
+    select: { clubId: true, year: true, totalPoints: true, legacyRank: true },
+  });
+  const scoredClubIds = [...new Set(annualScores.map((s) => s.clubId))];
+  const scoredClubs = scoredClubIds.length
+    ? await prisma.club.findMany({
+        where: { id: { in: scoredClubIds } },
+        select: { id: true, rankingGroupPrimaryClubId: true },
+      })
+    : [];
+  const rankingClubId = new Map(scoredClubs.map((c) => [c.id, c.rankingGroupPrimaryClubId ?? c.id]));
+
+  const perYearByClub = new Map<string, Map<number, YearCell>>();
+  for (const s of annualScores) {
+    const targetClubId = rankingClubId.get(s.clubId) ?? s.clubId;
+    const byYear = perYearByClub.get(targetClubId) ?? new Map<number, YearCell>();
+    const existing = byYear.get(s.year);
+    if (!existing || s.totalPoints > existing.points) {
+      byYear.set(s.year, { points: s.totalPoints, rank: s.legacyRank });
+    }
+    perYearByClub.set(targetClubId, byYear);
+  }
+
+  // Club display info (name/state) -- fetched for the union of every target clubId
+  // we'll display a row for (5-year results + any club with an endYear score), since a
+  // ranking-group's primary club may itself have no ClubAnnualScore row of its own
+  // (only its members do) and so wouldn't otherwise appear in `scoredClubs` above.
+  const displayClubIds = new Set<string>(fiveYearResults.map((r) => r.clubId));
+  for (const [clubId, byYear] of perYearByClub) {
+    if (byYear.has(endYear)) displayClubIds.add(clubId);
+  }
+  const displayClubs = await prisma.club.findMany({
+    where: { id: { in: [...displayClubIds] } },
+    select: { id: true, name: true, state: true },
+  });
+  const clubById = new Map(displayClubs.map((c) => [c.id, c]));
+
+  // --- Tiering (qualified / under-qualified) for the 1-Year sheet, when derivable ---
+  // Only possible when endYear's ClubAnnualScore rows came from this app's own
+  // computed ClubRankingResult (source "COMPUTED_NPS"/"COMPUTED_COMBINED") -- a
+  // legacy-imported year has no isQualified concept anywhere in this app's data.
+  const endYearSourceRows = await prisma.clubAnnualScore.findMany({
+    where: { year: endYear },
+    select: { source: true },
+    distinct: ["source"],
+  });
+  let qualifiedByClubId: Map<string, boolean> | null = null;
+  if (endYearSourceRows.length === 1 && endYearSourceRows[0].source.startsWith("COMPUTED_")) {
+    const rankingSource = endYearSourceRows[0].source === "COMPUTED_NPS" ? "NPS" : "COMBINED";
+    const seasons = await prisma.season.findMany({ select: { id: true, endDate: true } });
+    const seasonIds = seasons.filter((s) => s.endDate.getFullYear() === endYear).map((s) => s.id);
+    if (seasonIds.length > 0) {
+      const rankingResults = await prisma.clubRankingResult.findMany({
+        where: { seasonId: { in: seasonIds }, source: rankingSource },
+        select: { clubId: true, isQualified: true },
+      });
+      qualifiedByClubId = new Map(rankingResults.map((r) => [r.clubId, r.isQualified]));
+    }
+  }
+
+  const workbook = new ExcelJS.Workbook();
+  workbook.creator = "US Club Rankings";
+  workbook.created = new Date();
+
+  addFiveYearSheet(workbook, endYear, years, fiveYearResults, perYearByClub);
+  addOneYearSheet(workbook, endYear, years, perYearByClub, clubById, qualifiedByClubId);
+
+  const buffer = await workbook.xlsx.writeBuffer();
+  return { ok: true, buffer: Buffer.from(buffer) };
+}
+
+const HEADER_FILL: ExcelJS.Fill = {
+  type: "pattern",
+  pattern: "solid",
+  fgColor: { argb: "FF1F2937" }, // slate-800
+};
+const HEADER_FONT: Partial<ExcelJS.Font> = { bold: true, color: { argb: "FFFFFFFF" } };
+
+function addMethodologyBlock(sheet: ExcelJS.Worksheet, title: string, lines: string[]) {
+  sheet.addRow([title]).font = { bold: true, size: 14 };
+  for (const line of lines) {
+    sheet.addRow([line]);
+  }
+  sheet.addRow([]);
+}
+
+type FiveYearResultRow = {
+  clubId: string;
+  rank: number;
+  club: { name: string; state: string | null };
+};
+
+function addFiveYearSheet(
+  workbook: ExcelJS.Workbook,
+  endYear: number,
+  years: number[],
+  fiveYearResults: FiveYearResultRow[],
+  perYearByClub: Map<string, Map<number, YearCell>>,
+) {
+  const sheet = workbook.addWorksheet("5 Year Ranking");
+
+  addMethodologyBlock(sheet, `${endYear} National Volleyball Club Ranking – 5 Year Consolidated`, [
+    `Each club's 5-year score is a recency-weighted blend of its single-season club score in each of the trailing 5 calendar years (${years.join(", ")}):`,
+    years.map((y, i) => `${y}: ${FIVE_YEAR_WEIGHTS[i] * 100}%`).join("   "),
+    "A year with no score for a club contributes 0, not a renormalized share of the remaining weight.",
+    `Top ${PUBLISHED_RANK_LIMIT} shown.`,
+  ]);
+
+  const headerRow = sheet.addRow([
+    ...years.map((y) => `${y} Ranking`),
+    "Club",
+    "State",
+    ...years.map((y) => `${y} Points`),
+  ]);
+  headerRow.eachCell((cell) => {
+    cell.fill = HEADER_FILL;
+    cell.font = HEADER_FONT;
+  });
+
+  for (const r of fiveYearResults) {
+    const byYear = perYearByClub.get(r.clubId);
+    const row = sheet.addRow([
+      ...years.map((y) => byYear?.get(y)?.rank ?? null),
+      r.club.name,
+      r.club.state ?? "",
+      ...years.map((y) => byYear?.get(y)?.points ?? null),
+    ]);
+    for (let i = 0; i < years.length; i++) {
+      row.getCell(years.length + 2 + 1 + i).numFmt = "0.00";
+    }
+  }
+
+  sizeColumns(sheet, years.length);
+}
+
+function addOneYearSheet(
+  workbook: ExcelJS.Workbook,
+  endYear: number,
+  years: number[],
+  perYearByClub: Map<string, Map<number, YearCell>>,
+  clubById: Map<string, { id: string; name: string; state: string | null }>,
+  qualifiedByClubId: Map<string, boolean> | null,
+) {
+  const sheet = workbook.addWorksheet("1 Year Ranking");
+
+  addMethodologyBlock(sheet, `${endYear} National Volleyball Club Ranking – 1 Year`, [
+    `A club qualifies for the National Club Ranking if it has at least 3 teams in different age groups ranked in the top 100 of the ${endYear} National Rankings. Each qualifying age group's rank converts to points (1st = 100, ..., 100th = 1), and the club's best 5 of its 6 age groups are summed for its ${endYear} score.`,
+    "Clubs with fewer than 3 qualifying age groups are still shown below, ranked after every qualifying club.",
+    `Trailing-4-year rank/points are shown for reference only — sorting is by ${endYear} rank.`,
+  ]);
+
+  const rows = [...perYearByClub.entries()]
+    .map(([clubId, byYear]) => ({ clubId, current: byYear.get(endYear), byYear }))
+    .filter((r): r is { clubId: string; current: YearCell; byYear: Map<number, YearCell> } => r.current !== undefined)
+    .sort((a, b) => (a.current.rank ?? Infinity) - (b.current.rank ?? Infinity))
+    .slice(0, PUBLISHED_RANK_LIMIT);
+
+  const headerRow = sheet.addRow([
+    ...years.map((y) => `${y} Ranking`),
+    "Club",
+    "State",
+    ...years.map((y) => `${y} Points`),
+  ]);
+  headerRow.eachCell((cell) => {
+    cell.fill = HEADER_FILL;
+    cell.font = HEADER_FONT;
+  });
+
+  let dividerShown = qualifiedByClubId === null; // no tiering info -> never show the divider
+  for (const r of rows) {
+    const isQualified = qualifiedByClubId?.get(r.clubId) ?? true;
+    if (!dividerShown && !isQualified) {
+      const divider = sheet.addRow(["Clubs below only had 2 teams in the top 100 Rankings"]);
+      divider.font = { italic: true };
+      dividerShown = true;
+    }
+    const club = clubById.get(r.clubId);
+    const row = sheet.addRow([
+      ...years.map((y) => r.byYear.get(y)?.rank ?? null),
+      club?.name ?? "(unknown club)",
+      club?.state ?? "",
+      ...years.map((y) => r.byYear.get(y)?.points ?? null),
+    ]);
+    for (let i = 0; i < years.length; i++) {
+      row.getCell(years.length + 2 + 1 + i).numFmt = "0.00";
+    }
+  }
+
+  sizeColumns(sheet, years.length);
+}
+
+function sizeColumns(sheet: ExcelJS.Worksheet, yearCount: number) {
+  const rankCols = Array.from({ length: yearCount }, () => ({ width: 10 }));
+  const pointCols = Array.from({ length: yearCount }, () => ({ width: 10 }));
+  sheet.columns = [...rankCols, { width: 32 }, { width: 8 }, ...pointCols];
+}
