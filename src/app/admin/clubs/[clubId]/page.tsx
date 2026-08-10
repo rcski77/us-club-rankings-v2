@@ -13,6 +13,7 @@ import {
   tdClass,
 } from "@/lib/ui";
 import { updateClub, leaveRankingGroup } from "./actions";
+import { computeCombinedRankByTeam } from "@/lib/rating/powerRankings";
 
 export default async function ClubDetailPage({
   params,
@@ -45,6 +46,29 @@ export default async function ClubDetailPage({
     prisma.season.findFirst({ where: { isActive: true } }),
   ]);
   if (!club) notFound();
+
+  // National rank = the Combined Rankings blend (50% NPS rank + 50% Power Avg Rank),
+  // same number shown on /admin/team-rankings' Combine tab -- computed per (season,
+  // ageGroup), so only fetch it for the age groups this club actually fields a team
+  // in this season, not all of AGE_GROUPS.
+  const activeAgeGroups = activeSeason
+    ? Array.from(
+        new Set(
+          club.teams.flatMap((t) =>
+            t.seasons.filter((ts) => ts.seasonId === activeSeason.id).map((ts) => ts.ageGroup),
+          ),
+        ),
+      )
+    : [];
+  const combinedRankMaps = activeSeason
+    ? await Promise.all(
+        activeAgeGroups.map((ageGroup) => computeCombinedRankByTeam(activeSeason.id, ageGroup)),
+      )
+    : [];
+  const nationalRankByTeamId = new Map<string, number>();
+  for (const map of combinedRankMaps) {
+    for (const [teamId, rank] of map) nationalRankByTeamId.set(teamId, rank);
+  }
 
   const updateClubWithId = updateClub.bind(null, clubId);
   const leaveRankingGroupWithId = leaveRankingGroup.bind(null, clubId);
@@ -236,7 +260,9 @@ export default async function ClubDetailPage({
       <h2 className="mb-2 text-lg font-medium">Teams</h2>
       {activeSeason && (
         <p className="mb-2 text-xs text-slate-500">
-          Age, team #, and code shown are for the active season ({activeSeason.label}).
+          Age, team #, and code shown are for the active season ({activeSeason.label}). National
+          Rank is each team&apos;s Combined Rankings position (50% NPS rank + 50% Power Avg Rank)
+          within its age group.
         </p>
       )}
       <table className={tableClass}>
@@ -246,6 +272,7 @@ export default async function ClubDetailPage({
             <th className={thClass}>Age</th>
             <th className={thClass}>Team #</th>
             <th className={thClass}>Team code</th>
+            <th className={thClass}>National Rank</th>
             <th className={thClass}>Seasons</th>
           </tr>
         </thead>
@@ -267,6 +294,20 @@ export default async function ClubDetailPage({
                   {activeTs?.externalTeamCode ?? ""}
                 </td>
                 <td className={tdClass}>
+                  {(() => {
+                    const rank = nationalRankByTeamId.get(t.id);
+                    if (!rank) return "—";
+                    if (rank <= 100) {
+                      return (
+                        <span className="rounded-full bg-emerald-100 px-2 py-0.5 font-medium text-emerald-800">
+                          {rank}
+                        </span>
+                      );
+                    }
+                    return rank;
+                  })()}
+                </td>
+                <td className={tdClass}>
                   {t.seasons.length === 0 && (
                     <span className="text-slate-400">Not enrolled in any season</span>
                   )}
@@ -286,7 +327,7 @@ export default async function ClubDetailPage({
           })}
           {sortedTeams.length === 0 && (
             <tr>
-              <td className={tdClass} colSpan={5}>
+              <td className={tdClass} colSpan={6}>
                 No teams for this club yet.
               </td>
             </tr>
