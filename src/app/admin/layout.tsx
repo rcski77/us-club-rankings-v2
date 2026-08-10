@@ -51,6 +51,9 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           <Link href="/admin/seasons" className="rounded px-2 py-1 hover:bg-slate-200">
             Seasons
           </Link>
+          <Link href="/admin/exports" className="rounded px-2 py-1 hover:bg-slate-200">
+            Exports
+          </Link>
           {user.role === "SUPER_ADMIN" && (
             <Link href="/admin/users" className="rounded px-2 py-1 hover:bg-slate-200">
               Users

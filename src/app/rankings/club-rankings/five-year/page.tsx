@@ -49,29 +49,53 @@ export default async function PublicFiveYearClubRankingsPage({
     <div>
       <h1 className="mb-6 text-2xl font-semibold">Club Rankings</h1>
 
-      <div className="mb-6 flex flex-wrap gap-2">
-        {defaultSeason &&
-          SOURCES.map((s) => (
-            <Link
-              key={s.value}
-              href={`/rankings/club-rankings?${new URLSearchParams({ season: defaultSeason.id, source: s.value })}`}
-              className="rounded-full border border-slate-200 px-4 py-1.5 text-sm text-slate-600 transition-colors hover:border-slate-300 hover:bg-slate-50"
-            >
-              {s.label}
-            </Link>
-          ))}
-        <span
-          className="rounded-full px-4 py-1.5 text-sm font-semibold text-white shadow-sm"
-          style={{ backgroundColor: brand.purple }}
-        >
-          5-Year Aggregate
-        </span>
-      </div>
-
       {availableYears.length === 0 || !endYear ? (
         <p className="text-sm text-slate-500">No 5-year rankings available yet.</p>
       ) : (
         <>
+          {availableYears.length > 1 && (
+            <div className="mb-6 flex items-end gap-3">
+              <div className="flex flex-col gap-1 text-sm">
+                Window
+                <div className="flex flex-wrap gap-2">
+                  {availableYears.map((y) => (
+                    <Link
+                      key={y}
+                      href={`/rankings/club-rankings/five-year?${new URLSearchParams({ endYear: String(y) })}`}
+                      className={
+                        y === endYear
+                          ? "rounded-full px-4 py-1.5 text-sm font-semibold text-white shadow-sm"
+                          : "rounded-full border border-slate-200 px-4 py-1.5 text-sm text-slate-600 transition-colors hover:border-slate-300 hover:bg-slate-50"
+                      }
+                      style={y === endYear ? { backgroundColor: brand.teal } : undefined}
+                    >
+                      {y - 4}–{y}
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div className="mb-6 flex flex-wrap gap-2">
+            {defaultSeason &&
+              SOURCES.map((s) => (
+                <Link
+                  key={s.value}
+                  href={`/rankings/club-rankings?${new URLSearchParams({ season: defaultSeason.id, source: s.value })}`}
+                  className="rounded-full border border-slate-200 px-4 py-1.5 text-sm text-slate-600 transition-colors hover:border-slate-300 hover:bg-slate-50"
+                >
+                  {s.label}
+                </Link>
+              ))}
+            <span
+              className="rounded-full px-4 py-1.5 text-sm font-semibold text-white shadow-sm"
+              style={{ backgroundColor: brand.purple }}
+            >
+              5-Year Aggregate
+            </span>
+          </div>
+
           <p className="mb-4 text-sm text-slate-500">
             Recency-weighted blend of each year&apos;s club-level score (
             {FIVE_YEAR_WEIGHTS.map((w) => `${w * 100}%`).join(" / ")}, oldest to newest) — used for NIT invites
@@ -83,25 +107,6 @@ export default async function PublicFiveYearClubRankingsPage({
               View rank history across every computed window →
             </Link>
           </p>
-
-          {availableYears.length > 1 && (
-            <div className="mb-6 flex flex-wrap gap-2">
-              {availableYears.map((y) => (
-                <Link
-                  key={y}
-                  href={`/rankings/club-rankings/five-year?${new URLSearchParams({ endYear: String(y) })}`}
-                  className={
-                    y === endYear
-                      ? "rounded-full px-4 py-1.5 text-sm font-semibold text-white shadow-sm"
-                      : "rounded-full border border-slate-200 px-4 py-1.5 text-sm text-slate-600 transition-colors hover:border-slate-300 hover:bg-slate-50"
-                  }
-                  style={y === endYear ? { backgroundColor: brand.teal } : undefined}
-                >
-                  {y - 4}–{y}
-                </Link>
-              ))}
-            </div>
-          )}
 
           <FiveYearClubRankingTable endYear={endYear} />
         </>

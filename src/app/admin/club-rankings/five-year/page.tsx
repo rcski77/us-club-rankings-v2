@@ -139,6 +139,11 @@ export default async function FiveYearClubRankingsPage({
           View 5-year rank history across every computed window →
         </Link>
       </p>
+      <p className="mb-6 text-sm">
+        <Link href="/admin/exports" prefetch={false} className="text-slate-500 underline">
+          Export the published rankings workbook (.xlsx) →
+        </Link>
+      </p>
 
       {error === "legacy_window" && (
         <p className={errorBannerClass}>
