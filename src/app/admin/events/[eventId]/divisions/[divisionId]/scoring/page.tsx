@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { notFound } from "next/navigation";
-import Link from "next/link";
+import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { BUCKET_THRESHOLDS } from "@/lib/rating/fieldStrength";
 import {
   getDivisionRatedRatings,
@@ -59,19 +59,14 @@ export default async function DivisionScoringPage({
 
   return (
     <div className="max-w-2xl">
-      <div className="mb-2 text-sm text-slate-500">
-        <Link href="/admin/events" className="underline">
-          Events
-        </Link>{" "}
-        /{" "}
-        <Link href={`/admin/events/${eventId}`} className="underline">
-          {division.event.name}
-        </Link>{" "}
-        /{" "}
-        <Link href={`/admin/events/${eventId}/divisions/${divisionId}`} className="underline">
-          {division.name}
-        </Link>
-      </div>
+      <Breadcrumbs
+        items={[
+          { label: "Events", href: "/admin/events" },
+          { label: division.event.name, href: `/admin/events/${eventId}` },
+          { label: division.name, href: `/admin/events/${eventId}/divisions/${divisionId}` },
+          { label: "Scoring suggestion" },
+        ]}
+      />
       <h1 className="mb-1 text-2xl font-semibold">Scoring suggestion</h1>
       <p className="mb-6 text-sm text-slate-500">
         {division.name} · {division.ageGroup}u ·{" "}

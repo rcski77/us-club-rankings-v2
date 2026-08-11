@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { notFound } from "next/navigation";
 import Link from "next/link";
+import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { suggestClubName } from "@/lib/import/clubNameSuggestion";
 import { blockingReason } from "@/lib/import/rowBlocking";
 import { SubmitButton } from "@/components/SubmitButton";
@@ -189,19 +190,12 @@ export default async function ImportBatchPage({
 
   return (
     <div>
-      <div className="mb-2 flex gap-1 text-sm text-slate-500">
-        <Link href="/admin/events" className="underline">
-          Events
-        </Link>
-        <span>/</span>
-        <Link href={`/admin/events/${batch.eventId}`} className="underline">
-          {batch.event.name}
-        </Link>
-        <span>/</span>
-        <Link href="/admin/imports" className="underline">
-          Imports
-        </Link>
-      </div>
+      <Breadcrumbs
+        items={[
+          { label: "Imports", href: "/admin/imports" },
+          { label: batch.event.name, href: `/admin/events/${batch.eventId}` },
+        ]}
+      />
       <div className="mb-1 flex items-start justify-between gap-4">
         <h1 className="text-2xl font-semibold">
           {batch.event.season.label} — {batch.event.name}
@@ -730,19 +724,12 @@ async function MatchResultsBatchView({
 
   return (
     <div>
-      <div className="mb-2 flex gap-1 text-sm text-slate-500">
-        <Link href="/admin/events" className="underline">
-          Events
-        </Link>
-        <span>/</span>
-        <Link href={`/admin/events/${batch.eventId}`} className="underline">
-          {batch.event.name}
-        </Link>
-        <span>/</span>
-        <Link href="/admin/imports" className="underline">
-          Imports
-        </Link>
-      </div>
+      <Breadcrumbs
+        items={[
+          { label: "Imports", href: "/admin/imports" },
+          { label: batch.event.name, href: `/admin/events/${batch.eventId}` },
+        ]}
+      />
       <div className="mb-1 flex items-start justify-between gap-4">
         <h1 className="text-2xl font-semibold">
           {batch.event.season.label} — {batch.event.name} (Match Results)

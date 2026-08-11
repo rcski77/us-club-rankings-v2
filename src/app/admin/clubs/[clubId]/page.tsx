@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { notFound } from "next/navigation";
 import Link from "next/link";
+import { Breadcrumbs, type Crumb } from "@/components/Breadcrumbs";
 import {
   inputClass,
   selectClass,
@@ -20,10 +21,10 @@ export default async function ClubDetailPage({
   searchParams,
 }: {
   params: Promise<{ clubId: string }>;
-  searchParams: Promise<{ error?: string; success?: string }>;
+  searchParams: Promise<{ error?: string; success?: string; from?: string }>;
 }) {
   const { clubId } = await params;
-  const { error, success } = await searchParams;
+  const { error, success, from } = await searchParams;
 
   // club, regions, and activeSeason don't depend on each other's results.
   const [club, regions, activeSeason] = await Promise.all([
@@ -73,6 +74,16 @@ export default async function ClubDetailPage({
   const updateClubWithId = updateClub.bind(null, clubId);
   const leaveRankingGroupWithId = leaveRankingGroup.bind(null, clubId);
 
+  // Which page linked here determines the natural parent crumb -- clicking a club
+  // name from Club Rankings should trail back to Club Rankings, not the raw Clubs
+  // list, even though both routes land on this same detail page.
+  const FROM_CRUMBS: Record<string, Crumb> = {
+    "club-rankings": { label: "Club Rankings", href: "/admin/club-rankings" },
+    "five-year": { label: "5-Year Club Rankings", href: "/admin/club-rankings/five-year" },
+    "club-groups": { label: "Club Groups", href: "/admin/club-groups" },
+  };
+  const parentCrumb = (from && FROM_CRUMBS[from]) || { label: "Clubs", href: "/admin/clubs" };
+
   const sortedTeams = [...club.teams].sort((a, b) => {
     const aTs = activeSeason ? a.seasons.find((ts) => ts.seasonId === activeSeason.id) : undefined;
     const bTs = activeSeason ? b.seasons.find((ts) => ts.seasonId === activeSeason.id) : undefined;
@@ -85,11 +96,7 @@ export default async function ClubDetailPage({
 
   return (
     <div>
-      <div className="mb-2 text-sm text-slate-500">
-        <Link href="/admin/clubs" className="underline">
-          Clubs
-        </Link>
-      </div>
+      <Breadcrumbs items={[parentCrumb, { label: club.name }]} />
       <h1 className="mb-6 text-2xl font-semibold">{club.name}</h1>
 
       {error === "invalid" && <p className={errorBannerClass}>Club name is required.</p>}

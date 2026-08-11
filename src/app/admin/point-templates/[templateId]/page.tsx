@@ -2,7 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { requireSuperAdmin } from "@/lib/authz";
 import { notFound, redirect } from "next/navigation";
-import Link from "next/link";
+import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { refreshMaxPoints } from "@/lib/pointTemplates";
 import {
   inputClass,
@@ -79,11 +79,7 @@ export default async function PointTemplateDetailPage({
 
   return (
     <div className="max-w-xl">
-      <div className="mb-2 text-sm text-slate-500">
-        <Link href="/admin/point-templates" className="underline">
-          Point Templates
-        </Link>
-      </div>
+      <Breadcrumbs items={[{ label: "Point Templates", href: "/admin/point-templates" }, { label: template.name }]} />
       <h1 className="mb-1 text-2xl font-semibold">{template.name}</h1>
       <p className="mb-2 text-sm text-slate-500">
         Max points: {template.maxPoints}

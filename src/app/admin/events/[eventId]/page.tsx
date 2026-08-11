@@ -4,6 +4,7 @@ import { requireSuperAdmin } from "@/lib/authz";
 import { notFound, redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import Link from "next/link";
+import { Breadcrumbs } from "@/components/Breadcrumbs";
 import {
   inputClass,
   selectClass,
@@ -264,11 +265,7 @@ export default async function EventDetailPage({
 
   return (
     <div>
-      <div className="mb-2 text-sm text-slate-500">
-        <Link href="/admin/events" className="underline">
-          Events
-        </Link>
-      </div>
+      <Breadcrumbs items={[{ label: "Events", href: "/admin/events" }, { label: event.name }]} />
       <h1 className="mb-1 text-2xl font-semibold">{event.name}</h1>
       <p className="mb-6 text-sm text-slate-500">
         {event.season.label} · {event.startDate.toISOString().slice(0, 10)} –{" "}

@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { notFound } from "next/navigation";
 import Link from "next/link";
+import { Breadcrumbs } from "@/components/Breadcrumbs";
 import {
   updateDivisionDetails,
   applyTemplate,
@@ -86,15 +87,13 @@ export default async function DivisionDetailPage({
 
   return (
     <div className="max-w-2xl">
-      <div className="mb-2 text-sm text-slate-500">
-        <Link href="/admin/events" className="underline">
-          Events
-        </Link>{" "}
-        /{" "}
-        <Link href={`/admin/events/${eventId}`} className="underline">
-          {division.event.name}
-        </Link>
-      </div>
+      <Breadcrumbs
+        items={[
+          { label: "Events", href: "/admin/events" },
+          { label: division.event.name, href: `/admin/events/${eventId}` },
+          { label: division.name },
+        ]}
+      />
       <h1 className="mb-1 text-2xl font-semibold">{division.name}</h1>
       <p className="mb-6 text-sm text-slate-500">
         {division.ageGroup}u · {division.tierLabel}

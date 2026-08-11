@@ -19,6 +19,7 @@ import {
 } from "@/lib/ranking/computeFiveYearClubRanking";
 import { FIVE_YEAR_WEIGHTS } from "@/lib/ranking/fiveYearClubRanking";
 import { SubmitButton } from "@/components/SubmitButton";
+import { Breadcrumbs } from "@/components/Breadcrumbs";
 import type { ClubRankingSource } from "@/generated/prisma/enums";
 
 const SYNC_SOURCES = [
@@ -99,6 +100,12 @@ export default async function FiveYearClubRankingsPage({
 
   return (
     <div>
+      <Breadcrumbs
+        items={[
+          { label: "Club Rankings", href: "/admin/club-rankings" },
+          { label: "5-Year Aggregate" },
+        ]}
+      />
       <h1 className="mb-2 text-2xl font-semibold">5-Year Aggregate Club Rankings</h1>
 
       {/* Same tab row as /admin/club-rankings, so the two views read as one surface --
@@ -259,7 +266,11 @@ export default async function FiveYearClubRankingsPage({
               <tr key={r.id}>
                 <td className={tdClass}>{r.rank}</td>
                 <td className={tdClass}>
-                  <Link href={`/admin/clubs/${r.club.id}`} prefetch={false} className="text-slate-900 underline">
+                  <Link
+                    href={`/admin/clubs/${r.club.id}?from=five-year`}
+                    prefetch={false}
+                    className="text-slate-900 underline"
+                  >
                     {r.club.name}
                   </Link>
                 </td>

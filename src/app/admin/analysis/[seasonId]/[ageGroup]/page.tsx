@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
+import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { BUCKET_THRESHOLDS } from "@/lib/rating/fieldStrength";
 import { computeDivisionWeightsForPartition } from "@/lib/rating/computeMatchDivisionWeights";
 import { computeDivisionScoringSuggestion } from "@/lib/rating/computeDivisionScoringSuggestion";
@@ -168,11 +169,12 @@ export default async function AnalysisPage({
 
   return (
     <div>
-      <div className="mb-2 text-sm text-slate-500">
-        <Link href="/admin/analysis" className="underline">
-          Analysis
-        </Link>
-      </div>
+      <Breadcrumbs
+        items={[
+          { label: "Analysis", href: "/admin/analysis" },
+          { label: `${season.label} · ${ageGroup}u` },
+        ]}
+      />
       <div className="mb-6 flex items-center justify-between">
         <h1 className="text-2xl font-semibold">
           {season.label} · {ageGroup}u Analysis
