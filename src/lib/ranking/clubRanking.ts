@@ -74,10 +74,17 @@ export function computeClubScore(bestRankByAgeGroup: BestRankByAgeGroup): ClubSc
     };
   });
 
-  // Drop the single lowest-weighted slot(s); ties for lowest are broken by original
-  // age-group order (stable sort), which just needs to be deterministic, not any
-  // particular order -- the spec doesn't distinguish among equally-lowest slots.
-  const sortedByWeighted = [...slots].sort((a, b) => a.weightedPoints - b.weightedPoints);
+  // Drop the single lowest-weighted slot(s); ties for lowest (e.g. two teams both
+  // ranked outside the top 100, so both floored to 0 weighted points) are broken by
+  // actual rank, worst-ranked first -- otherwise a stable sort on age-group order
+  // could "drop" a 132nd-ranked team while displaying a 226th-ranked team as
+  // counting, which is technically equivalent (both score 0) but looks wrong. A
+  // missing team (rank null) is treated as worse than any ranked team, so it's
+  // preferred for dropping over an actually-ranked-but-non-qualifying team.
+  const sortedByWeighted = [...slots].sort((a, b) => {
+    if (a.weightedPoints !== b.weightedPoints) return a.weightedPoints - b.weightedPoints;
+    return (b.rank ?? Infinity) - (a.rank ?? Infinity);
+  });
   const droppedIds = new Set(sortedByWeighted.slice(0, DROP_LOWEST_COUNT).map((s) => s.ageGroup));
 
   const contributions: AgeGroupContribution[] = slots.map((s) => ({
