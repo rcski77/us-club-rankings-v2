@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { prisma } from "@/lib/prisma";
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
@@ -19,6 +20,16 @@ import {
   scoreBandBadgeClass,
 } from "@/lib/ui";
 import { SubmitButton } from "@/components/SubmitButton";
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ seasonId: string; ageGroup: string }>;
+}): Promise<Metadata> {
+  const { seasonId, ageGroup } = await params;
+  const season = await prisma.season.findUnique({ where: { id: seasonId }, select: { label: true } });
+  return { title: season ? `U${ageGroup} Analysis — ${season.label}` : "Analysis" };
+}
 
 async function runAnalysisForAll(seasonId: string, ageGroup: number) {
   "use server";

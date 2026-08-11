@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { prisma } from "@/lib/prisma";
 import { redirect } from "next/navigation";
 import Link from "next/link";
@@ -12,6 +13,8 @@ import {
   tdClass,
 } from "@/lib/ui";
 import { ClubCombobox } from "@/components/ClubCombobox";
+
+export const metadata: Metadata = { title: "Teams" };
 
 async function createTeam(formData: FormData) {
   "use server";

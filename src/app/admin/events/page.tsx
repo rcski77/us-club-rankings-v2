@@ -1,6 +1,9 @@
+import type { Metadata } from "next";
 import { prisma } from "@/lib/prisma";
 import Link from "next/link";
 import { inputClass, tableClass, thClass, tdClass, primaryButtonClass, successBannerClass } from "@/lib/ui";
+
+export const metadata: Metadata = { title: "Events" };
 
 export default async function EventsPage({
   searchParams,

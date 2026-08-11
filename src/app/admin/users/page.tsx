@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { hashPassword } from "@/lib/password";
@@ -6,6 +7,8 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import type { UserRole, UserStatus } from "@/generated/prisma/enums";
 import { inputClass, selectClass, primaryButtonClass, errorBannerClass } from "@/lib/ui";
+
+export const metadata: Metadata = { title: "Users" };
 
 async function updateUser(userId: string, status: UserStatus, role: UserRole) {
   "use server";

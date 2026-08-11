@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { prisma } from "@/lib/prisma";
 import { notFound } from "next/navigation";
 import Link from "next/link";
@@ -17,6 +18,16 @@ import {
   RecordIcon,
 } from "@/lib/publicUi";
 import { getTeamEloHistory } from "@/lib/rating/computeEloRatings";
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ teamId: string }>;
+}): Promise<Metadata> {
+  const { teamId } = await params;
+  const team = await prisma.team.findUnique({ where: { id: teamId }, select: { name: true } });
+  return { title: team?.name ?? "Team" };
+}
 
 export default async function PublicTeamDetailPage({
   params,

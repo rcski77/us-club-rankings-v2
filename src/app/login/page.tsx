@@ -1,6 +1,9 @@
+import type { Metadata } from "next";
 import { signIn } from "@/auth";
 import { redirect } from "next/navigation";
 import Link from "next/link";
+
+export const metadata: Metadata = { title: "Sign In" };
 
 export default async function LoginPage({
   searchParams,

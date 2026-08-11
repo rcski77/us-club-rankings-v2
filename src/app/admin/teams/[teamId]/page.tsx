@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { requireSuperAdmin } from "@/lib/authz";
@@ -18,6 +19,16 @@ import {
 } from "@/lib/ui";
 import { getTeamEloHistory } from "@/lib/rating/computeEloRatings";
 import { ClubCombobox } from "@/components/ClubCombobox";
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ teamId: string }>;
+}): Promise<Metadata> {
+  const { teamId } = await params;
+  const team = await prisma.team.findUnique({ where: { id: teamId }, select: { name: true } });
+  return { title: team?.name ?? "Team" };
+}
 
 async function updateTeam(teamId: string, formData: FormData) {
   "use server";

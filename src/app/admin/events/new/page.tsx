@@ -1,7 +1,10 @@
+import type { Metadata } from "next";
 import { prisma } from "@/lib/prisma";
 import { redirect } from "next/navigation";
 import { uniqueSlug } from "@/lib/slug";
 import { inputClass, selectClass, primaryButtonClass, errorBannerClass } from "@/lib/ui";
+
+export const metadata: Metadata = { title: "New Event" };
 
 async function createEvent(formData: FormData) {
   "use server";

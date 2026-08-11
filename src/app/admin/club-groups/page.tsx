@@ -12,6 +12,9 @@ import {
   tdClass,
 } from "@/lib/ui";
 import { mergeClubs, combineClubs, removeGroupMember } from "./actions";
+import type { Metadata } from "next";
+
+export const metadata: Metadata = { title: "Club Groups" };
 
 export default async function ClubGroupsPage({
   searchParams,

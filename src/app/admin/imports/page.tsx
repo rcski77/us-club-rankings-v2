@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { requireSuperAdmin } from "@/lib/authz";
@@ -14,6 +15,8 @@ import {
   tdClass,
 } from "@/lib/ui";
 import { SubmitButton } from "@/components/SubmitButton";
+
+export const metadata: Metadata = { title: "Imports" };
 
 async function startImportBatch(formData: FormData) {
   "use server";

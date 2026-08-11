@@ -1,6 +1,9 @@
+import type { Metadata } from "next";
 import { prisma } from "@/lib/prisma";
 import { redirect } from "next/navigation";
 import { selectClass, primaryButtonClass } from "@/lib/ui";
+
+export const metadata: Metadata = { title: "Analysis" };
 
 async function goToAnalysis(formData: FormData) {
   "use server";

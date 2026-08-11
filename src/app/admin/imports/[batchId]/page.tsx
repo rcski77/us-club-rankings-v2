@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { notFound } from "next/navigation";
@@ -47,6 +48,19 @@ const STATUS_COLORS: Record<string, string> = {
   ERROR: "text-red-700",
   PENDING: "text-slate-500",
 };
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ batchId: string }>;
+}): Promise<Metadata> {
+  const { batchId } = await params;
+  const batch = await prisma.importBatch.findUnique({
+    where: { id: batchId },
+    select: { event: { select: { name: true } } },
+  });
+  return { title: batch ? `Import — ${batch.event.name}` : "Import" };
+}
 
 export default async function ImportBatchPage({
   params,

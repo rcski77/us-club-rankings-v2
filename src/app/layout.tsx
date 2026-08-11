@@ -13,7 +13,10 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "US Club Rankings v2.0",
+  title: {
+    default: "US Club Rankings v2.0",
+    template: "%s | US Club Rankings",
+  },
   description: "Powered by Triple Crown Sports",
 };
 

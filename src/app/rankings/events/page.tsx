@@ -1,9 +1,12 @@
+import type { Metadata } from "next";
 import { prisma } from "@/lib/prisma";
 import Link from "next/link";
 import { brand } from "@/lib/brand";
 import { tableWrapClass, thClass, tdClass, numThClass, numTdClass, tbodyClass } from "@/lib/publicUi";
 import { SeasonFilterSelect } from "./SeasonFilterSelect";
 import { DEFAULT_PAGE_SIZE, Pagination, parsePage } from "../Pagination";
+
+export const metadata: Metadata = { title: "Events" };
 
 function TeamsIcon() {
   return (

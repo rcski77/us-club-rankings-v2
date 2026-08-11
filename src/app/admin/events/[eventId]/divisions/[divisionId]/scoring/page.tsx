@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { prisma } from "@/lib/prisma";
 import { notFound } from "next/navigation";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
@@ -18,6 +19,19 @@ import {
   thClass,
   tdClass,
 } from "@/lib/ui";
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ eventId: string; divisionId: string }>;
+}): Promise<Metadata> {
+  const { divisionId } = await params;
+  const division = await prisma.division.findUnique({
+    where: { id: divisionId },
+    select: { name: true, ageGroup: true },
+  });
+  return { title: division ? `Scoring — ${division.name} (${division.ageGroup}u)` : "Scoring" };
+}
 
 export default async function DivisionScoringPage({
   params,

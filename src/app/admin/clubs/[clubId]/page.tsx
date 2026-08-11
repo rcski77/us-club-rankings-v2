@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { prisma } from "@/lib/prisma";
 import { notFound } from "next/navigation";
 import Link from "next/link";
@@ -15,6 +16,16 @@ import {
 } from "@/lib/ui";
 import { updateClub, leaveRankingGroup } from "./actions";
 import { computeCombinedRankByTeam } from "@/lib/rating/powerRankings";
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ clubId: string }>;
+}): Promise<Metadata> {
+  const { clubId } = await params;
+  const club = await prisma.club.findUnique({ where: { id: clubId }, select: { name: true } });
+  return { title: club?.name ?? "Club" };
+}
 
 export default async function ClubDetailPage({
   params,

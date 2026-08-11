@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { Fragment } from "react";
 import { prisma } from "@/lib/prisma";
 import { redirect } from "next/navigation";
@@ -11,6 +12,8 @@ import {
   tdClass,
 } from "@/lib/ui";
 import type { UsavZone } from "@/generated/prisma/enums";
+
+export const metadata: Metadata = { title: "Regions" };
 
 const ZONE_ORDER: UsavZone[] = ["ATLANTIC", "BORDER", "CENTRAL", "PACIFIC"];
 const ZONE_LABEL: Record<UsavZone, string> = {

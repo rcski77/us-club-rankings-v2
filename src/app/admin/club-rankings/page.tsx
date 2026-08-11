@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { prisma } from "@/lib/prisma";
 import { redirect } from "next/navigation";
 import Link from "next/link";
@@ -9,6 +10,8 @@ import { AGE_GROUPS } from "@/lib/ranking/clubRanking";
 import type { ClubRankingSource } from "@/generated/prisma/enums";
 import { SeasonFilterSelect } from "../team-rankings/SeasonFilterSelect";
 import { SubmitButton } from "@/components/SubmitButton";
+
+export const metadata: Metadata = { title: "Club Rankings" };
 
 const SOURCES = [
   { value: "NPS", label: "NPS" },

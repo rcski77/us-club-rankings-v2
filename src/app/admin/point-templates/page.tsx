@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { prisma } from "@/lib/prisma";
 import { redirect } from "next/navigation";
 import Link from "next/link";
@@ -9,6 +10,8 @@ import {
   thClass,
   tdClass,
 } from "@/lib/ui";
+
+export const metadata: Metadata = { title: "Point Templates" };
 
 async function createTemplate(formData: FormData) {
   "use server";

@@ -1,5 +1,8 @@
+import type { Metadata } from "next";
 import { auth, signOut } from "@/auth";
 import { redirect } from "next/navigation";
+
+export const metadata: Metadata = { title: "Pending Approval" };
 
 export default async function PendingPage() {
   const session = await auth();
