@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { requireSuperAdmin } from "@/lib/authz";
@@ -13,6 +14,16 @@ import {
   thClass,
   tdClass,
 } from "@/lib/ui";
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ templateId: string }>;
+}): Promise<Metadata> {
+  const { templateId } = await params;
+  const template = await prisma.pointTemplate.findUnique({ where: { id: templateId }, select: { name: true } });
+  return { title: template?.name ?? "Point Template" };
+}
 
 async function addBand(templateId: string, formData: FormData) {
   "use server";

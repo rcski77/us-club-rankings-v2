@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { prisma } from "@/lib/prisma";
 import { redirect } from "next/navigation";
 import Link from "next/link";
@@ -21,6 +22,8 @@ import { FIVE_YEAR_WEIGHTS } from "@/lib/ranking/fiveYearClubRanking";
 import { SubmitButton } from "@/components/SubmitButton";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
 import type { ClubRankingSource } from "@/generated/prisma/enums";
+
+export const metadata: Metadata = { title: "Five-Year Club Rankings" };
 
 const SYNC_SOURCES = [
   { value: "COMBINED", label: "Combined" },

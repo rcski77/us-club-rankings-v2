@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { prisma } from "@/lib/prisma";
 import Link from "next/link";
 import { brand } from "@/lib/brand";
@@ -11,6 +12,8 @@ import { LEGACY_IMPORT_ALGORITHM_VERSION } from "@/lib/ranking/computeFiveYearCl
 // capped, and the admin equivalent (/admin/club-rankings/five-year) stays uncapped
 // for staff QA.
 const PUBLISHED_RANK_LIMIT = 100;
+
+export const metadata: Metadata = { title: "Five-Year Club Rankings" };
 
 const SOURCES = [
   { value: "NPS", label: "NPS" },

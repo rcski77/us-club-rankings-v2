@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { prisma } from "@/lib/prisma";
 import Link from "next/link";
 import { brand } from "@/lib/brand";
@@ -5,6 +6,8 @@ import { tableWrapClass, thClass, tdClass, primaryTdClass, numThClass, numTdClas
 import { DEFAULT_PAGE_SIZE, Pagination, parsePage } from "../Pagination";
 
 export const dynamic = "force-dynamic";
+
+export const metadata: Metadata = { title: "Clubs" };
 
 export default async function PublicClubsPage({
   searchParams,

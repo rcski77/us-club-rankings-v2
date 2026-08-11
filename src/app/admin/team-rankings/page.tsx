@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { prisma } from "@/lib/prisma";
 import { redirect } from "next/navigation";
 import Link from "next/link";
@@ -22,6 +23,8 @@ import {
 } from "@/lib/rating/powerRankings";
 import { SeasonFilterSelect } from "./SeasonFilterSelect";
 import { SubmitButton } from "@/components/SubmitButton";
+
+export const metadata: Metadata = { title: "Team Rankings" };
 
 const AGE_GROUPS = [12, 13, 14, 15, 16, 17, 18];
 const VIEWS = [

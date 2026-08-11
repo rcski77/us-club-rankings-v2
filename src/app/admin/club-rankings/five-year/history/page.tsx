@@ -1,8 +1,11 @@
+import type { Metadata } from "next";
 import { Fragment } from "react";
 import Link from "next/link";
 import { tableClass, thClass, tdClass, stripedTbodyClass } from "@/lib/ui";
 import { getFiveYearRankingHistory } from "@/lib/ranking/fiveYearRankingHistory";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
+
+export const metadata: Metadata = { title: "Five-Year Rankings History" };
 
 export default async function FiveYearRankingHistoryPage() {
   const { endYears, rows } = await getFiveYearRankingHistory();

@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { prisma } from "@/lib/prisma";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
@@ -10,6 +11,8 @@ import {
   thClass,
   tdClass,
 } from "@/lib/ui";
+
+export const metadata: Metadata = { title: "Seasons" };
 
 async function createSeason(formData: FormData) {
   "use server";

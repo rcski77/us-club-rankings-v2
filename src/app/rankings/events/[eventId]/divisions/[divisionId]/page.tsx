@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { prisma } from "@/lib/prisma";
 import { notFound } from "next/navigation";
 import Link from "next/link";
@@ -14,6 +15,19 @@ import {
   RankBadge,
 } from "@/lib/publicUi";
 import { getEventEloSummaries } from "@/lib/rating/computeEloRatings";
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ eventId: string; divisionId: string }>;
+}): Promise<Metadata> {
+  const { divisionId } = await params;
+  const division = await prisma.division.findUnique({
+    where: { id: divisionId },
+    select: { name: true, ageGroup: true },
+  });
+  return { title: division ? `${division.name} (${division.ageGroup}u)` : "Division" };
+}
 
 export default async function PublicDivisionDetailPage({
   params,

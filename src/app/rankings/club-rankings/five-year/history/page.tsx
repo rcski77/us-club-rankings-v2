@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { Fragment } from "react";
 import Link from "next/link";
 import { brand } from "@/lib/brand";
@@ -10,6 +11,8 @@ import { getFiveYearRankingHistory } from "@/lib/ranking/fiveYearRankingHistory"
 // reachable during `npm run build`). Same explicit opt-out /rankings/clubs/page.tsx
 // already uses.
 export const dynamic = "force-dynamic";
+
+export const metadata: Metadata = { title: "Five-Year Rankings History" };
 
 // Same top-100 cap as /rankings/club-rankings/five-year (only the top 100 gets
 // published) -- applied against the most recent computed window's rank, since rows

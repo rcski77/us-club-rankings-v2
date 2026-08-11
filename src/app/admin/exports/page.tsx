@@ -1,7 +1,10 @@
+import type { Metadata } from "next";
 import { prisma } from "@/lib/prisma";
 import Link from "next/link";
 import { primaryButtonClass, tableClass, thClass, tdClass, stripedTbodyClass } from "@/lib/ui";
 import { LEGACY_IMPORT_ALGORITHM_VERSION } from "@/lib/ranking/computeFiveYearClubRanking";
+
+export const metadata: Metadata = { title: "Exports" };
 
 export default async function ExportsPage() {
   // Only years with a computed ClubFiveYearRankingResult are exportable --

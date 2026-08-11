@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { requireSuperAdmin } from "@/lib/authz";
@@ -49,6 +50,16 @@ const TIER_LABELS: DivisionTierLabel[] = [
 ];
 
 const SCHEDULE_SOURCES: ImportSource[] = ["AES", "SPORTWRENCH", "TM2", "VBSCHEDULE"];
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ eventId: string }>;
+}): Promise<Metadata> {
+  const { eventId } = await params;
+  const event = await prisma.event.findUnique({ where: { id: eventId }, select: { name: true } });
+  return { title: event?.name ?? "Event" };
+}
 
 async function updateEvent(eventId: string, formData: FormData) {
   "use server";

@@ -1,7 +1,10 @@
+import type { Metadata } from "next";
 import { prisma } from "@/lib/prisma";
 import { hashPassword } from "@/lib/password";
 import { redirect } from "next/navigation";
 import Link from "next/link";
+
+export const metadata: Metadata = { title: "Register" };
 
 async function registerAction(formData: FormData) {
   "use server";
