@@ -290,7 +290,7 @@ async function NpsRankingTable({
           <tr key={r.id}>
             <td className={tdClass}>{r.rank}</td>
             <td className={tdClass}>
-              <Link href={`/admin/teams/${r.team.id}`} prefetch={false} className="text-slate-900 underline">
+              <Link href={`/admin/teams/${r.team.id}?from=team-rankings`} prefetch={false} className="text-slate-900 underline">
                 {r.team.name}
               </Link>
             </td>
@@ -472,7 +472,7 @@ async function PowerRankingTable({
             <tr key={team.id}>
               <td className={tdClass}>{rankByTeamId.get(team.id) ?? "—"}</td>
               <td className={tdClass}>
-                <Link href={`/admin/teams/${team.id}`} prefetch={false} className="text-slate-900 underline">
+                <Link href={`/admin/teams/${team.id}?from=team-rankings`} prefetch={false} className="text-slate-900 underline">
                   {team.name}
                 </Link>
               </td>
@@ -625,7 +625,7 @@ async function CombineRankingTable({
           <tr key={r.team.id}>
             <td className={tdClass}>{rankByTeamId.get(r.team.id) ?? "—"}</td>
             <td className={tdClass}>
-              <Link href={`/admin/teams/${r.team.id}`} prefetch={false} className="text-slate-900 underline">
+              <Link href={`/admin/teams/${r.team.id}?from=team-rankings`} prefetch={false} className="text-slate-900 underline">
                 {r.team.name}
               </Link>
             </td>

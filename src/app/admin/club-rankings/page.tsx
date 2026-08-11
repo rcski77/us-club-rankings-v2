@@ -201,7 +201,7 @@ async function ClubRankingTable({ seasonId, source }: { seasonId: string; source
                       <td className={tdClass}>{r.rank}</td>
                       <td className={tdClass}>
                         <Link
-                          href={`/admin/clubs/${r.club.id}`}
+                          href={`/admin/clubs/${r.club.id}?from=club-rankings`}
                           prefetch={false}
                           className="text-slate-900 underline"
                         >
@@ -221,7 +221,7 @@ async function ClubRankingTable({ seasonId, source }: { seasonId: string; source
                         }
                         return (
                           <td key={ag} className={`${tdClass} ${c.countedInBest5 ? "" : "text-slate-400 line-through"}`}>
-                            <Link href={`/admin/teams/${c.team.id}`} prefetch={false} className="underline">
+                            <Link href={`/admin/teams/${c.team.id}?from=club-rankings`} prefetch={false} className="underline">
                               {c.team.name}
                             </Link>{" "}
                             ({c.rank}

@@ -4,6 +4,7 @@ import { requireSuperAdmin } from "@/lib/authz";
 import { notFound, redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import Link from "next/link";
+import { Breadcrumbs, type Crumb } from "@/components/Breadcrumbs";
 import {
   tableClass,
   thClass,
@@ -65,10 +66,10 @@ export default async function TeamDetailPage({
   searchParams,
 }: {
   params: Promise<{ teamId: string }>;
-  searchParams: Promise<{ error?: string; season?: string }>;
+  searchParams: Promise<{ error?: string; season?: string; from?: string }>;
 }) {
   const { teamId } = await params;
-  const { error, season: seasonParam } = await searchParams;
+  const { error, season: seasonParam, from } = await searchParams;
   const session = await auth();
   const isSuperAdmin = session?.user.role === "SUPER_ADMIN";
 
@@ -102,6 +103,20 @@ export default async function TeamDetailPage({
     }),
   ]);
   if (!team) notFound();
+
+  // Which page linked here determines the natural parent crumb -- clicking a team
+  // name from Team Rankings or its club should trail back there, not the raw Teams
+  // list, even though all three routes land on this same detail page.
+  const FROM_CRUMBS: Record<string, Crumb> = {
+    "team-rankings": { label: "Team Rankings", href: "/admin/team-rankings" },
+    "club-rankings": { label: "Club Rankings", href: "/admin/club-rankings" },
+  };
+  const parentCrumbs: Crumb[] =
+    from && FROM_CRUMBS[from]
+      ? [FROM_CRUMBS[from]]
+      : team.club
+        ? [{ label: "Clubs", href: "/admin/clubs" }, { label: team.club.name, href: `/admin/clubs/${team.club.id}` }]
+        : [{ label: "Teams", href: "/admin/teams" }];
 
   const enrolledSeasonIds = new Set(team.seasons.map((ts) => ts.seasonId));
   const availableSeasons = seasons.filter((s) => !enrolledSeasonIds.has(s.id));
@@ -232,11 +247,7 @@ export default async function TeamDetailPage({
 
   return (
     <div>
-      <div className="mb-2 text-sm text-slate-500">
-        <Link href="/admin/teams" className="underline">
-          Teams
-        </Link>
-      </div>
+      <Breadcrumbs items={[...parentCrumbs, { label: team.name }]} />
       <h1 className="mb-6 text-2xl font-semibold">{team.name}</h1>
 
       {error === "invalid" && <p className={errorBannerClass}>Name is required.</p>}
