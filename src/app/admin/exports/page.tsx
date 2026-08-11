@@ -8,11 +8,26 @@ export default async function ExportsPage() {
   // buildClubRankingsWorkbook() requires it for the 5-Year sheet's totals/rank (see
   // its own gate), so this page surfaces that requirement up front instead of letting
   // staff hit a 400 after clicking "Export."
-  const results = await prisma.clubFiveYearRankingResult.findMany({
-    distinct: ["endYear"],
-    select: { endYear: true, computedAt: true, algorithmVersion: true },
-    orderBy: { endYear: "desc" },
-  });
+  const [results, seasons] = await Promise.all([
+    prisma.clubFiveYearRankingResult.findMany({
+      distinct: ["endYear"],
+      select: { endYear: true, computedAt: true, algorithmVersion: true },
+      orderBy: { endYear: "desc" },
+    }),
+    // Only seasons with at least one computed RankingResult are exportable -- same
+    // reasoning as the endYear gate above, applied to the Team Rankings workbook.
+    // RankingResult has no back-relation declared on Season, so filter by the
+    // distinct seasonIds it actually has rows for.
+    prisma.rankingResult
+      .findMany({ distinct: ["seasonId"], select: { seasonId: true } })
+      .then((rows) =>
+        prisma.season.findMany({
+          where: { id: { in: rows.map((r) => r.seasonId) } },
+          select: { id: true, label: true, startDate: true },
+          orderBy: { startDate: "desc" },
+        }),
+      ),
+  ]);
 
   return (
     <div>
@@ -58,6 +73,48 @@ export default async function ExportsPage() {
               <td className={tdClass} colSpan={3}>
                 No 5-year rankings computed yet —{" "}
                 <Link href="/admin/club-rankings/five-year" prefetch={false} className="underline">
+                  compute one first
+                </Link>
+                .
+              </td>
+            </tr>
+          )}
+        </tbody>
+      </table>
+
+      <h2 className="mt-10 mb-2 text-xl font-semibold">Team Rankings</h2>
+      <p className="mb-6 text-sm text-slate-500">
+        Downloads a workbook with one sheet per age group (12u–18u), each listing that age
+        group&apos;s top 100 Combined-ranked teams (50% NPS rank + 50% Power Rankings&apos; Avg
+        Rank) — the same blend as the Combined Rankings tab.
+      </p>
+
+      <table className={tableClass}>
+        <thead>
+          <tr>
+            <th className={thClass}>Season</th>
+            <th className={thClass}></th>
+          </tr>
+        </thead>
+        <tbody className={stripedTbodyClass}>
+          {seasons.map((s) => (
+            <tr key={s.id}>
+              <td className={tdClass}>{s.label}</td>
+              <td className={tdClass}>
+                <a
+                  href={`/admin/exports/download-teams?${new URLSearchParams({ season: s.id })}`}
+                  className={primaryButtonClass}
+                >
+                  Export .xlsx
+                </a>
+              </td>
+            </tr>
+          ))}
+          {seasons.length === 0 && (
+            <tr>
+              <td className={tdClass} colSpan={2}>
+                No team rankings computed yet —{" "}
+                <Link href="/admin/team-rankings" prefetch={false} className="underline">
                   compute one first
                 </Link>
                 .
