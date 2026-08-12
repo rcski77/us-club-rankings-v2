@@ -20,6 +20,7 @@ import {
   scoreBandBadgeClass,
 } from "@/lib/ui";
 import { SubmitButton } from "@/components/SubmitButton";
+import { SeasonPathSelect } from "../../SeasonPathSelect";
 
 export async function generateMetadata({
   params,
@@ -119,19 +120,23 @@ export default async function AnalysisPage({
   const season = await prisma.season.findUnique({ where: { id: seasonId } });
   if (!season || !ageGroup) notFound();
 
-  const divisions = await prisma.division.findMany({
-    where: { ageGroup, event: { seasonId } },
-    include: {
-      event: true,
-      pointBands: true,
-      scoringSnapshots: {
-        orderBy: { createdAt: "desc" },
-        take: 1,
-        include: { suggestedTemplate: true },
+  // seasons (for the season switcher) and divisions don't depend on each other's result.
+  const [seasons, divisions] = await Promise.all([
+    prisma.season.findMany({ orderBy: { startDate: "desc" } }),
+    prisma.division.findMany({
+      where: { ageGroup, event: { seasonId } },
+      include: {
+        event: true,
+        pointBands: true,
+        scoringSnapshots: {
+          orderBy: { createdAt: "desc" },
+          take: 1,
+          include: { suggestedTemplate: true },
+        },
       },
-    },
-    orderBy: [{ event: { startDate: "asc" } }, { name: "asc" }],
-  });
+      orderBy: [{ event: { startDate: "asc" } }, { name: "asc" }],
+    }),
+  ]);
 
   const eloWeights = await computeDivisionWeightsForPartition(seasonId, ageGroup);
 
@@ -192,7 +197,11 @@ export default async function AnalysisPage({
         <h1 className="text-2xl font-semibold">
           {season.label} · {ageGroup}u Analysis
         </h1>
-        <div className="flex items-center gap-3">
+        <div className="flex items-end gap-3">
+          <label className="flex flex-col gap-1 text-sm">
+            Season
+            <SeasonPathSelect seasons={seasons} defaultValue={season.id} ageGroup={ageGroup} />
+          </label>
           <form action={runAnalysisForAllWithParams}>
             <SubmitButton className={primaryButtonClass} pendingText="Running…">
               Run analysis for all divisions
