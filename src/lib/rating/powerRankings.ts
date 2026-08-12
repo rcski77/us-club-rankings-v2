@@ -187,16 +187,83 @@ export function averagePowerRank(r: PowerRow): number | undefined {
  * blend falls back to 100% the side it has; a team with neither has no combined rank
  * and is simply absent from the returned map.
  */
+/**
+ * Same three-engine "latest snapshot per (season, ageGroup)" lookup as
+ * getLatestPowerRatings, but selects only teamId + rank instead of including the full
+ * team/club relation -- computeCombinedRankByTeam only ever needs a team's rank within
+ * each engine, never its display fields, and the team+club join is the expensive part
+ * of that query for age groups with hundreds/thousands of rated teams.
+ */
+const getLatestPowerRankByTeam = cache(async function getLatestPowerRankByTeam(
+  seasonId: string,
+  ageGroup: number,
+): Promise<Map<string, number>> {
+  const [latestColley, latestElo, latestMassey] = await Promise.all([
+    prisma.teamRatingHistory.findFirst({
+      where: { seasonId, ageGroup, ratingEngine: "COLLEY" },
+      orderBy: { weekEndingDate: "desc" },
+      select: { weekEndingDate: true },
+    }),
+    prisma.teamRatingHistory.findFirst({
+      where: { seasonId, ageGroup, ratingEngine: "ELO" },
+      orderBy: { weekEndingDate: "desc" },
+      select: { weekEndingDate: true },
+    }),
+    prisma.teamRatingHistory.findFirst({
+      where: { seasonId, ageGroup, ratingEngine: "MASSEY" },
+      orderBy: { weekEndingDate: "desc" },
+      select: { weekEndingDate: true },
+    }),
+  ]);
+
+  const [colleyRanks, eloRanks, masseyRanks] = await Promise.all([
+    latestColley
+      ? prisma.teamRatingHistory.findMany({
+          where: { seasonId, ageGroup, ratingEngine: "COLLEY", weekEndingDate: latestColley.weekEndingDate },
+          select: { teamId: true, rank: true },
+        })
+      : [],
+    latestElo
+      ? prisma.teamRatingHistory.findMany({
+          where: { seasonId, ageGroup, ratingEngine: "ELO", weekEndingDate: latestElo.weekEndingDate },
+          select: { teamId: true, rank: true },
+        })
+      : [],
+    latestMassey
+      ? prisma.teamRatingHistory.findMany({
+          where: { seasonId, ageGroup, ratingEngine: "MASSEY", weekEndingDate: latestMassey.weekEndingDate },
+          select: { teamId: true, rank: true },
+        })
+      : [],
+  ]);
+
+  const colleyByTeam = new Map(colleyRanks.map((r) => [r.teamId, r.rank]));
+  const eloByTeam = new Map(eloRanks.map((r) => [r.teamId, r.rank]));
+  const masseyByTeam = new Map(masseyRanks.map((r) => [r.teamId, r.rank]));
+  const teamIds = new Set([...colleyByTeam.keys(), ...eloByTeam.keys(), ...masseyByTeam.keys()]);
+
+  const powerAvgRankByTeam = new Map<string, number>();
+  for (const teamId of teamIds) {
+    const ranks = [colleyByTeam.get(teamId), eloByTeam.get(teamId), masseyByTeam.get(teamId)].filter(
+      (v): v is number => v !== undefined,
+    );
+    if (ranks.length > 0) {
+      powerAvgRankByTeam.set(teamId, ranks.reduce((sum, v) => sum + v, 0) / ranks.length);
+    }
+  }
+  return powerAvgRankByTeam;
+});
+
 export async function computeCombinedRankByTeam(seasonId: string, ageGroup: number): Promise<Map<string, number>> {
-  const npsResults = await prisma.rankingResult.findMany({
-    where: { seasonId, ageGroup },
-    select: { teamId: true, rank: true },
-  });
-  const powerData = await getLatestPowerRatings(seasonId, ageGroup);
-  const powerRows = buildPowerRows(powerData);
+  const [npsResults, powerAvgRankByTeam] = await Promise.all([
+    prisma.rankingResult.findMany({
+      where: { seasonId, ageGroup },
+      select: { teamId: true, rank: true },
+    }),
+    getLatestPowerRankByTeam(seasonId, ageGroup),
+  ]);
 
   const npsRankByTeam = new Map(npsResults.map((r) => [r.teamId, r.rank]));
-  const powerAvgRankByTeam = new Map(powerRows.map((r) => [r.team.id, averagePowerRank(r)]));
 
   const teamIds = new Set([...npsRankByTeam.keys(), ...powerAvgRankByTeam.keys()]);
   type Row = { teamId: string; npsRank: number | undefined; powerAvgRank: number | undefined };
