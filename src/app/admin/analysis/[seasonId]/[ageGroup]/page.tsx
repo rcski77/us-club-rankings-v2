@@ -90,6 +90,8 @@ async function runAnalysisForSeason(seasonId: string, ageGroup: number) {
  * the two numbers answer different questions ("what point curve fits this field" vs.
  * "how much should a result here move Elo/Massey") and won't generally match.
  */
+const AGE_GROUPS = [12, 13, 14, 15, 16, 17, 18];
+
 type SortKey = "fss" | "elitePresence" | "percentile" | "eloWeight" | "maxPoints" | `bucket:${number}`;
 
 function sortLink(seasonId: string, ageGroup: number, key: SortKey, activeSort?: string, activeDir?: string) {
@@ -202,6 +204,23 @@ export default async function AnalysisPage({
             </SubmitButton>
           </form>
         </div>
+      </div>
+
+      <div className="mb-6 flex gap-1 border-b">
+        {AGE_GROUPS.map((a) => (
+          <Link
+            key={a}
+            href={`/admin/analysis/${seasonId}/${a}`}
+            prefetch={false}
+            className={
+              a === ageGroup
+                ? "border-b-2 border-slate-900 px-3 py-2 text-sm font-medium text-slate-900"
+                : "border-b-2 border-transparent px-3 py-2 text-sm text-slate-500 hover:text-slate-900"
+            }
+          >
+            {a}u
+          </Link>
+        ))}
       </div>
 
       {analysisStarted === "1" && (

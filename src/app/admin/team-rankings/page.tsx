@@ -28,9 +28,9 @@ export const metadata: Metadata = { title: "Team Rankings" };
 
 const AGE_GROUPS = [12, 13, 14, 15, 16, 17, 18];
 const VIEWS = [
+  { value: "combine", label: "Combined Rankings" },
   { value: "nps", label: "NPS Rankings" },
   { value: "power", label: "Power Rankings" },
-  { value: "combine", label: "Combined Rankings" },
 ] as const;
 type View = (typeof VIEWS)[number]["value"];
 type SortDir = "asc" | "desc";
@@ -51,8 +51,8 @@ type SortDir = "asc" | "desc";
 async function recomputeAll(formData: FormData) {
   "use server";
   const seasonId = String(formData.get("seasonId") ?? "");
-  const view = String(formData.get("view") ?? "nps");
-  const ageGroup = String(formData.get("ageGroup") ?? "14");
+  const view = String(formData.get("view") ?? "combine");
+  const ageGroup = String(formData.get("ageGroup") ?? "12");
   if (!seasonId) redirect("/admin/team-rankings");
 
   recomputeRatingsInWorker(seasonId).catch((err) => {
@@ -89,8 +89,8 @@ export default async function TeamRankingsIndexPage({
   const activeSeason = seasons.find((s) => s.isActive) ?? seasons[0];
   const season = seasons.find((s) => s.id === seasonParam) ?? activeSeason;
 
-  const view: View = viewParam === "power" ? "power" : viewParam === "combine" ? "combine" : "nps";
-  const ageGroup = AGE_GROUPS.includes(Number(ageGroupParam)) ? Number(ageGroupParam) : 14;
+  const view: View = viewParam === "power" ? "power" : viewParam === "nps" ? "nps" : "combine";
+  const ageGroup = AGE_GROUPS.includes(Number(ageGroupParam)) ? Number(ageGroupParam) : 12;
   const dir: SortDir = dirParam === "desc" ? "desc" : "asc";
 
   function tabHref(overrides: { view?: View; ageGroup?: number }) {
