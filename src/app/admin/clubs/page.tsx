@@ -39,31 +39,53 @@ async function createClub(formData: FormData) {
   revalidatePath("/admin/clubs");
 }
 
+const PAGE_SIZE = 50;
+const ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
+
+function buildHref(params: { q?: string; regionId?: string; letter?: string; page?: number }) {
+  const sp = new URLSearchParams();
+  if (params.q) sp.set("q", params.q);
+  if (params.regionId) sp.set("regionId", params.regionId);
+  if (params.letter) sp.set("letter", params.letter);
+  if (params.page && params.page > 1) sp.set("page", String(params.page));
+  const qs = sp.toString();
+  return qs ? `/admin/clubs?${qs}` : "/admin/clubs";
+}
+
 export default async function ClubsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string; q?: string; regionId?: string }>;
+  searchParams: Promise<{ error?: string; q?: string; regionId?: string; letter?: string; page?: string }>;
 }) {
-  const { error, q, regionId } = await searchParams;
-  // clubs and regions don't depend on each other's results.
-  const [clubs, regions] = await Promise.all([
+  const { error, q, regionId, letter, page: pageParam } = await searchParams;
+  const page = Math.max(1, Number(pageParam) || 1);
+
+  const where = {
+    ...(q
+      ? {
+          OR: [
+            { name: { contains: q, mode: "insensitive" as const } },
+            { externalCode: { contains: q, mode: "insensitive" as const } },
+          ],
+        }
+      : {}),
+    ...(regionId ? { regionId } : {}),
+    ...(letter ? { name: { startsWith: letter, mode: "insensitive" as const } } : {}),
+  };
+
+  // clubs, total count, and regions don't depend on each other's results.
+  const [clubs, totalCount, regions] = await Promise.all([
     prisma.club.findMany({
-      where: {
-        ...(q
-          ? {
-              OR: [
-                { name: { contains: q, mode: "insensitive" } },
-                { externalCode: { contains: q, mode: "insensitive" } },
-              ],
-            }
-          : {}),
-        ...(regionId ? { regionId } : {}),
-      },
+      where,
       include: { region: true, mergedInto: true, _count: { select: { teams: true } } },
       orderBy: { name: "asc" },
+      skip: (page - 1) * PAGE_SIZE,
+      take: PAGE_SIZE,
     }),
+    prisma.club.count({ where }),
     prisma.region.findMany({ orderBy: { code: "asc" } }),
   ]);
+  const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
 
   return (
     <div>
@@ -83,12 +105,30 @@ export default async function ClubsPage({
         <button type="submit" className={primaryButtonClass}>
           Search
         </button>
-        {(q || regionId) && (
+        {(q || regionId || letter) && (
           <Link href="/admin/clubs" className="self-center text-sm text-slate-500 underline">
             Clear
           </Link>
         )}
       </form>
+
+      <div className="mb-4 flex flex-wrap gap-1 text-sm">
+        <Link
+          href={buildHref({ regionId })}
+          className={`rounded px-2 py-1 ${!letter ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-100"}`}
+        >
+          All
+        </Link>
+        {ALPHABET.map((l) => (
+          <Link
+            key={l}
+            href={buildHref({ regionId, letter: l })}
+            className={`rounded px-2 py-1 ${letter === l ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-100"}`}
+          >
+            {l}
+          </Link>
+        ))}
+      </div>
 
       <table className={`${tableClass} mb-8`}>
         <thead>
@@ -124,12 +164,32 @@ export default async function ClubsPage({
           {clubs.length === 0 && (
             <tr>
               <td className={tdClass} colSpan={5}>
-                {q || regionId ? "No clubs match your search." : "No clubs yet."}
+                {q || regionId || letter ? "No clubs match your search." : "No clubs yet."}
               </td>
             </tr>
           )}
         </tbody>
       </table>
+
+      {totalCount > 0 && (
+        <div className="mb-8 -mt-6 flex items-center justify-between text-sm text-slate-500">
+          <span>
+            {totalCount} club{totalCount === 1 ? "" : "s"} — page {page} of {totalPages}
+          </span>
+          <div className="flex gap-3">
+            {page > 1 && (
+              <Link href={buildHref({ q, regionId, letter, page: page - 1 })} className="underline">
+                ← Previous
+              </Link>
+            )}
+            {page < totalPages && (
+              <Link href={buildHref({ q, regionId, letter, page: page + 1 })} className="underline">
+                Next →
+              </Link>
+            )}
+          </div>
+        </div>
+      )}
 
       <h2 className="mb-2 text-lg font-medium">New club</h2>
       <form action={createClub} className="flex flex-col gap-3">
