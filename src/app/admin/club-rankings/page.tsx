@@ -14,8 +14,8 @@ import { SubmitButton } from "@/components/SubmitButton";
 export const metadata: Metadata = { title: "Club Rankings" };
 
 const SOURCES = [
-  { value: "NPS", label: "NPS" },
   { value: "COMBINED", label: "Combined" },
+  { value: "NPS", label: "NPS" },
 ] as const;
 
 /**
@@ -33,7 +33,7 @@ const SOURCES = [
 async function recomputeClubRankings(formData: FormData) {
   "use server";
   const seasonId = String(formData.get("seasonId") ?? "");
-  const source = String(formData.get("source") ?? "NPS") as ClubRankingSource;
+  const source = String(formData.get("source") ?? "COMBINED") as ClubRankingSource;
   if (!seasonId) redirect("/admin/club-rankings");
 
   computeClubRankingInWorker(seasonId, source).catch((err) => {
@@ -55,7 +55,7 @@ export default async function ClubRankingsPage({
   const seasons = await prisma.season.findMany({ orderBy: { startDate: "desc" } });
   const activeSeason = seasons.find((s) => s.isActive) ?? seasons[0];
   const season = seasons.find((s) => s.id === seasonParam) ?? activeSeason;
-  const source: ClubRankingSource = sourceParam === "COMBINED" ? "COMBINED" : "NPS";
+  const source: ClubRankingSource = sourceParam === "NPS" ? "NPS" : "COMBINED";
 
   return (
     <div>

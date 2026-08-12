@@ -1,23 +1,21 @@
 import type { Metadata } from "next";
 import { prisma } from "@/lib/prisma";
-import { redirect } from "next/navigation";
-import { selectClass, primaryButtonClass } from "@/lib/ui";
+import Link from "next/link";
+import { SeasonFilterSelect } from "@/app/admin/team-rankings/SeasonFilterSelect";
 
 export const metadata: Metadata = { title: "Analysis" };
 
-async function goToAnalysis(formData: FormData) {
-  "use server";
-  const seasonId = String(formData.get("seasonId") ?? "");
-  const ageGroup = String(formData.get("ageGroup") ?? "");
-  if (!seasonId || !ageGroup) redirect("/admin/analysis");
-  redirect(`/admin/analysis/${seasonId}/${ageGroup}`);
-}
-
 const AGE_GROUPS = [12, 13, 14, 15, 16, 17, 18];
 
-export default async function AnalysisIndexPage() {
+export default async function AnalysisIndexPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ season?: string }>;
+}) {
+  const { season: seasonParam } = await searchParams;
   const seasons = await prisma.season.findMany({ orderBy: { startDate: "desc" } });
   const activeSeason = seasons.find((s) => s.isActive) ?? seasons[0];
+  const season = seasons.find((s) => s.id === seasonParam) ?? activeSeason;
 
   return (
     <div>
@@ -27,34 +25,30 @@ export default async function AnalysisIndexPage() {
         justification for the algorithmic scoring suggestion.
       </p>
 
-      {seasons.length === 0 ? (
+      {seasons.length === 0 || !season ? (
         <p className="text-sm text-slate-500">Create a season first (Admin → Seasons).</p>
       ) : (
-        <form action={goToAnalysis} className="flex items-end gap-3">
-          <label className="flex flex-col gap-1 text-sm">
-            Season
-            <select name="seasonId" className={selectClass} defaultValue={activeSeason?.id}>
-              {seasons.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="flex flex-col gap-1 text-sm">
-            Age group
-            <select name="ageGroup" className={selectClass} defaultValue="14">
-              {AGE_GROUPS.map((a) => (
-                <option key={a} value={a}>
-                  {a}u
-                </option>
-              ))}
-            </select>
-          </label>
-          <button type="submit" className={primaryButtonClass}>
-            View analysis
-          </button>
-        </form>
+        <>
+          <form method="get" className="mb-6 flex items-end gap-3">
+            <label className="flex flex-col gap-1 text-sm">
+              Season
+              <SeasonFilterSelect seasons={seasons} defaultValue={season.id} />
+            </label>
+          </form>
+
+          <div className="mb-6 flex gap-1 border-b">
+            {AGE_GROUPS.map((a) => (
+              <Link
+                key={a}
+                href={`/admin/analysis/${season.id}/${a}`}
+                prefetch={false}
+                className="border-b-2 border-transparent px-3 py-2 text-sm text-slate-500 hover:text-slate-900"
+              >
+                {a}u
+              </Link>
+            ))}
+          </div>
+        </>
       )}
     </div>
   );
