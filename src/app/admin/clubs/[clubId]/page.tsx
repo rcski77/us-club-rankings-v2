@@ -16,6 +16,7 @@ import {
 } from "@/lib/ui";
 import { updateClub, leaveRankingGroup } from "./actions";
 import { computeCombinedRankByTeam } from "@/lib/rating/powerRankings";
+import { RankHistoryChart, type RankHistoryPoint } from "./RankHistoryChart";
 
 export async function generateMetadata({
   params,
@@ -37,8 +38,9 @@ export default async function ClubDetailPage({
   const { clubId } = await params;
   const { error, success, from } = await searchParams;
 
-  // club, regions, and activeSeason don't depend on each other's results.
-  const [club, regions, activeSeason] = await Promise.all([
+  // club, regions, activeSeason, and the two rank-history series don't depend on
+  // each other's results.
+  const [club, regions, activeSeason, annualScoreResults, oneYearResults, fiveYearResults] = await Promise.all([
     prisma.club.findUnique({
       where: { id: clubId },
       include: {
@@ -56,8 +58,49 @@ export default async function ClubDetailPage({
     }),
     prisma.region.findMany({ orderBy: { code: "asc" } }),
     prisma.season.findFirst({ where: { isActive: true } }),
+    // 1-year rank history -- primarily the imported historical annual rank
+    // (ClubAnnualScore.legacyRank, keyed by the season's ending year: legacy-workbook
+    // import for 2021-2025, or whatever a season's own Combined Club Rankings rank was
+    // at the time it got synced -- see syncClubAnnualScoreFromSeason and the "Add a
+    // new year" section on /admin/club-rankings/five-year). Only reference/QA per that
+    // field's own schema comment, but it's exactly the per-year club rank this chart
+    // wants, and reusing it means the chart shows real multi-year history instead of
+    // just the one season this app has recomputed live so far.
+    prisma.clubAnnualScore.findMany({
+      where: { clubId, legacyRank: { not: null } },
+      select: { year: true, legacyRank: true },
+      orderBy: { year: "asc" },
+    }),
+    // Live fallback for the current season, in case it hasn't been synced into
+    // ClubAnnualScore yet -- same "COMBINED" source /admin/club-rankings defaults to.
+    prisma.clubRankingResult.findMany({
+      where: { clubId, source: "COMBINED" },
+      include: { season: true },
+      orderBy: { season: { startDate: "asc" } },
+    }),
+    // 5-year rank = this club's position within *that year's own* 5-year-window
+    // aggregate (see /admin/club-rankings/five-year/history for the same convention).
+    prisma.clubFiveYearRankingResult.findMany({
+      where: { clubId },
+      orderBy: { endYear: "asc" },
+    }),
   ]);
   if (!club) notFound();
+
+  const oneYearRankByEndYear = new Map<number, number>(
+    annualScoreResults.map((r) => [r.year, r.legacyRank as number]),
+  );
+  for (const r of oneYearResults) {
+    const endYear = r.season.endDate.getFullYear();
+    if (!oneYearRankByEndYear.has(endYear)) oneYearRankByEndYear.set(endYear, r.rank);
+  }
+  const oneYearRankHistory: RankHistoryPoint[] = Array.from(oneYearRankByEndYear.entries())
+    .sort(([a], [b]) => a - b)
+    .map(([year, rank]) => ({ label: String(year), rank }));
+  const fiveYearRankHistory: RankHistoryPoint[] = fiveYearResults.map((r) => ({
+    label: String(r.endYear),
+    rank: r.rank,
+  }));
 
   // National rank = the Combined Rankings blend (50% NPS rank + 50% Power Avg Rank),
   // same number shown on /admin/team-rankings' Combine tab -- computed per (season,
@@ -273,6 +316,22 @@ export default async function ClubDetailPage({
           </Link>
           .
         </p>
+      )}
+
+      {(oneYearRankHistory.length > 0 || fiveYearRankHistory.length > 0) && (
+        <section className="mb-8">
+          <h2 className="mb-1 text-lg font-medium">Rank History</h2>
+          <p className="mb-2 text-xs text-slate-500">
+            1-Year: Combined Club Rankings position by season. 5-Year: position within each year&apos;s own
+            5-year-window aggregate.
+          </p>
+          <RankHistoryChart
+            series={[
+              { name: "1-Year", points: oneYearRankHistory, colorClassName: "stroke-sky-600", dotClassName: "fill-sky-600" },
+              { name: "5-Year", points: fiveYearRankHistory, colorClassName: "stroke-orange-600", dotClassName: "fill-orange-600" },
+            ]}
+          />
+        </section>
       )}
 
       <h2 className="mb-2 text-lg font-medium">Teams</h2>
