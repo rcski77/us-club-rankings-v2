@@ -278,7 +278,15 @@ export async function computeEloRatingsForPartition(
     // alongside it (one row per team per match in the partition) pushed a full season's worth
     // of matches past that default intermittently, silently killing this and every downstream
     // engine (see recomputeRatingsWorkerEntry.ts's sequential Colley -> Elo -> Massey order).
-    { timeout: 60_000 },
+    // Bumped 60s -> 300s after the largest partition (64k+ TeamEloMatchStep rows for one
+    // age group) kept timing out even with an index on the deleteMany's (seasonId,
+    // ageGroup) filter (see the migration adding it) -- EXPLAIN ANALYZE showed the delete
+    // itself only takes ~300ms once indexed, so the real cost is the createMany insert
+    // volume, not the delete scan. This is still a moving target as more matches get
+    // imported each season; splitting this into its own transaction separate from the
+    // smaller TeamRatingHistory write (so a slow step-write can't also risk the rating
+    // write's atomicity) is the real fix, not tracked here yet.
+    { timeout: 300_000 },
   );
 
   return ranked;
