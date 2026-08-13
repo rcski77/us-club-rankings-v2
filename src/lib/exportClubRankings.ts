@@ -75,7 +75,16 @@ export async function buildClubRankingsWorkbook(endYear: number): Promise<ClubRa
     const targetClubId = rankingClubId.get(s.clubId) ?? s.clubId;
     const byYear = perYearByClub.get(targetClubId) ?? new Map<number, YearCell>();
     const existing = byYear.get(s.year);
-    if (!existing || s.totalPoints > existing.points) {
+    // On points ties (common for a merge target's own legacy row vs. the merged-in
+    // club's row -- the source workbook recorded the same consolidated total on both,
+    // see rankings/clubs/[clubId]/page.tsx's own note that legacyRank wasn't recorded
+    // for every year) prefer whichever row actually has a rank, so a real published
+    // rank isn't dropped just because it happened to lose the race to be read first.
+    const isBetter =
+      !existing ||
+      s.totalPoints > existing.points ||
+      (s.totalPoints === existing.points && existing.rank === null && s.legacyRank !== null);
+    if (isBetter) {
       byYear.set(s.year, { points: s.totalPoints, rank: s.legacyRank });
     }
     perYearByClub.set(targetClubId, byYear);
