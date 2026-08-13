@@ -120,7 +120,10 @@ export default async function PublicFiveYearClubRankingsPage({
 
 async function FiveYearClubRankingTable({ endYear }: { endYear: number }) {
   const results = await prisma.clubFiveYearRankingResult.findMany({
-    where: { endYear, rank: { lte: PUBLISHED_RANK_LIMIT } },
+    // Exclude clubs merged into another club (Club.mergedIntoClubId) -- their history
+    // now belongs to the surviving club, including in frozen legacy-imported windows
+    // that predate the merge.
+    where: { endYear, rank: { lte: PUBLISHED_RANK_LIMIT }, club: { mergedIntoClubId: null } },
     include: { club: true, contributions: { orderBy: { year: "asc" } } },
     orderBy: { rank: "asc" },
   });

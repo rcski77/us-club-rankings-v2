@@ -33,7 +33,11 @@ export async function getFiveYearRankingHistory(): Promise<FiveYearRankingHistor
   if (endYears.length === 0) return { endYears: [], rows: [] };
 
   const results = await prisma.clubFiveYearRankingResult.findMany({
-    where: { endYear: { in: endYears } },
+    // A club merged into another (Club.mergedIntoClubId) is retired outright -- its
+    // history was folded into the surviving club (see mergeClubsIntoTarget), so it
+    // shouldn't still show up as its own row here, including in already-frozen
+    // legacy-imported windows that predate the merge and can't be recomputed.
+    where: { endYear: { in: endYears }, club: { mergedIntoClubId: null } },
     select: {
       endYear: true,
       rank: true,

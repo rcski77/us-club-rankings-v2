@@ -93,7 +93,10 @@ export default async function FiveYearClubRankingsPage({
   const endYear = Number(endYearParam) || availableYears[0] || new Date().getFullYear();
 
   const results = await prisma.clubFiveYearRankingResult.findMany({
-    where: { endYear },
+    // Exclude clubs merged into another club (Club.mergedIntoClubId) -- their history
+    // now belongs to the surviving club, including in frozen legacy-imported windows
+    // that predate the merge.
+    where: { endYear, club: { mergedIntoClubId: null } },
     include: { club: true, contributions: { orderBy: { year: "asc" } } },
     orderBy: { rank: "asc" },
   });

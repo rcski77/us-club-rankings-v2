@@ -136,7 +136,11 @@ export default async function ClubRankingsPage({
 
 async function ClubRankingTable({ seasonId, source }: { seasonId: string; source: ClubRankingSource }) {
   const results = await prisma.clubRankingResult.findMany({
-    where: { seasonId, source },
+    // Exclude clubs merged into another club (Club.mergedIntoClubId) -- their teams
+    // and history now belong to the surviving club (computeClubRankingForSeason
+    // already redirects new computations there; this is belt-and-suspenders for any
+    // stale row from before that redirect existed).
+    where: { seasonId, source, club: { mergedIntoClubId: null } },
     include: {
       club: true,
       contributions: { include: { team: true }, orderBy: { ageGroup: "asc" } },

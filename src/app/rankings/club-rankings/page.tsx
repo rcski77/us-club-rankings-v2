@@ -91,9 +91,13 @@ async function ClubRankingTable({
   // so this can page at the DB level -- qualified clubs are already ranked ahead of
   // under-qualified ones, so a page boundary landing between the two groups just
   // means one of the two group headers below doesn't render on that page.
-  const totalCount = await prisma.clubRankingResult.count({ where: { seasonId, source } });
+  // Exclude clubs merged into another club (Club.mergedIntoClubId) -- their teams and
+  // history now belong to the surviving club.
+  const totalCount = await prisma.clubRankingResult.count({
+    where: { seasonId, source, club: { mergedIntoClubId: null } },
+  });
   const results = await prisma.clubRankingResult.findMany({
-    where: { seasonId, source },
+    where: { seasonId, source, club: { mergedIntoClubId: null } },
     include: {
       club: true,
       contributions: { include: { team: true }, orderBy: { ageGroup: "asc" } },
