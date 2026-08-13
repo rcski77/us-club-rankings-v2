@@ -26,28 +26,49 @@ export async function runNightlyRecompute(): Promise<void> {
   });
 
   for (const season of seasons) {
-    // Sequential, not Promise.all -- see docs/dev-environment.md's note on concurrent
-    // Prisma queries from the same pool.
-    await computeColleyRatingsForSeason(season.id);
-    await computeEloRatingsForSeason(season.id);
-    await computeMasseyRatingsForSeason(season.id);
-
-    const divisions = await prisma.division.findMany({
-      where: { event: { seasonId: season.id } },
-      select: { id: true, scoringStatus: true },
+    const jobRun = await prisma.jobRun.create({
+      data: { kind: "NIGHTLY_RECOMPUTE", seasonId: season.id, triggeredBy: "nightly" },
     });
-    for (const division of divisions) {
-      // CONFIRMED divisions get their stats refreshed without reopening finish/band
-      // editing -- see computeDivisionScoringSuggestion's preserveStatus doc comment.
-      await computeDivisionScoringSuggestion(division.id, {
-        preserveStatus: division.scoringStatus === "CONFIRMED",
+
+    // Each season gets its own try/catch so one season's failure (e.g. the Elo
+    // transaction timeout that motivated this file's JobRun tracking) doesn't abort
+    // every later season silently -- previously an uncaught throw here would exit the
+    // whole for-loop, leaving unrelated seasons' rankings stale with no record of why.
+    try {
+      // Sequential, not Promise.all -- see docs/dev-environment.md's note on concurrent
+      // Prisma queries from the same pool.
+      await computeColleyRatingsForSeason(season.id);
+      await computeEloRatingsForSeason(season.id);
+      await computeMasseyRatingsForSeason(season.id);
+
+      const divisions = await prisma.division.findMany({
+        where: { event: { seasonId: season.id } },
+        select: { id: true, scoringStatus: true },
+      });
+      for (const division of divisions) {
+        // CONFIRMED divisions get their stats refreshed without reopening finish/band
+        // editing -- see computeDivisionScoringSuggestion's preserveStatus doc comment.
+        await computeDivisionScoringSuggestion(division.id, {
+          preserveStatus: division.scoringStatus === "CONFIRMED",
+        });
+      }
+
+      // NPS first, then COMBINED -- COMBINED re-derives the Colley/Elo/Massey power
+      // ratings just recomputed above (see computeClubRankingForSeason's own comment),
+      // so both sources are safe to roll up here without a separate NPS-recompute step.
+      await computeClubRankingForSeason(season.id, "NPS");
+      await computeClubRankingForSeason(season.id, "COMBINED");
+
+      await prisma.jobRun.update({
+        where: { id: jobRun.id },
+        data: { status: "SUCCEEDED", finishedAt: new Date() },
+      });
+    } catch (err) {
+      console.error(`Nightly recompute failed for season ${season.id} (${season.label}):`, err);
+      await prisma.jobRun.update({
+        where: { id: jobRun.id },
+        data: { status: "FAILED", finishedAt: new Date(), error: err instanceof Error ? err.message : String(err) },
       });
     }
-
-    // NPS first, then COMBINED -- COMBINED re-derives the Colley/Elo/Massey power
-    // ratings just recomputed above (see computeClubRankingForSeason's own comment),
-    // so both sources are safe to roll up here without a separate NPS-recompute step.
-    await computeClubRankingForSeason(season.id, "NPS");
-    await computeClubRankingForSeason(season.id, "COMBINED");
   }
 }

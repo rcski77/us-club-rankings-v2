@@ -33,6 +33,9 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           <Link href="/admin/analysis" className="rounded px-2 py-1 hover:bg-slate-200">
             Analysis
           </Link>
+          <Link href="/admin/job-runs" className="rounded px-2 py-1 hover:bg-slate-200">
+            Job Runs
+          </Link>
           <Link href="/admin/point-templates" className="rounded px-2 py-1 hover:bg-slate-200">
             Point Templates
           </Link>

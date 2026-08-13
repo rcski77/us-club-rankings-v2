@@ -39,6 +39,18 @@ export function scoringStatusBadgeClass(status: "DRAFT" | "SUGGESTED" | "CONFIRM
   }
 }
 
+// JobRun.status (prisma/schema.prisma) -- background recompute run outcome.
+export function jobRunStatusBadgeClass(status: "RUNNING" | "SUCCEEDED" | "FAILED") {
+  switch (status) {
+    case "SUCCEEDED":
+      return `${badgeBaseClass} bg-green-100 text-green-800`;
+    case "FAILED":
+      return `${badgeBaseClass} bg-red-100 text-red-800`;
+    case "RUNNING":
+      return `${badgeBaseClass} bg-amber-100 text-amber-800`;
+  }
+}
+
 // ScoreBand (src/lib/rating/suggestPointTemplate.ts) -- field-strength tier.
 export function scoreBandBadgeClass(
   band: "Elite field" | "National" | "Strong regional" | "Solid regional" | "Developmental",

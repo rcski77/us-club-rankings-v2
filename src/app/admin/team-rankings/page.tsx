@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { prisma } from "@/lib/prisma";
+import { auth } from "@/auth";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import {
@@ -55,9 +56,20 @@ async function recomputeAll(formData: FormData) {
   const ageGroup = String(formData.get("ageGroup") ?? "12");
   if (!seasonId) redirect("/admin/team-rankings");
 
-  recomputeRatingsInWorker(seasonId).catch((err) => {
-    console.error(`Background ratings recompute failed for season ${seasonId}:`, err);
+  const session = await auth();
+  const jobRun = await prisma.jobRun.create({
+    data: { kind: "RATINGS_RECOMPUTE", seasonId, triggeredBy: session?.user?.email ?? "unknown" },
   });
+
+  recomputeRatingsInWorker(seasonId)
+    .then(() => prisma.jobRun.update({ where: { id: jobRun.id }, data: { status: "SUCCEEDED", finishedAt: new Date() } }))
+    .catch((err) => {
+      console.error(`Background ratings recompute failed for season ${seasonId}:`, err);
+      return prisma.jobRun.update({
+        where: { id: jobRun.id },
+        data: { status: "FAILED", finishedAt: new Date(), error: err instanceof Error ? err.message : String(err) },
+      });
+    });
 
   redirect(
     `/admin/team-rankings?${new URLSearchParams({ season: seasonId, view, ageGroup, recomputeStarted: "1" })}`,

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { prisma } from "@/lib/prisma";
+import { auth } from "@/auth";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { Fragment } from "react";
@@ -36,9 +37,25 @@ async function recomputeClubRankings(formData: FormData) {
   const source = String(formData.get("source") ?? "COMBINED") as ClubRankingSource;
   if (!seasonId) redirect("/admin/club-rankings");
 
-  computeClubRankingInWorker(seasonId, source).catch((err) => {
-    console.error(`Background club-ranking recompute failed for season ${seasonId} (${source}):`, err);
+  const session = await auth();
+  const jobRun = await prisma.jobRun.create({
+    data: {
+      kind: "CLUB_RANKING_RECOMPUTE",
+      seasonId,
+      detail: source,
+      triggeredBy: session?.user?.email ?? "unknown",
+    },
   });
+
+  computeClubRankingInWorker(seasonId, source)
+    .then(() => prisma.jobRun.update({ where: { id: jobRun.id }, data: { status: "SUCCEEDED", finishedAt: new Date() } }))
+    .catch((err) => {
+      console.error(`Background club-ranking recompute failed for season ${seasonId} (${source}):`, err);
+      return prisma.jobRun.update({
+        where: { id: jobRun.id },
+        data: { status: "FAILED", finishedAt: new Date(), error: err instanceof Error ? err.message : String(err) },
+      });
+    });
 
   redirect(
     `/admin/club-rankings?${new URLSearchParams({ season: seasonId, source, recomputeStarted: "1" })}`,

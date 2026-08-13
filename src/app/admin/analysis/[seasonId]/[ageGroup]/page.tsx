@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { prisma } from "@/lib/prisma";
+import { auth } from "@/auth";
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
@@ -65,9 +66,20 @@ async function runAnalysisForAll(seasonId: string, ageGroup: number) {
 async function runAnalysisForSeason(seasonId: string, ageGroup: number) {
   "use server";
 
-  computeAnalysisForSeasonInWorker(seasonId).catch((err) => {
-    console.error(`Background season-wide analysis run failed for season ${seasonId}:`, err);
+  const session = await auth();
+  const jobRun = await prisma.jobRun.create({
+    data: { kind: "ANALYSIS_RECOMPUTE", seasonId, triggeredBy: session?.user?.email ?? "unknown" },
   });
+
+  computeAnalysisForSeasonInWorker(seasonId)
+    .then(() => prisma.jobRun.update({ where: { id: jobRun.id }, data: { status: "SUCCEEDED", finishedAt: new Date() } }))
+    .catch((err) => {
+      console.error(`Background season-wide analysis run failed for season ${seasonId}:`, err);
+      return prisma.jobRun.update({
+        where: { id: jobRun.id },
+        data: { status: "FAILED", finishedAt: new Date(), error: err instanceof Error ? err.message : String(err) },
+      });
+    });
 
   redirect(`/admin/analysis/${seasonId}/${ageGroup}?analysisStarted=1`);
 }
