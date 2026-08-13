@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { getResolvedFiveYearRanking } from "./computeFiveYearClubRanking";
 
 export type FiveYearRankingHistoryRow = {
   clubId: string;
@@ -32,31 +33,43 @@ export async function getFiveYearRankingHistory(): Promise<FiveYearRankingHistor
   const endYears = endYearRows.map((r) => r.endYear);
   if (endYears.length === 0) return { endYears: [], rows: [] };
 
-  const results = await prisma.clubFiveYearRankingResult.findMany({
-    // A club merged into another (Club.mergedIntoClubId) is retired outright -- its
-    // history was folded into the surviving club (see mergeClubsIntoTarget), so it
-    // shouldn't still show up as its own row here, including in already-frozen
-    // legacy-imported windows that predate the merge and can't be recomputed.
-    where: { endYear: { in: endYears }, club: { mergedIntoClubId: null } },
-    select: {
-      endYear: true,
-      rank: true,
-      totalPoints: true,
-      club: { select: { id: true, name: true, externalCode: true, state: true } },
-    },
-  });
+  // Resolved per endYear (not a single findMany across all of them): a club merged
+  // into another (Club.mergedIntoClubId) is retired outright, its history folded onto
+  // the surviving club (see mergeClubsIntoTarget) -- getResolvedFiveYearRanking
+  // applies that fold, plus the ranking-group redirect, and re-derives each endYear's
+  // rank over the resulting set rather than trusting the stored `rank` column, which
+  // was computed against a wider set that included the now-excluded club as its own
+  // separate entry.
+  const resolvedByYear = await Promise.all(endYears.map((y) => getResolvedFiveYearRanking(y)));
 
   const byClub = new Map<string, FiveYearRankingHistoryRow>();
-  for (const r of results) {
-    const entry = byClub.get(r.club.id) ?? {
-      clubId: r.club.id,
-      clubName: r.club.name,
-      clubCode: r.club.externalCode,
-      state: r.club.state,
-      byYear: {},
-    };
-    entry.byYear[r.endYear] = { rank: r.rank, totalPoints: r.totalPoints };
-    byClub.set(r.club.id, entry);
+  const clubIds = new Set<string>();
+  resolvedByYear.forEach((resolved, i) => {
+    const endYear = endYears[i];
+    for (const r of resolved) {
+      clubIds.add(r.clubId);
+      const entry = byClub.get(r.clubId) ?? {
+        clubId: r.clubId,
+        clubName: "",
+        clubCode: null,
+        state: null,
+        byYear: {},
+      };
+      entry.byYear[endYear] = { rank: r.rank, totalPoints: r.totalPoints };
+      byClub.set(r.clubId, entry);
+    }
+  });
+
+  const clubs = await prisma.club.findMany({
+    where: { id: { in: [...clubIds] } },
+    select: { id: true, name: true, externalCode: true, state: true },
+  });
+  for (const c of clubs) {
+    const entry = byClub.get(c.id);
+    if (!entry) continue;
+    entry.clubName = c.name;
+    entry.clubCode = c.externalCode;
+    entry.state = c.state;
   }
 
   // Sorted by rank within the most recent window -- same convention the legacy sheet

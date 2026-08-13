@@ -16,6 +16,7 @@ import {
 import {
   computeFiveYearClubRankingForYear,
   syncClubAnnualScoreFromSeason,
+  getResolvedFiveYearRanking,
   LEGACY_IMPORT_ALGORITHM_VERSION,
 } from "@/lib/ranking/computeFiveYearClubRanking";
 import { FIVE_YEAR_WEIGHTS } from "@/lib/ranking/fiveYearClubRanking";
@@ -92,14 +93,39 @@ export default async function FiveYearClubRankingsPage({
 
   const endYear = Number(endYearParam) || availableYears[0] || new Date().getFullYear();
 
-  const results = await prisma.clubFiveYearRankingResult.findMany({
-    // Exclude clubs merged into another club (Club.mergedIntoClubId) -- their history
-    // now belongs to the surviving club, including in frozen legacy-imported windows
-    // that predate the merge.
-    where: { endYear, club: { mergedIntoClubId: null } },
-    include: { club: true, contributions: { orderBy: { year: "asc" } } },
-    orderBy: { rank: "asc" },
-  });
+  // Resolved (not a raw findMany) so a merged-away club's rank/points fold onto its
+  // surviving club with a correctly re-derived dense rank, instead of leaving a gap
+  // in the rank sequence where the merged club used to sit -- see
+  // getResolvedFiveYearRanking's own comment.
+  const resolved = await getResolvedFiveYearRanking(endYear);
+  const [sourceRows, targetClubs] = await Promise.all([
+    resolved.length
+      ? prisma.clubFiveYearRankingResult.findMany({
+          where: { id: { in: resolved.map((r) => r.sourceRowId) } },
+          include: { contributions: { orderBy: { year: "asc" } } },
+        })
+      : Promise.resolve([]),
+    resolved.length
+      ? prisma.club.findMany({ where: { id: { in: resolved.map((r) => r.clubId) } } })
+      : Promise.resolve([]),
+  ]);
+  const sourceRowById = new Map(sourceRows.map((r) => [r.id, r]));
+  const targetClubById = new Map(targetClubs.map((c) => [c.id, c]));
+  const results = resolved
+    .map((r) => {
+      const sourceRow = sourceRowById.get(r.sourceRowId);
+      const club = targetClubById.get(r.clubId);
+      if (!sourceRow || !club) return null;
+      return {
+        ...r,
+        club,
+        contributions: sourceRow.contributions,
+        computedAt: sourceRow.computedAt,
+        algorithmVersion: sourceRow.algorithmVersion,
+      };
+    })
+    .filter((r): r is NonNullable<typeof r> => r !== null)
+    .sort((a, b) => a.rank - b.rank);
   const computedAt = results[0]?.computedAt;
   const isLegacyWindow = results.some((r) => r.algorithmVersion === LEGACY_IMPORT_ALGORITHM_VERSION);
   const years = Array.from({ length: FIVE_YEAR_WEIGHTS.length }, (_, i) => endYear - (FIVE_YEAR_WEIGHTS.length - 1 - i));
@@ -263,7 +289,7 @@ export default async function FiveYearClubRankingsPage({
           {results.map((r) => {
             const byYear = new Map(r.contributions.map((c) => [c.year, c]));
             return (
-              <tr key={r.id}>
+              <tr key={r.clubId}>
                 <td className={tdClass}>{r.rank}</td>
                 <td className={tdClass}>
                   <Link
