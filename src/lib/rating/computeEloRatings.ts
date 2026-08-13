@@ -246,26 +246,34 @@ export async function computeEloRatingsForPartition(
     }
   }
 
+  // Two separate transactions, not one -- this table used to be written alongside
+  // TeamEloMatchStep in a single transaction, but that let TeamEloMatchStep's insert
+  // volume (one row per team per match in the partition -- 64k+ for the largest age
+  // group) risk the timing of this much smaller, more important write too. A slow or
+  // failed step-write should never block the "as of" rating/rank staff actually look
+  // at from landing. Default interactive-transaction timeout (5s) is plenty here.
+  await prisma.$transaction(async (tx) => {
+    await tx.teamRatingHistory.deleteMany({
+      where: { seasonId, ageGroup, weekEndingDate, ratingEngine: "ELO" },
+    });
+    if (ranked.length > 0) {
+      await tx.teamRatingHistory.createMany({
+        data: ranked.map((r) => ({
+          teamId: r.teamId,
+          seasonId,
+          ageGroup,
+          weekEndingDate,
+          ratingEngine: "ELO" as const,
+          rating: r.rating,
+          rank: r.rank,
+          comparisons: r.matchesPlayed,
+        })),
+      });
+    }
+  });
+
   await prisma.$transaction(
     async (tx) => {
-      await tx.teamRatingHistory.deleteMany({
-        where: { seasonId, ageGroup, weekEndingDate, ratingEngine: "ELO" },
-      });
-      if (ranked.length > 0) {
-        await tx.teamRatingHistory.createMany({
-          data: ranked.map((r) => ({
-            teamId: r.teamId,
-            seasonId,
-            ageGroup,
-            weekEndingDate,
-            ratingEngine: "ELO" as const,
-            rating: r.rating,
-            rank: r.rank,
-            comparisons: r.matchesPlayed,
-          })),
-        });
-      }
-
       await tx.teamEloMatchStep.deleteMany({ where: { seasonId, ageGroup } });
       if (stepRows.length > 0) {
         await tx.teamEloMatchStep.createMany({
@@ -273,19 +281,15 @@ export async function computeEloRatingsForPartition(
         });
       }
     },
-    // Default interactive-transaction timeout (5s) was tuned for the TeamRatingHistory-only
-    // write this transaction used to do -- the TeamEloMatchStep delete-and-replace added
-    // alongside it (one row per team per match in the partition) pushed a full season's worth
-    // of matches past that default intermittently, silently killing this and every downstream
-    // engine (see recomputeRatingsWorkerEntry.ts's sequential Colley -> Elo -> Massey order).
-    // Bumped 60s -> 300s after the largest partition (64k+ TeamEloMatchStep rows for one
-    // age group) kept timing out even with an index on the deleteMany's (seasonId,
-    // ageGroup) filter (see the migration adding it) -- EXPLAIN ANALYZE showed the delete
-    // itself only takes ~300ms once indexed, so the real cost is the createMany insert
-    // volume, not the delete scan. This is still a moving target as more matches get
-    // imported each season; splitting this into its own transaction separate from the
-    // smaller TeamRatingHistory write (so a slow step-write can't also risk the rating
-    // write's atomicity) is the real fix, not tracked here yet.
+    // This table's delete-and-replace (one row per team per match in the partition)
+    // repeatedly ran past the default 5s, then a bumped 60s, interactive-transaction
+    // timeout on the largest age-group partition (64k+ rows) -- see the migration
+    // adding an index on the deleteMany's (seasonId, ageGroup) filter, which turned
+    // out not to be the bottleneck (EXPLAIN ANALYZE showed the delete itself takes
+    // ~300ms once indexed): the real cost is the createMany insert volume. 300s is
+    // generous headroom for today's data, but still a moving target as more matches
+    // get imported each season -- if this times out again, the next step is batching
+    // the createMany into chunks rather than raising the timeout further.
     { timeout: 300_000 },
   );
 
