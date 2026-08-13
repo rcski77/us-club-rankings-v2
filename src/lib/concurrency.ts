@@ -19,13 +19,19 @@ export async function mapWithConcurrency<T, R>(
   return results;
 }
 
-// @prisma/adapter-pg's underlying node-postgres Pool defaults to 10 connections (no
-// override in src/lib/prisma.ts) -- capped below that default so a season-recompute's
-// partitions can't alone exhaust the pool, leaving headroom for whatever else is
-// sharing it (nightlyRecompute.ts runs in-process on the main app's pool, unlike the
-// manually-triggered recompute's own spawned worker process -- see
-// recomputeRatingsWorkerEntry.ts).
-export const PARTITION_RECOMPUTE_CONCURRENCY = 4;
+// Started at 4, which was fine against local dev's much smaller dataset but
+// destabilized prod on the homelab host: 4 partitions computing/writing at once
+// against the real season's data (tens of thousands of matches in the largest age
+// groups) overloaded the host enough that Postgres itself started timing out new
+// connection auth and dropping existing ones ("canceling authentication due to
+// timeout", "Connection reset by peer") -- a host resource-contention problem
+// (CPU/memory on a shared homelab box), not a connection-pool-size problem (Postgres's
+// own max_connections was nowhere close to hit). Dropped to 2 as a more conservative
+// middle ground between "no parallelism" and the host-overloading 4. If this still
+// causes instability under prod's real data volume, drop to 1 (fully sequential --
+// the fetch-dedup and split-transaction wins still apply independent of this) rather
+// than raising it further.
+export const PARTITION_RECOMPUTE_CONCURRENCY = 2;
 
 // Prisma's $transaction `maxWait` (time allowed to acquire a connection before the
 // transaction even starts) defaults to 2000ms -- fine for a single caller, but too
