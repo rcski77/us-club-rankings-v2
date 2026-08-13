@@ -4,7 +4,7 @@ import Link from "next/link";
 import { brand } from "@/lib/brand";
 import { tableWrapClass, thClass, tdClass, numThClass, numTdClass, tbodyClass, RankBadge } from "@/lib/publicUi";
 import { FIVE_YEAR_WEIGHTS } from "@/lib/ranking/fiveYearClubRanking";
-import { LEGACY_IMPORT_ALGORITHM_VERSION } from "@/lib/ranking/computeFiveYearClubRanking";
+import { LEGACY_IMPORT_ALGORITHM_VERSION, getResolvedFiveYearRanking } from "@/lib/ranking/computeFiveYearClubRanking";
 
 // Only the top 100 gets published (NIT invites/housing priority), same cap the
 // legacy workbook's own published sheets used -- unlike /rankings/club-rankings
@@ -119,14 +119,34 @@ export default async function PublicFiveYearClubRankingsPage({
 }
 
 async function FiveYearClubRankingTable({ endYear }: { endYear: number }) {
-  const results = await prisma.clubFiveYearRankingResult.findMany({
-    // Exclude clubs merged into another club (Club.mergedIntoClubId) -- their history
-    // now belongs to the surviving club, including in frozen legacy-imported windows
-    // that predate the merge.
-    where: { endYear, rank: { lte: PUBLISHED_RANK_LIMIT }, club: { mergedIntoClubId: null } },
-    include: { club: true, contributions: { orderBy: { year: "asc" } } },
-    orderBy: { rank: "asc" },
-  });
+  // Resolved (not a raw findMany) so a merged-away club's rank/points fold onto its
+  // surviving club with a correctly re-derived dense rank -- see
+  // getResolvedFiveYearRanking's own comment for why filtering the stored `rank`
+  // column after the fact would silently shrink this capped top-N list.
+  const resolvedAll = await getResolvedFiveYearRanking(endYear);
+  const resolved = resolvedAll.filter((r) => r.rank <= PUBLISHED_RANK_LIMIT);
+  const [sourceRows, targetClubs] = await Promise.all([
+    resolved.length
+      ? prisma.clubFiveYearRankingResult.findMany({
+          where: { id: { in: resolved.map((r) => r.sourceRowId) } },
+          include: { contributions: { orderBy: { year: "asc" } } },
+        })
+      : Promise.resolve([]),
+    resolved.length
+      ? prisma.club.findMany({ where: { id: { in: resolved.map((r) => r.clubId) } } })
+      : Promise.resolve([]),
+  ]);
+  const sourceRowById = new Map(sourceRows.map((r) => [r.id, r]));
+  const targetClubById = new Map(targetClubs.map((c) => [c.id, c]));
+  const results = resolved
+    .map((r) => {
+      const sourceRow = sourceRowById.get(r.sourceRowId);
+      const club = targetClubById.get(r.clubId);
+      if (!sourceRow || !club) return null;
+      return { ...r, club, contributions: sourceRow.contributions, computedAt: sourceRow.computedAt };
+    })
+    .filter((r): r is NonNullable<typeof r> => r !== null)
+    .sort((a, b) => a.rank - b.rank);
   const computedAt = results[0]?.computedAt;
   const years = Array.from({ length: FIVE_YEAR_WEIGHTS.length }, (_, i) => endYear - (FIVE_YEAR_WEIGHTS.length - 1 - i));
 
@@ -158,7 +178,7 @@ async function FiveYearClubRankingTable({ endYear }: { endYear: number }) {
             {results.map((r) => {
               const byYear = new Map(r.contributions.map((c) => [c.year, c]));
               return (
-                <tr key={r.id} className="cursor-pointer">
+                <tr key={r.clubId} className="cursor-pointer">
                   <td className={numTdClass}>
                     <RankBadge rank={r.rank} />
                   </td>

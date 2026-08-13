@@ -191,3 +191,61 @@ export async function computeFiveYearClubRankingForYear(
 
   return { ok: true };
 }
+
+export type ResolvedFiveYearRanking = {
+  clubId: string; // the surviving/target club's id -- never a merged-away or
+  // ranking-group-member club, even if that club's own row is the one that won
+  totalPoints: number;
+  rank: number;
+  sourceRowId: string; // whichever ClubFiveYearRankingResult row (target's own, or a
+  // merged-away/grouped club's) had the higher totalPoints -- contributions/breakdown
+  // for this club at this endYear come from that row.
+};
+
+/**
+ * Read-time equivalent of computeFiveYearClubRankingForYear's merge/ranking-group
+ * redirect (same higher-of-the-two-wins rule), for reading back an endYear whose
+ * stored ClubFiveYearRankingResult rows predate that redirect -- or, for a frozen
+ * legacy-imported window (2021-2024, see LEGACY_IMPORT_ALGORITHM_VERSION), can never
+ * be recomputed at all. Every page/export that reads a 5-year window should call this
+ * instead of querying ClubFiveYearRankingResult directly and filtering out merged
+ * clubs afterward: the stored `rank` column was computed against a wider set that
+ * included the now-excluded club as its own separate entry, so filtering it out
+ * without renumbering leaves gaps in the rank sequence -- e.g. a capped "top 100" list
+ * silently shrinks to 98 rows instead of promoting the next two clubs up to fill the
+ * merged clubs' old slots.
+ */
+export async function getResolvedFiveYearRanking(endYear: number): Promise<ResolvedFiveYearRanking[]> {
+  const rows = await prisma.clubFiveYearRankingResult.findMany({
+    where: { endYear },
+    select: { id: true, clubId: true, totalPoints: true },
+  });
+  if (rows.length === 0) return [];
+
+  const clubIds = [...new Set(rows.map((r) => r.clubId))];
+  const clubs = await prisma.club.findMany({
+    where: { id: { in: clubIds } },
+    select: { id: true, mergedIntoClubId: true, rankingGroupPrimaryClubId: true },
+  });
+  const targetOf = new Map(clubs.map((c) => [c.id, c.mergedIntoClubId ?? c.rankingGroupPrimaryClubId ?? c.id]));
+
+  const bestByTarget = new Map<string, { totalPoints: number; sourceRowId: string }>();
+  for (const r of rows) {
+    const targetClubId = targetOf.get(r.clubId) ?? r.clubId;
+    const existing = bestByTarget.get(targetClubId);
+    if (!existing || r.totalPoints > existing.totalPoints) {
+      bestByTarget.set(targetClubId, { totalPoints: r.totalPoints, sourceRowId: r.id });
+    }
+  }
+
+  const ranked = rankFiveYearClubs(
+    Array.from(bestByTarget.entries()).map(([clubId, v]) => ({ clubId, totalPoints: v.totalPoints })),
+  );
+
+  return ranked.map((r) => ({
+    clubId: r.clubId,
+    totalPoints: r.totalPoints,
+    rank: r.rank,
+    sourceRowId: bestByTarget.get(r.clubId)!.sourceRowId,
+  }));
+}

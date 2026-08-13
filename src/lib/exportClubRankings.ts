@@ -1,6 +1,7 @@
 import ExcelJS from "exceljs";
 import { prisma } from "@/lib/prisma";
 import { FIVE_YEAR_WEIGHTS } from "@/lib/ranking/fiveYearClubRanking";
+import { getResolvedFiveYearRanking } from "@/lib/ranking/computeFiveYearClubRanking";
 
 // Generates the "N Rankings for Publish.xlsx" workbook staff have historically
 // hand-built each year (two sheets: "5 Year Ranking" and "1 Year Ranking") straight
@@ -25,14 +26,26 @@ export type ClubRankingsExportResult =
 export async function buildClubRankingsWorkbook(endYear: number): Promise<ClubRankingsExportResult> {
   const years = Array.from({ length: 5 }, (_, i) => endYear - (4 - i)); // oldest -> newest
 
-  const fiveYearResults = await prisma.clubFiveYearRankingResult.findMany({
-    // Exclude clubs merged into another club (Club.mergedIntoClubId) -- their history
-    // now belongs to the surviving club, including in frozen legacy-imported windows
-    // that predate the merge.
-    where: { endYear, rank: { lte: PUBLISHED_RANK_LIMIT }, club: { mergedIntoClubId: null } },
-    include: { club: true },
-    orderBy: { rank: "asc" },
-  });
+  // Resolved (not a raw findMany) so a merged-away club's rank/points fold onto its
+  // surviving club with a correctly re-derived dense rank, instead of filtering the
+  // stored `rank` column after the fact -- see getResolvedFiveYearRanking's own
+  // comment for why that silently shrinks this capped top-N sheet.
+  const resolvedEndYear = await getResolvedFiveYearRanking(endYear);
+  const resolvedEndYearInRange = resolvedEndYear.filter((r) => r.rank <= PUBLISHED_RANK_LIMIT);
+  const endYearClubs = resolvedEndYearInRange.length
+    ? await prisma.club.findMany({
+        where: { id: { in: resolvedEndYearInRange.map((r) => r.clubId) } },
+        select: { id: true, name: true, state: true },
+      })
+    : [];
+  const endYearClubById = new Map(endYearClubs.map((c) => [c.id, c]));
+  const fiveYearResults: FiveYearResultRow[] = resolvedEndYearInRange
+    .map((r): FiveYearResultRow | null => {
+      const club = endYearClubById.get(r.clubId);
+      return club ? { clubId: r.clubId, rank: r.rank, club: { name: club.name, state: club.state } } : null;
+    })
+    .filter((r): r is FiveYearResultRow => r !== null)
+    .sort((a, b) => a.rank - b.rank);
   if (fiveYearResults.length === 0) {
     return {
       ok: false,
@@ -105,38 +118,26 @@ export async function buildClubRankingsWorkbook(endYear: number): Promise<ClubRa
   const clubById = new Map(displayClubs.map((c) => [c.id, c]));
 
   // --- Per-year 5-year-consolidated rank/points, for the "5 Year Ranking" sheet's
-  // year columns -- each column is that year's own already-computed
-  // ClubFiveYearRankingResult (endYear = that column's year), not that year's 1-year
-  // score. computeFiveYearClubRankingForYear already redirects a ranking-group/merged
-  // club's data onto its surviving club for future recomputes, but a frozen legacy-
-  // imported window (2021-2024) can have that surviving club with no row of its own
-  // for a year where only the merged-away club was separately ranked at the time --
-  // so this collapses by clubId the same way perYearByClub does above, taking the
-  // higher of the two when both the target and a merged-away club have their own row
-  // for the same endYear.
-  const fiveYearResultsAllYears = await prisma.clubFiveYearRankingResult.findMany({
-    where: { endYear: { in: years } },
-    select: { clubId: true, endYear: true, totalPoints: true, rank: true },
-  });
-  const fiveYearClubIds = [...new Set(fiveYearResultsAllYears.map((r) => r.clubId))];
-  const fiveYearClubs = fiveYearClubIds.length
-    ? await prisma.club.findMany({
-        where: { id: { in: fiveYearClubIds } },
-        select: { id: true, mergedIntoClubId: true, rankingGroupPrimaryClubId: true },
-      })
-    : [];
-  const fiveYearRankingClubId = new Map(
-    fiveYearClubs.map((c) => [c.id, c.mergedIntoClubId ?? c.rankingGroupPrimaryClubId ?? c.id]),
+  // year columns -- each column is that year's own resolved ClubFiveYearRankingResult
+  // (endYear = that column's year, folded/re-ranked via getResolvedFiveYearRanking),
+  // not that year's 1-year score. resolvedEndYear above already covers the report's
+  // own endYear; the other 4 trailing years need their own resolve call each, since a
+  // club's rank/points can differ window to window.
+  const resolvedByYear = new Map(years.map((y) => [y, y === endYear ? resolvedEndYear : null]));
+  await Promise.all(
+    years
+      .filter((y) => resolvedByYear.get(y) === null)
+      .map(async (y) => {
+        resolvedByYear.set(y, await getResolvedFiveYearRanking(y));
+      }),
   );
   const fiveYearByClub = new Map<string, Map<number, YearCell>>();
-  for (const r of fiveYearResultsAllYears) {
-    const targetClubId = fiveYearRankingClubId.get(r.clubId) ?? r.clubId;
-    const byYear = fiveYearByClub.get(targetClubId) ?? new Map<number, YearCell>();
-    const existing = byYear.get(r.endYear);
-    if (!existing || r.totalPoints > existing.points) {
-      byYear.set(r.endYear, { points: r.totalPoints, rank: r.rank });
+  for (const y of years) {
+    for (const r of resolvedByYear.get(y) ?? []) {
+      const byYear = fiveYearByClub.get(r.clubId) ?? new Map<number, YearCell>();
+      byYear.set(y, { points: r.totalPoints, rank: r.rank });
+      fiveYearByClub.set(r.clubId, byYear);
     }
-    fiveYearByClub.set(targetClubId, byYear);
   }
 
   // --- Tiering (qualified / under-qualified) for the 1-Year sheet, when derivable ---
