@@ -19,19 +19,25 @@ export async function mapWithConcurrency<T, R>(
   return results;
 }
 
-// Started at 4, which was fine against local dev's much smaller dataset but
-// destabilized prod on the homelab host: 4 partitions computing/writing at once
-// against the real season's data (tens of thousands of matches in the largest age
-// groups) overloaded the host enough that Postgres itself started timing out new
-// connection auth and dropping existing ones ("canceling authentication due to
-// timeout", "Connection reset by peer") -- a host resource-contention problem
-// (CPU/memory on a shared homelab box), not a connection-pool-size problem (Postgres's
-// own max_connections was nowhere close to hit). Dropped to 2 as a more conservative
-// middle ground between "no parallelism" and the host-overloading 4. If this still
-// causes instability under prod's real data volume, drop to 1 (fully sequential --
-// the fetch-dedup and split-transaction wins still apply independent of this) rather
-// than raising it further.
-export const PARTITION_RECOMPUTE_CONCURRENCY = 2;
+// Tried 4, then 2 -- both failed against prod's real data volume, for two different
+// reasons. At 4: partitions computing/writing at once overloaded the homelab host
+// enough that Postgres itself started timing out new connection auth and dropping
+// connections ("canceling authentication due to timeout", "Connection reset by peer").
+// At 2: a *different* failure -- one partition's synchronous JS compute (the Elo/
+// Massey/Colley replay itself, not a DB call) can run long enough to block Node's
+// single-threaded event loop, starving a different partition's already-open
+// transaction of the chance to send its next query before Postgres's own timeout
+// expires ("A query cannot be executed on an expired transaction"). That's not a
+// connection-pool or host-resource problem -- it's that "concurrent" async partitions
+// still share one JS thread for their CPU-bound compute, so a slow partition can stall
+// a different partition's transaction clock even though nothing is actually wrong on
+// the DB side. True parallelism here would need separate OS processes/threads, which
+// this codebase already ruled out as unreliable with Turbopack (see the long comment
+// in runInWorker.ts). Back to 1 -- i.e. no partition parallelism -- until/unless a
+// process-based approach is worth the complexity. The fetch-dedup (getPartitionMatches'
+// cache) and split-transaction wins from the same change are unaffected by this number
+// and still apply.
+export const PARTITION_RECOMPUTE_CONCURRENCY = 1;
 
 // Prisma's $transaction `maxWait` (time allowed to acquire a connection before the
 // transaction even starts) defaults to 2000ms -- fine for a single caller, but too
