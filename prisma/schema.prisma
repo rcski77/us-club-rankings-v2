@@ -471,6 +471,11 @@ model TeamEloMatchStep {
 
   @@unique([matchId, teamId])
   @@index([teamId, seasonId, ageGroup])
+  // The Elo recompute's delete-and-replace filters by (seasonId, ageGroup) alone (see
+  // computeEloRatings.ts) -- the index above is unusable there since it leads with
+  // teamId, forcing a full table scan that grows with total match-step volume across
+  // every season/age-group, not just the partition being replaced.
+  @@index([seasonId, ageGroup])
 }
 
 model RankingResult {
