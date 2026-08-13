@@ -10,6 +10,11 @@ import {
 import { computeMatchDivisionWeights } from "./computeMatchDivisionWeights";
 import { isBoysTeamCode } from "@/lib/teamGender";
 import { normalizeWeekEndingDate } from "./weekEndingDate";
+import {
+  mapWithConcurrency,
+  PARTITION_RECOMPUTE_CONCURRENCY,
+  PARTITION_TRANSACTION_MAX_WAIT,
+} from "@/lib/concurrency";
 
 /**
  * Gathers the same match set computeEloRatingsForPartition() rates from -- every
@@ -40,8 +45,35 @@ import { normalizeWeekEndingDate } from "./weekEndingDate";
  * confirmation workflow. TeamFinish rows still exist pre-confirm (created at import
  * commit time, before scoring is even suggested), which is all this query needs them
  * for -- resolving each team's natural age group/ignoreAge, not their rank.
+ *
+ * Optional `cache`: computeEloRatingsForSeason and computeMasseyRatingsForSeason both
+ * run this same heavy query (with event/division/team+club includes) for every
+ * partition of the same season recompute -- Elo first, Massey moments later, for
+ * identical (seasonId, ageGroup, asOfDate) args. Without a shared cache, Massey
+ * silently re-fetches and re-hydrates everything Elo already did. Callers that share
+ * one cache Map across both engines' season-level calls (see recomputeRatingsWorkerEntry.ts
+ * and nightlyRecompute.ts) get one fetch per partition instead of two; callers that
+ * don't pass one (e.g. getTeamEloHistory's single-team lookups) are unaffected.
  */
-export async function getPartitionMatches(seasonId: string, ageGroup: number, asOfDate: Date) {
+export async function getPartitionMatches(
+  seasonId: string,
+  ageGroup: number,
+  asOfDate: Date,
+  cache?: PartitionMatchesCache,
+) {
+  if (!cache) return fetchPartitionMatches(seasonId, ageGroup, asOfDate);
+  const key = `${seasonId}|${ageGroup}|${asOfDate.getTime()}`;
+  let pending = cache.get(key);
+  if (!pending) {
+    pending = fetchPartitionMatches(seasonId, ageGroup, asOfDate);
+    cache.set(key, pending);
+  }
+  return pending;
+}
+
+export type PartitionMatchesCache = Map<string, ReturnType<typeof fetchPartitionMatches>>;
+
+async function fetchPartitionMatches(seasonId: string, ageGroup: number, asOfDate: Date) {
   const finishes = await prisma.teamFinish.findMany({
     where: {
       division: { event: { seasonId, startDate: { lte: asOfDate } } },
@@ -152,12 +184,13 @@ export async function computeEloRatingsForPartition(
   ageGroup: number,
   asOfDate: Date,
   weekEndingDateRaw: Date,
+  cache?: PartitionMatchesCache,
 ) {
   // See weekEndingDate.ts -- collapses same-day recomputes onto one timestamp so
   // delete-and-replace below actually replaces instead of piling up.
   const weekEndingDate = normalizeWeekEndingDate(weekEndingDateRaw);
 
-  const { matches, relevantTeamIds } = await getPartitionMatches(seasonId, ageGroup, asOfDate);
+  const { matches, relevantTeamIds } = await getPartitionMatches(seasonId, ageGroup, asOfDate, cache);
   const eloMatches = buildEloMatches(await withDivisionWeights(matches));
   const steps = computeEloHistory(eloMatches);
 
@@ -251,7 +284,10 @@ export async function computeEloRatingsForPartition(
   // volume (one row per team per match in the partition -- 64k+ for the largest age
   // group) risk the timing of this much smaller, more important write too. A slow or
   // failed step-write should never block the "as of" rating/rank staff actually look
-  // at from landing. Default interactive-transaction timeout (5s) is plenty here.
+  // at from landing. This write itself is always small, but PARTITION_TRANSACTION_MAX_WAIT
+  // is applied to both maxWait and timeout anyway -- concurrent partitions (see
+  // PARTITION_RECOMPUTE_CONCURRENCY) put this table under enough contention that even
+  // a small write can occasionally miss the 5s default.
   await prisma.$transaction(async (tx) => {
     await tx.teamRatingHistory.deleteMany({
       where: { seasonId, ageGroup, weekEndingDate, ratingEngine: "ELO" },
@@ -270,7 +306,7 @@ export async function computeEloRatingsForPartition(
         })),
       });
     }
-  });
+  }, { maxWait: PARTITION_TRANSACTION_MAX_WAIT, timeout: PARTITION_TRANSACTION_MAX_WAIT });
 
   await prisma.$transaction(
     async (tx) => {
@@ -289,8 +325,10 @@ export async function computeEloRatingsForPartition(
     // ~300ms once indexed): the real cost is the createMany insert volume. 300s is
     // generous headroom for today's data, but still a moving target as more matches
     // get imported each season -- if this times out again, the next step is batching
-    // the createMany into chunks rather than raising the timeout further.
-    { timeout: 300_000 },
+    // the createMany into chunks rather than raising the timeout further. maxWait
+    // (separate from timeout -- see PARTITION_TRANSACTION_MAX_WAIT) covers waiting
+    // for a free connection when multiple partitions try to start this at once.
+    { timeout: 300_000, maxWait: PARTITION_TRANSACTION_MAX_WAIT },
   );
 
   return ranked;
@@ -365,11 +403,20 @@ export async function getEventEloSummaries(
   return summaries;
 }
 
-/** Recomputes Elo ratings for every distinct ageGroup with a TeamSeason row this season. */
+/**
+ * Recomputes Elo ratings for every distinct ageGroup with a TeamSeason row this
+ * season. Partitions (age groups) are data-independent, so they run up to
+ * PARTITION_RECOMPUTE_CONCURRENCY at a time rather than fully sequentially -- each
+ * partition's own delete-and-replace transaction is already split from the others (no
+ * shared transaction to serialize on), so this is safe concurrency, not just a
+ * scheduling change. Pass a `cache` shared with a same-run computeMasseyRatingsForSeason
+ * call (see getPartitionMatches) to avoid double-fetching each partition's matches.
+ */
 export async function computeEloRatingsForSeason(
   seasonId: string,
   asOfDate: Date = new Date(),
   weekEndingDate: Date = new Date(),
+  cache: PartitionMatchesCache = new Map(),
 ) {
   const teamSeasons = await prisma.teamSeason.findMany({
     where: { seasonId },
@@ -377,11 +424,13 @@ export async function computeEloRatingsForSeason(
     distinct: ["ageGroup"],
   });
 
+  const ageGroups = teamSeasons.map((ts) => ts.ageGroup);
+  const ranked = await mapWithConcurrency(ageGroups, PARTITION_RECOMPUTE_CONCURRENCY, (ageGroup) =>
+    computeEloRatingsForPartition(seasonId, ageGroup, asOfDate, weekEndingDate, cache),
+  );
+
   const results = new Map<number, Awaited<ReturnType<typeof computeEloRatingsForPartition>>>();
-  for (const { ageGroup } of teamSeasons) {
-    const ranked = await computeEloRatingsForPartition(seasonId, ageGroup, asOfDate, weekEndingDate);
-    results.set(ageGroup, ranked);
-  }
+  ageGroups.forEach((ageGroup, i) => results.set(ageGroup, ranked[i]));
   return results;
 }
 

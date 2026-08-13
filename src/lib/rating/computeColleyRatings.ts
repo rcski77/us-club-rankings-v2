@@ -2,6 +2,11 @@ import { prisma } from "@/lib/prisma";
 import { buildDivisionComparisons, buildMatchComparisons, solveColley } from "./colley";
 import { isBoysTeamCode } from "@/lib/teamGender";
 import { normalizeWeekEndingDate } from "./weekEndingDate";
+import {
+  mapWithConcurrency,
+  PARTITION_RECOMPUTE_CONCURRENCY,
+  PARTITION_TRANSACTION_MAX_WAIT,
+} from "@/lib/concurrency";
 
 /**
  * Recomputes Colley ratings for one (season, ageGroup) partition as of asOfDate, and
@@ -136,12 +141,16 @@ export async function computeColleyRatings(
         })),
       });
     }
-  });
+  }, { maxWait: PARTITION_TRANSACTION_MAX_WAIT, timeout: PARTITION_TRANSACTION_MAX_WAIT });
 
   return ranked;
 }
 
-/** Recomputes Colley ratings for every distinct ageGroup with a TeamSeason row this season. */
+/**
+ * Recomputes Colley ratings for every distinct ageGroup with a TeamSeason row this
+ * season. See computeEloRatingsForSeason's own comment -- same bounded-concurrency
+ * partition loop (partitions are data-independent, each with its own transaction).
+ */
 export async function computeColleyRatingsForSeason(
   seasonId: string,
   asOfDate: Date = new Date(),
@@ -153,10 +162,12 @@ export async function computeColleyRatingsForSeason(
     distinct: ["ageGroup"],
   });
 
+  const ageGroups = teamSeasons.map((ts) => ts.ageGroup);
+  const ranked = await mapWithConcurrency(ageGroups, PARTITION_RECOMPUTE_CONCURRENCY, (ageGroup) =>
+    computeColleyRatings(seasonId, ageGroup, asOfDate, weekEndingDate),
+  );
+
   const results = new Map<number, Awaited<ReturnType<typeof computeColleyRatings>>>();
-  for (const { ageGroup } of teamSeasons) {
-    const ranked = await computeColleyRatings(seasonId, ageGroup, asOfDate, weekEndingDate);
-    results.set(ageGroup, ranked);
-  }
+  ageGroups.forEach((ageGroup, i) => results.set(ageGroup, ranked[i]));
   return results;
 }

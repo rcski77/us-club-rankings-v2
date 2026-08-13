@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { computeColleyRatingsForSeason } from "@/lib/rating/computeColleyRatings";
-import { computeEloRatingsForSeason } from "@/lib/rating/computeEloRatings";
+import { computeEloRatingsForSeason, type PartitionMatchesCache } from "@/lib/rating/computeEloRatings";
 import { computeMasseyRatingsForSeason } from "@/lib/rating/computeMasseyRatings";
 import { computeDivisionScoringSuggestion } from "@/lib/rating/computeDivisionScoringSuggestion";
 import { computeClubRankingForSeason } from "@/lib/ranking/computeClubRanking";
@@ -35,11 +35,18 @@ export async function runNightlyRecompute(): Promise<void> {
     // every later season silently -- previously an uncaught throw here would exit the
     // whole for-loop, leaving unrelated seasons' rankings stale with no record of why.
     try {
-      // Sequential, not Promise.all -- see docs/dev-environment.md's note on concurrent
-      // Prisma queries from the same pool.
-      await computeColleyRatingsForSeason(season.id);
-      await computeEloRatingsForSeason(season.id);
-      await computeMasseyRatingsForSeason(season.id);
+      // Colley -> Elo -> Massey stays sequential across engines (each one's own
+      // per-age-group loop is already concurrent -- see computeEloRatingsForSeason's
+      // comment -- capped well under the shared Prisma pool's default size since this
+      // runs in-process alongside live admin traffic, unlike the manually-triggered
+      // recompute's own spawned worker process). Shared asOfDate/weekEndingDate/cache
+      // for the same reasons as recomputeRatingsWorkerEntry.ts.
+      const asOfDate = new Date();
+      const weekEndingDate = new Date();
+      const partitionMatchesCache: PartitionMatchesCache = new Map();
+      await computeColleyRatingsForSeason(season.id, asOfDate, weekEndingDate);
+      await computeEloRatingsForSeason(season.id, asOfDate, weekEndingDate, partitionMatchesCache);
+      await computeMasseyRatingsForSeason(season.id, asOfDate, weekEndingDate, partitionMatchesCache);
 
       const divisions = await prisma.division.findMany({
         where: { event: { seasonId: season.id } },
