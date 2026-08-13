@@ -41,6 +41,7 @@ model Season {
   ratingHistory TeamRatingHistory[]
   clubRankingResults ClubRankingResult[]
   eloMatchSteps TeamEloMatchStep[]
+  jobRuns       JobRun[]
   createdAt   DateTime     @default(now())
 }
 
@@ -521,6 +522,41 @@ model TeamRatingHistory {
 
   @@unique([teamId, seasonId, ageGroup, weekEndingDate, ratingEngine])
   @@index([seasonId, ageGroup, weekEndingDate])
+}
+
+enum JobRunKind {
+  RATINGS_RECOMPUTE // Colley + Elo + Massey, team-rankings/page.tsx's recomputeAll
+  CLUB_RANKING_RECOMPUTE // club-rankings/page.tsx's recomputeClubRankings (NPS or COMBINED)
+  ANALYSIS_RECOMPUTE // analysis/[seasonId]/[ageGroup]/page.tsx's runAnalysisForSeason
+  NIGHTLY_RECOMPUTE // nightlyRecompute.ts -- all of the above for one season
+}
+
+enum JobRunStatus {
+  RUNNING
+  SUCCEEDED
+  FAILED
+}
+
+// Every "Recompute ratings" / "Recompute club rankings" / "Run analysis for all
+// divisions in season" button, and the nightly timer, fires its work fire-and-forget
+// (see each trigger's own comment for why -- Cloudflare's ~100s proxy timeout on the
+// homelab host). One row per invocation, at the same granularity as the button that
+// triggered it, so a run that dies mid-flight (process crash, not just a caught
+// error) is visible as a stale RUNNING row on /admin/job-runs instead of leaving no
+// trace at all.
+model JobRun {
+  id          String       @id @default(cuid())
+  kind        JobRunKind
+  status      JobRunStatus @default(RUNNING)
+  seasonId    String
+  season      Season       @relation(fields: [seasonId], references: [id])
+  detail      String? // e.g. club ranking source ("NPS"/"COMBINED")
+  triggeredBy String // user email, or "nightly" for the scheduled job
+  startedAt   DateTime     @default(now())
+  finishedAt  DateTime?
+  error       String?      @db.Text
+
+  @@index([seasonId, kind, startedAt])
 }
 
 // State machine on the entity (Division.scoringStatus), audit trail here -- see
