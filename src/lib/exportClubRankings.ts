@@ -5,11 +5,13 @@ import { FIVE_YEAR_WEIGHTS } from "@/lib/ranking/fiveYearClubRanking";
 // Generates the "N Rankings for Publish.xlsx" workbook staff have historically
 // hand-built each year (two sheets: "5 Year Ranking" and "1 Year Ranking") straight
 // from this app's own data, so publishing no longer means manually retyping a legacy
-// spreadsheet. Column shape on both sheets is identical -- year-by-year rank/points
-// for the club's trailing 5 calendar years, Club, State -- because both are ultimately
-// reading the same underlying per-year numbers (ClubAnnualScore); only the sheets'
-// *sort order* and *row inclusion* differ (5-year weighted rank vs. that single year's
-// own rank/qualification tier). See docs/domain-notes.md for the ranking methodology
+// spreadsheet. Column shape on both sheets is the same (year-by-year rank/points for
+// the club's trailing 5 calendar years, Club, State) but the two sheets deliberately
+// read different underlying numbers per year, matching the legacy hand-built report:
+// the "5 Year Ranking" sheet's year columns are each that year's own already-published
+// 5-year-consolidated rank/score (ClubFiveYearRankingResult, one endYear per column),
+// while the "1 Year Ranking" sheet's year columns are that year's single-season
+// rank/score (ClubAnnualScore). See docs/domain-notes.md for the ranking methodology
 // this reproduces in prose form on each sheet.
 
 const PUBLISHED_RANK_LIMIT = 100; // same cap as /rankings/club-rankings/five-year (public)
@@ -82,6 +84,23 @@ export async function buildClubRankingsWorkbook(endYear: number): Promise<ClubRa
   });
   const clubById = new Map(displayClubs.map((c) => [c.id, c]));
 
+  // --- Per-year 5-year-consolidated rank/points, for the "5 Year Ranking" sheet's
+  // year columns -- each column is that year's own already-computed
+  // ClubFiveYearRankingResult (endYear = that column's year), not that year's 1-year
+  // score. computeFiveYearClubRankingForYear already writes these keyed to a ranking
+  // group's primary club, so no merge-collapse is needed here (unlike perYearByClub
+  // above, which reads raw per-club ClubAnnualScore rows).
+  const fiveYearResultsAllYears = await prisma.clubFiveYearRankingResult.findMany({
+    where: { endYear: { in: years } },
+    select: { clubId: true, endYear: true, totalPoints: true, rank: true },
+  });
+  const fiveYearByClub = new Map<string, Map<number, YearCell>>();
+  for (const r of fiveYearResultsAllYears) {
+    const byYear = fiveYearByClub.get(r.clubId) ?? new Map<number, YearCell>();
+    byYear.set(r.endYear, { points: r.totalPoints, rank: r.rank });
+    fiveYearByClub.set(r.clubId, byYear);
+  }
+
   // --- Tiering (qualified / under-qualified) for the 1-Year sheet, when derivable ---
   // Only possible when endYear's ClubAnnualScore rows came from this app's own
   // computed ClubRankingResult (source "COMPUTED_NPS"/"COMPUTED_COMBINED") -- a
@@ -109,7 +128,7 @@ export async function buildClubRankingsWorkbook(endYear: number): Promise<ClubRa
   workbook.creator = "US Club Rankings";
   workbook.created = new Date();
 
-  addFiveYearSheet(workbook, endYear, years, fiveYearResults, perYearByClub);
+  addFiveYearSheet(workbook, endYear, years, fiveYearResults, fiveYearByClub);
   addOneYearSheet(workbook, endYear, years, perYearByClub, clubById, qualifiedByClubId);
 
   const buffer = await workbook.xlsx.writeBuffer();
@@ -142,7 +161,7 @@ function addFiveYearSheet(
   endYear: number,
   years: number[],
   fiveYearResults: FiveYearResultRow[],
-  perYearByClub: Map<string, Map<number, YearCell>>,
+  fiveYearByClub: Map<string, Map<number, YearCell>>,
 ) {
   const sheet = workbook.addWorksheet("5 Year Ranking");
 
@@ -165,7 +184,7 @@ function addFiveYearSheet(
   });
 
   for (const r of fiveYearResults) {
-    const byYear = perYearByClub.get(r.clubId);
+    const byYear = fiveYearByClub.get(r.clubId);
     const row = sheet.addRow([
       ...years.map((y) => byYear?.get(y)?.rank ?? null),
       r.club.name,
