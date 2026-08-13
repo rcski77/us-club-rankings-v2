@@ -26,7 +26,10 @@ export async function buildClubRankingsWorkbook(endYear: number): Promise<ClubRa
   const years = Array.from({ length: 5 }, (_, i) => endYear - (4 - i)); // oldest -> newest
 
   const fiveYearResults = await prisma.clubFiveYearRankingResult.findMany({
-    where: { endYear, rank: { lte: PUBLISHED_RANK_LIMIT } },
+    // Exclude clubs merged into another club (Club.mergedIntoClubId) -- their history
+    // now belongs to the surviving club, including in frozen legacy-imported windows
+    // that predate the merge.
+    where: { endYear, rank: { lte: PUBLISHED_RANK_LIMIT }, club: { mergedIntoClubId: null } },
     include: { club: true },
     orderBy: { rank: "asc" },
   });
@@ -37,15 +40,21 @@ export async function buildClubRankingsWorkbook(endYear: number): Promise<ClubRa
     };
   }
 
-  // --- Per-year rank/points, collapsed onto each club's ranking-group primary club --
-  // same "member club's score redirects to the group's primary club, higher of the two
-  // wins on a shared year" rule computeFiveYearClubRankingForYear applies for the
-  // 5-year *total*; applied here per-cell so a merged club's per-year Rank and Points
-  // always come from the same underlying row (never rank from one club, points from
-  // another). legacyRank is trusted as-is (see its schema comment: populated for both
-  // legacy-imported and this-app-computed years, not just legacy ones) rather than
-  // re-derived, since it's exactly the "this year's own published rank" value both
-  // sheets need and computeFiveYearClubRankingForYear never recomputes it itself.
+  // --- Per-year rank/points, collapsed onto each club's ranking-group primary club (or
+  // its merge target, if it's since been merged away) -- same "score redirects to the
+  // surviving club, higher of the two wins on a shared year" rule
+  // computeFiveYearClubRankingForYear applies for the 5-year *total*; applied here
+  // per-cell so a merged/grouped club's per-year Rank and Points always come from the
+  // same underlying row (never rank from one club, points from another). mergedIntoClubId
+  // takes priority over rankingGroupPrimaryClubId (a merged-away club is retired
+  // outright), and matters here specifically because mergeClubsIntoTarget leaves a
+  // colliding year's losing ClubAnnualScore row in place on the now-inactive source
+  // club rather than deleting it -- without this redirect that stray row would still
+  // surface as its own line on the export. legacyRank is trusted as-is (see its schema
+  // comment: populated for both legacy-imported and this-app-computed years, not just
+  // legacy ones) rather than re-derived, since it's exactly the "this year's own
+  // published rank" value both sheets need and computeFiveYearClubRankingForYear never
+  // recomputes it itself.
   const annualScores = await prisma.clubAnnualScore.findMany({
     where: { year: { in: years } },
     select: { clubId: true, year: true, totalPoints: true, legacyRank: true },
@@ -54,17 +63,28 @@ export async function buildClubRankingsWorkbook(endYear: number): Promise<ClubRa
   const scoredClubs = scoredClubIds.length
     ? await prisma.club.findMany({
         where: { id: { in: scoredClubIds } },
-        select: { id: true, rankingGroupPrimaryClubId: true },
+        select: { id: true, mergedIntoClubId: true, rankingGroupPrimaryClubId: true },
       })
     : [];
-  const rankingClubId = new Map(scoredClubs.map((c) => [c.id, c.rankingGroupPrimaryClubId ?? c.id]));
+  const rankingClubId = new Map(
+    scoredClubs.map((c) => [c.id, c.mergedIntoClubId ?? c.rankingGroupPrimaryClubId ?? c.id]),
+  );
 
   const perYearByClub = new Map<string, Map<number, YearCell>>();
   for (const s of annualScores) {
     const targetClubId = rankingClubId.get(s.clubId) ?? s.clubId;
     const byYear = perYearByClub.get(targetClubId) ?? new Map<number, YearCell>();
     const existing = byYear.get(s.year);
-    if (!existing || s.totalPoints > existing.points) {
+    // On points ties (common for a merge target's own legacy row vs. the merged-in
+    // club's row -- the source workbook recorded the same consolidated total on both,
+    // see rankings/clubs/[clubId]/page.tsx's own note that legacyRank wasn't recorded
+    // for every year) prefer whichever row actually has a rank, so a real published
+    // rank isn't dropped just because it happened to lose the race to be read first.
+    const isBetter =
+      !existing ||
+      s.totalPoints > existing.points ||
+      (s.totalPoints === existing.points && existing.rank === null && s.legacyRank !== null);
+    if (isBetter) {
       byYear.set(s.year, { points: s.totalPoints, rank: s.legacyRank });
     }
     perYearByClub.set(targetClubId, byYear);
@@ -87,18 +107,36 @@ export async function buildClubRankingsWorkbook(endYear: number): Promise<ClubRa
   // --- Per-year 5-year-consolidated rank/points, for the "5 Year Ranking" sheet's
   // year columns -- each column is that year's own already-computed
   // ClubFiveYearRankingResult (endYear = that column's year), not that year's 1-year
-  // score. computeFiveYearClubRankingForYear already writes these keyed to a ranking
-  // group's primary club, so no merge-collapse is needed here (unlike perYearByClub
-  // above, which reads raw per-club ClubAnnualScore rows).
+  // score. computeFiveYearClubRankingForYear already redirects a ranking-group/merged
+  // club's data onto its surviving club for future recomputes, but a frozen legacy-
+  // imported window (2021-2024) can have that surviving club with no row of its own
+  // for a year where only the merged-away club was separately ranked at the time --
+  // so this collapses by clubId the same way perYearByClub does above, taking the
+  // higher of the two when both the target and a merged-away club have their own row
+  // for the same endYear.
   const fiveYearResultsAllYears = await prisma.clubFiveYearRankingResult.findMany({
     where: { endYear: { in: years } },
     select: { clubId: true, endYear: true, totalPoints: true, rank: true },
   });
+  const fiveYearClubIds = [...new Set(fiveYearResultsAllYears.map((r) => r.clubId))];
+  const fiveYearClubs = fiveYearClubIds.length
+    ? await prisma.club.findMany({
+        where: { id: { in: fiveYearClubIds } },
+        select: { id: true, mergedIntoClubId: true, rankingGroupPrimaryClubId: true },
+      })
+    : [];
+  const fiveYearRankingClubId = new Map(
+    fiveYearClubs.map((c) => [c.id, c.mergedIntoClubId ?? c.rankingGroupPrimaryClubId ?? c.id]),
+  );
   const fiveYearByClub = new Map<string, Map<number, YearCell>>();
   for (const r of fiveYearResultsAllYears) {
-    const byYear = fiveYearByClub.get(r.clubId) ?? new Map<number, YearCell>();
-    byYear.set(r.endYear, { points: r.totalPoints, rank: r.rank });
-    fiveYearByClub.set(r.clubId, byYear);
+    const targetClubId = fiveYearRankingClubId.get(r.clubId) ?? r.clubId;
+    const byYear = fiveYearByClub.get(targetClubId) ?? new Map<number, YearCell>();
+    const existing = byYear.get(r.endYear);
+    if (!existing || r.totalPoints > existing.points) {
+      byYear.set(r.endYear, { points: r.totalPoints, rank: r.rank });
+    }
+    fiveYearByClub.set(targetClubId, byYear);
   }
 
   // --- Tiering (qualified / under-qualified) for the 1-Year sheet, when derivable ---

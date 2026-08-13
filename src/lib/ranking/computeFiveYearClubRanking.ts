@@ -116,14 +116,26 @@ export async function computeFiveYearClubRankingForYear(
   // used for merge-conflict years (mergeClubs.ts) and for picking a group's
   // best-per-age-group team in the current season, not a sum (these are already
   // final, best-5-of-6-derived scores, not additive raw points).
+  //
+  // A club with mergedIntoClubId set is retired outright -- mergeClubsIntoTarget
+  // moves its ClubAnnualScore rows onto the surviving club already, EXCEPT for a
+  // year where both clubs already had their own row before the merge (the merge
+  // keeps the higher value on the target but leaves the loser's original row in
+  // place on the now-inactive source, for audit trail). Without this redirect that
+  // leftover row would still surface here as a separate, partial "club" in the 5-year
+  // ranking. mergedIntoClubId is resolved with the same higher-wins rule (and takes
+  // priority over rankingGroupPrimaryClubId -- a merged-away club can't also be an
+  // independent ranking-group member).
   const clubIds = [...new Set(scores.map((s) => s.clubId))];
   const clubs = clubIds.length
     ? await prisma.club.findMany({
         where: { id: { in: clubIds } },
-        select: { id: true, rankingGroupPrimaryClubId: true },
+        select: { id: true, mergedIntoClubId: true, rankingGroupPrimaryClubId: true },
       })
     : [];
-  const rankingClubId = new Map(clubs.map((c) => [c.id, c.rankingGroupPrimaryClubId ?? c.id]));
+  const rankingClubId = new Map(
+    clubs.map((c) => [c.id, c.mergedIntoClubId ?? c.rankingGroupPrimaryClubId ?? c.id]),
+  );
 
   const pointsByClub = new Map<string, Partial<Record<number, number>>>();
   for (const s of scores) {

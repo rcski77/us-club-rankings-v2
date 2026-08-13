@@ -51,16 +51,23 @@ export async function computeClubRankingForSeason(seasonId: string, source: Club
     // A club with rankingGroupPrimaryClubId set stays fully independent (own teams,
     // own imports) but its teams' best finishes should fold into another club's
     // rollup instead of publishing their own separate, partial ClubRankingResult --
-    // see the field's comment on Club. Resolved per age-group batch (not once
-    // up front) since it's cheap and keeps this loop self-contained.
+    // see the field's comment on Club. A club with mergedIntoClubId set has had its
+    // Team rows moved to the surviving club already (mergeClubsIntoTarget), so this
+    // is a belt-and-suspenders redirect for any team that still points at the merged-
+    // away club -- mergedIntoClubId takes priority over rankingGroupPrimaryClubId
+    // since a merged-away club is retired outright, not just folded in for scoring.
+    // Resolved per age-group batch (not once up front) since it's cheap and keeps
+    // this loop self-contained.
     const clubIds = [...new Set(teams.map((t) => t.clubId).filter((id): id is string => id !== null))];
     const clubs = clubIds.length
       ? await prisma.club.findMany({
           where: { id: { in: clubIds } },
-          select: { id: true, rankingGroupPrimaryClubId: true },
+          select: { id: true, mergedIntoClubId: true, rankingGroupPrimaryClubId: true },
         })
       : [];
-    const rankingClubId = new Map(clubs.map((c) => [c.id, c.rankingGroupPrimaryClubId ?? c.id]));
+    const rankingClubId = new Map(
+      clubs.map((c) => [c.id, c.mergedIntoClubId ?? c.rankingGroupPrimaryClubId ?? c.id]),
+    );
 
     for (const team of teams) {
       if (!team.clubId) continue; // unlinked team -- no club to roll up into
