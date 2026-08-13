@@ -107,18 +107,36 @@ export async function buildClubRankingsWorkbook(endYear: number): Promise<ClubRa
   // --- Per-year 5-year-consolidated rank/points, for the "5 Year Ranking" sheet's
   // year columns -- each column is that year's own already-computed
   // ClubFiveYearRankingResult (endYear = that column's year), not that year's 1-year
-  // score. computeFiveYearClubRankingForYear already writes these keyed to a ranking
-  // group's primary club, so no merge-collapse is needed here (unlike perYearByClub
-  // above, which reads raw per-club ClubAnnualScore rows).
+  // score. computeFiveYearClubRankingForYear already redirects a ranking-group/merged
+  // club's data onto its surviving club for future recomputes, but a frozen legacy-
+  // imported window (2021-2024) can have that surviving club with no row of its own
+  // for a year where only the merged-away club was separately ranked at the time --
+  // so this collapses by clubId the same way perYearByClub does above, taking the
+  // higher of the two when both the target and a merged-away club have their own row
+  // for the same endYear.
   const fiveYearResultsAllYears = await prisma.clubFiveYearRankingResult.findMany({
     where: { endYear: { in: years } },
     select: { clubId: true, endYear: true, totalPoints: true, rank: true },
   });
+  const fiveYearClubIds = [...new Set(fiveYearResultsAllYears.map((r) => r.clubId))];
+  const fiveYearClubs = fiveYearClubIds.length
+    ? await prisma.club.findMany({
+        where: { id: { in: fiveYearClubIds } },
+        select: { id: true, mergedIntoClubId: true, rankingGroupPrimaryClubId: true },
+      })
+    : [];
+  const fiveYearRankingClubId = new Map(
+    fiveYearClubs.map((c) => [c.id, c.mergedIntoClubId ?? c.rankingGroupPrimaryClubId ?? c.id]),
+  );
   const fiveYearByClub = new Map<string, Map<number, YearCell>>();
   for (const r of fiveYearResultsAllYears) {
-    const byYear = fiveYearByClub.get(r.clubId) ?? new Map<number, YearCell>();
-    byYear.set(r.endYear, { points: r.totalPoints, rank: r.rank });
-    fiveYearByClub.set(r.clubId, byYear);
+    const targetClubId = fiveYearRankingClubId.get(r.clubId) ?? r.clubId;
+    const byYear = fiveYearByClub.get(targetClubId) ?? new Map<number, YearCell>();
+    const existing = byYear.get(r.endYear);
+    if (!existing || r.totalPoints > existing.points) {
+      byYear.set(r.endYear, { points: r.totalPoints, rank: r.rank });
+    }
+    fiveYearByClub.set(targetClubId, byYear);
   }
 
   // --- Tiering (qualified / under-qualified) for the 1-Year sheet, when derivable ---
