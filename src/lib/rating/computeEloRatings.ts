@@ -303,26 +303,33 @@ export async function computeEloRatingsForPartition(
     }
   }, { maxWait: PARTITION_TRANSACTION_MAX_WAIT, timeout: PARTITION_TRANSACTION_MAX_WAIT });
 
+  // One createMany call for the whole partition (64k+ rows for the largest age
+  // group) turned out to be the real bottleneck, but not in Postgres -- traced live
+  // on prod (pg_stat_activity): the connection sits `idle in transaction` for
+  // minutes with nothing running server-side, meaning Node itself is stalled
+  // building/serializing that one giant call, not waiting on the database. That's
+  // synchronous, single-threaded work, so more CPU/memory on the host didn't fix it
+  // (confirmed: raising both only shrank, never eliminated, the stall). Chunking
+  // into smaller createMany calls bounds each one's serialization cost instead of
+  // paying it all in one shot.
+  const STEP_ROWS_BATCH_SIZE = 5_000;
   await prisma.$transaction(
     async (tx) => {
       await tx.teamEloMatchStep.deleteMany({ where: { seasonId, ageGroup } });
-      if (stepRows.length > 0) {
-        await tx.teamEloMatchStep.createMany({
-          data: stepRows.map((s) => ({ ...s, seasonId, ageGroup })),
-        });
+      for (let i = 0; i < stepRows.length; i += STEP_ROWS_BATCH_SIZE) {
+        const batch = stepRows.slice(i, i + STEP_ROWS_BATCH_SIZE).map((s) => ({ ...s, seasonId, ageGroup }));
+        await tx.teamEloMatchStep.createMany({ data: batch });
       }
     },
-    // This table's delete-and-replace (one row per team per match in the partition)
-    // repeatedly ran past the default 5s, then a bumped 60s, interactive-transaction
-    // timeout on the largest age-group partition (64k+ rows) -- see the migration
-    // adding an index on the deleteMany's (seasonId, ageGroup) filter, which turned
-    // out not to be the bottleneck (EXPLAIN ANALYZE showed the delete itself takes
-    // ~300ms once indexed): the real cost is the createMany insert volume. 300s is
-    // generous headroom for today's data, but still a moving target as more matches
-    // get imported each season -- if this times out again, the next step is batching
-    // the createMany into chunks rather than raising the timeout further. maxWait
-    // (separate from timeout -- see PARTITION_TRANSACTION_MAX_WAIT) covers waiting
-    // for a free connection when multiple partitions try to start this at once.
+    // This table's delete-and-replace repeatedly ran past the default 5s, then a
+    // bumped 60s, then 300s interactive-transaction timeout on the largest
+    // age-group partition -- see the migration adding an index on the deleteMany's
+    // (seasonId, ageGroup) filter, which turned out not to be the bottleneck
+    // (EXPLAIN ANALYZE showed the delete itself takes ~300ms once indexed). 300s
+    // stays as generous headroom now that the real cost (see above) is fixed.
+    // maxWait (separate from timeout -- see PARTITION_TRANSACTION_MAX_WAIT) covers
+    // waiting for a free connection when multiple partitions try to start this at
+    // once.
     { timeout: 300_000, maxWait: PARTITION_TRANSACTION_MAX_WAIT },
   );
 
