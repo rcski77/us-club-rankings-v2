@@ -10,11 +10,7 @@ import {
 import { computeMatchDivisionWeights } from "./computeMatchDivisionWeights";
 import { isBoysTeamCode } from "@/lib/teamGender";
 import { normalizeWeekEndingDate } from "./weekEndingDate";
-import {
-  mapWithConcurrency,
-  PARTITION_RECOMPUTE_CONCURRENCY,
-  PARTITION_TRANSACTION_MAX_WAIT,
-} from "@/lib/concurrency";
+import { PARTITION_TRANSACTION_MAX_WAIT } from "@/lib/concurrency";
 
 /**
  * Gathers the same match set computeEloRatingsForPartition() rates from -- every
@@ -46,14 +42,13 @@ import {
  * commit time, before scoring is even suggested), which is all this query needs them
  * for -- resolving each team's natural age group/ignoreAge, not their rank.
  *
- * Optional `cache`: computeEloRatingsForSeason and computeMasseyRatingsForSeason both
- * run this same heavy query (with event/division/team+club includes) for every
- * partition of the same season recompute -- Elo first, Massey moments later, for
- * identical (seasonId, ageGroup, asOfDate) args. Without a shared cache, Massey
- * silently re-fetches and re-hydrates everything Elo already did. Callers that share
- * one cache Map across both engines' season-level calls (see recomputeRatingsWorkerEntry.ts
- * and nightlyRecompute.ts) get one fetch per partition instead of two; callers that
- * don't pass one (e.g. getTeamEloHistory's single-team lookups) are unaffected.
+ * Optional `cache`: this same heavy query (with event/division/team+club includes)
+ * gets called for both Elo and Massey on the same partition, moments apart, for
+ * identical (seasonId, ageGroup, asOfDate) args -- see
+ * computeEloMasseyPartitionWorkerEntry.ts, which runs both in one process sharing
+ * one cache Map, so Massey doesn't re-fetch and re-hydrate everything Elo already
+ * did. Callers that don't pass one (e.g. getTeamEloHistory's single-team lookups)
+ * are unaffected.
  */
 export async function getPartitionMatches(
   seasonId: string,
@@ -286,8 +281,8 @@ export async function computeEloRatingsForPartition(
   // failed step-write should never block the "as of" rating/rank staff actually look
   // at from landing. This write itself is always small, but PARTITION_TRANSACTION_MAX_WAIT
   // is applied to both maxWait and timeout anyway -- concurrent partitions (see
-  // PARTITION_RECOMPUTE_CONCURRENCY) put this table under enough contention that even
-  // a small write can occasionally miss the 5s default.
+  // PARTITION_PROCESS_CONCURRENCY in rankingComputeServer.ts) put this table under
+  // enough contention that even a small write can occasionally miss the 5s default.
   await prisma.$transaction(async (tx) => {
     await tx.teamRatingHistory.deleteMany({
       where: { seasonId, ageGroup, weekEndingDate, ratingEngine: "ELO" },
@@ -401,37 +396,6 @@ export async function getEventEloSummaries(
     });
   }
   return summaries;
-}
-
-/**
- * Recomputes Elo ratings for every distinct ageGroup with a TeamSeason row this
- * season. Partitions (age groups) are data-independent, so they run up to
- * PARTITION_RECOMPUTE_CONCURRENCY at a time rather than fully sequentially -- each
- * partition's own delete-and-replace transaction is already split from the others (no
- * shared transaction to serialize on), so this is safe concurrency, not just a
- * scheduling change. Pass a `cache` shared with a same-run computeMasseyRatingsForSeason
- * call (see getPartitionMatches) to avoid double-fetching each partition's matches.
- */
-export async function computeEloRatingsForSeason(
-  seasonId: string,
-  asOfDate: Date = new Date(),
-  weekEndingDate: Date = new Date(),
-  cache: PartitionMatchesCache = new Map(),
-) {
-  const teamSeasons = await prisma.teamSeason.findMany({
-    where: { seasonId },
-    select: { ageGroup: true },
-    distinct: ["ageGroup"],
-  });
-
-  const ageGroups = teamSeasons.map((ts) => ts.ageGroup);
-  const ranked = await mapWithConcurrency(ageGroups, PARTITION_RECOMPUTE_CONCURRENCY, (ageGroup) =>
-    computeEloRatingsForPartition(seasonId, ageGroup, asOfDate, weekEndingDate, cache),
-  );
-
-  const results = new Map<number, Awaited<ReturnType<typeof computeEloRatingsForPartition>>>();
-  ageGroups.forEach((ageGroup, i) => results.set(ageGroup, ranked[i]));
-  return results;
 }
 
 export type TeamEloHistoryEntry = {

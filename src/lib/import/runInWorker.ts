@@ -14,9 +14,9 @@ function workerEntryPath(entryRelativePath: string): string {
  * "lib/import/resolveWorkerEntry.ts") in a separate OS process (via
  * `child_process.execFile`), resolving with whatever result it prints to stdout as
  * its last line. Shared by resolveInWorker.ts, commitMatchesInWorker.ts, and
- * recomputeRatingsInWorker.ts -- all move heavy work off the process Next uses to
- * serve every other admin request, for their own different reasons (see each call
- * site).
+ * rankingComputeServer.ts's own per-partition fan-out -- all move heavy work off the
+ * process Next uses to serve every other admin request, for their own different
+ * reasons (see each call site).
  *
  * This went through two other approaches first, both of which Turbopack broke in
  * ways that only showed up in a real Docker build, not `next dev`:
@@ -49,8 +49,8 @@ function workerEntryPath(entryRelativePath: string): string {
  * No IPC channel here (execFile doesn't give you one the way fork does), so the
  * payload goes in as a JSON argv string and the result comes back as the last line
  * the child process prints to stdout -- see resolveWorkerEntry.ts /
- * commitMatchesWorkerEntry.ts / recomputeRatingsWorkerEntry.ts for the other side
- * of that contract.
+ * commitMatchesWorkerEntry.ts / computeColleyPartitionWorkerEntry.ts for the other
+ * side of that contract.
  */
 export async function runInWorker<TWorkerData extends Record<string, unknown>, TResult>(
   entryRelativePath: string,

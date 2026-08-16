@@ -3,8 +3,9 @@ import type { ClubRankingSource } from "@/generated/prisma/enums";
 
 /**
  * Runs computeClubRankingForSeason in a separate process instead of inline in the
- * server action -- same reason as recomputeRatingsInWorker.ts (see that file and
- * docs/plan.md's "Team rankings recompute performance" note). The COMBINED source is
+ * server action -- same reason ratings recompute moved to the ranking-compute
+ * service (see src/lib/rating/rankingComputeServer.ts and docs/plan.md's "Team
+ * rankings recompute performance" note). The COMBINED source is
  * the expensive path: it calls computeCombinedRankByTeam once per age group, each of
  * which re-derives Power Rankings' Colley/Elo/Massey data (getLatestPowerRatings) on
  * top of the NPS RankingResult query the NPS source alone needs -- on a season with a

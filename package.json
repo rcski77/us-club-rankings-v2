@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "ranking-compute": "tsx src/lib/rating/rankingComputeServer.ts",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",

@@ -11,7 +11,6 @@ import {
   thClass,
   tdClass,
 } from "@/lib/ui";
-import { recomputeRatingsInWorker } from "@/lib/rating/recomputeRatingsInWorker";
 import {
   ordinalSuffix,
   sortRows,
@@ -40,14 +39,16 @@ type SortDir = "asc" | "desc";
  * three engines used to have separate buttons, but staff always want all three current
  * together, not one at a time.
  *
- * Deliberately does NOT await recomputeRatingsInWorker() -- a full-season recompute can
- * run right up against (and occasionally past) Cloudflare's ~100s proxy timeout on the
- * homelab docker host, which isn't something the app can raise. The underlying worker
- * process finishes and writes its results regardless of whether this request waits for
- * it, so waiting only bought a false-alarm error page for something that actually
- * succeeded. Redirecting immediately with a "started" (not "complete") message and
- * relying on TeamRatingHistory.createdAt for freshness (see the "as of" display below)
- * is honest about what this button can actually promise synchronously.
+ * Hands the actual work off to the ranking-compute service over HTTP (see
+ * src/lib/rating/rankingComputeServer.ts) rather than spawning a child process here --
+ * that service owns the JobRun row from here on (marks it SUCCEEDED/FAILED itself once
+ * the recompute finishes), so this action's job is just "did the hand-off succeed."
+ * Deliberately doesn't await the recompute itself -- a full-season run can take many
+ * minutes, far past Cloudflare's ~100s proxy timeout on the homelab docker host, which
+ * isn't something the app can raise. Redirecting immediately with a "started" (not
+ * "complete") message and relying on TeamRatingHistory.createdAt for freshness (see the
+ * "as of" display below) is honest about what this button can actually promise
+ * synchronously.
  */
 async function recomputeAll(formData: FormData) {
   "use server";
@@ -61,15 +62,25 @@ async function recomputeAll(formData: FormData) {
     data: { kind: "RATINGS_RECOMPUTE", seasonId, triggeredBy: session?.user?.email ?? "unknown" },
   });
 
-  recomputeRatingsInWorker(seasonId)
-    .then(() => prisma.jobRun.update({ where: { id: jobRun.id }, data: { status: "SUCCEEDED", finishedAt: new Date() } }))
-    .catch((err) => {
-      console.error(`Background ratings recompute failed for season ${seasonId}:`, err);
-      return prisma.jobRun.update({
-        where: { id: jobRun.id },
-        data: { status: "FAILED", finishedAt: new Date(), error: err instanceof Error ? err.message : String(err) },
-      });
+  fetch(`${process.env.RANKING_COMPUTE_URL}/recompute-ratings`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ seasonId, jobRunId: jobRun.id }),
+    signal: AbortSignal.timeout(5000),
+  }).catch((err) => {
+    // Couldn't even hand the job off -- mark it failed now rather than leaving it
+    // RUNNING forever with nothing left to ever update it (the ranking-compute service
+    // itself never received the request, so it will never mark this row either way).
+    console.error(`Could not reach ranking-compute service for season ${seasonId}:`, err);
+    return prisma.jobRun.update({
+      where: { id: jobRun.id },
+      data: {
+        status: "FAILED",
+        finishedAt: new Date(),
+        error: `Could not reach ranking-compute service: ${err instanceof Error ? err.message : String(err)}`,
+      },
     });
+  });
 
   redirect(
     `/admin/team-rankings?${new URLSearchParams({ season: seasonId, view, ageGroup, recomputeStarted: "1" })}`,

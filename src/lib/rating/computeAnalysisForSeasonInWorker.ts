@@ -7,7 +7,8 @@ import { runInWorker } from "@/lib/import/runInWorker";
  * hundreds of divisions across all age groups combined, each requiring several Prisma
  * queries (field strength, Elo population, template list, ...), so run inline this
  * risks the same ~100s Cloudflare proxy timeout already solved for "Recompute ratings"
- * (recomputeRatingsInWorker.ts) and club rankings (computeClubRankingInWorker.ts).
+ * (now the ranking-compute service, see src/lib/rating/rankingComputeServer.ts) and
+ * club rankings (computeClubRankingInWorker.ts).
  */
 export function computeAnalysisForSeasonInWorker(seasonId: string): Promise<void> {
   return runInWorker<{ seasonId: string }, void>(

@@ -1,9 +1,58 @@
 import { prisma } from "@/lib/prisma";
-import { computeColleyRatingsForSeason } from "@/lib/rating/computeColleyRatings";
-import { computeEloRatingsForSeason, type PartitionMatchesCache } from "@/lib/rating/computeEloRatings";
-import { computeMasseyRatingsForSeason } from "@/lib/rating/computeMasseyRatings";
 import { computeDivisionScoringSuggestion } from "@/lib/rating/computeDivisionScoringSuggestion";
 import { computeClubRankingForSeason } from "@/lib/ranking/computeClubRanking";
+
+// Generous over the ~21-31 min durations observed so far, so a slow-but-healthy run
+// isn't mistaken for a stuck one -- but still bounded, so a ranking-compute crash that
+// never updates its own JobRun row (see rankingComputeServer.ts) can't hang this
+// function, and therefore the whole nightly job, forever.
+const RATINGS_RECOMPUTE_POLL_TIMEOUT_MS = 40 * 60 * 1000;
+const RATINGS_RECOMPUTE_POLL_INTERVAL_MS = 5_000;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Triggers a Colley/Elo/Massey recompute on the ranking-compute service and waits
+ * for it to finish, unlike the manually-triggered "Recompute ratings" button (which
+ * is genuinely fire-and-forget). Nightly's own later steps -- division scoring,
+ * NPS/COMBINED club rankings -- re-derive from the ratings this triggers, so they
+ * can't start on stale data; this has to actually block until ratings either
+ * succeed or fail.
+ *
+ * Creates its own RATINGS_RECOMPUTE JobRun row (separate from the NIGHTLY_RECOMPUTE
+ * row runNightlyRecompute() already tracks per season) so ratings progress is
+ * visible on its own row here too, same as a manual trigger's.
+ */
+async function triggerAndAwaitRatingsRecompute(seasonId: string): Promise<void> {
+  const jobRun = await prisma.jobRun.create({
+    data: { kind: "RATINGS_RECOMPUTE", seasonId, triggeredBy: "nightly" },
+  });
+
+  const response = await fetch(`${process.env.RANKING_COMPUTE_URL}/recompute-ratings`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ seasonId, jobRunId: jobRun.id }),
+    signal: AbortSignal.timeout(5000),
+  }).catch((err) => {
+    throw new Error(`Could not reach ranking-compute service: ${err instanceof Error ? err.message : String(err)}`);
+  });
+  if (!response.ok) {
+    throw new Error(`ranking-compute service rejected the request: HTTP ${response.status}`);
+  }
+
+  const deadline = Date.now() + RATINGS_RECOMPUTE_POLL_TIMEOUT_MS;
+  while (Date.now() < deadline) {
+    await sleep(RATINGS_RECOMPUTE_POLL_INTERVAL_MS);
+    const current = await prisma.jobRun.findUniqueOrThrow({ where: { id: jobRun.id } });
+    if (current.status === "SUCCEEDED") return;
+    if (current.status === "FAILED") throw new Error(current.error ?? "ranking-compute reported failure");
+  }
+  throw new Error(
+    `ranking-compute did not report completion within ${RATINGS_RECOMPUTE_POLL_TIMEOUT_MS / 60_000} minutes`,
+  );
+}
 
 /**
  * Nightly refresh: recomputes Colley/Elo/Massey power ratings, every division's
@@ -13,11 +62,6 @@ import { computeClubRankingForSeason } from "@/lib/ranking/computeClubRanking";
  * divisions" on /admin/analysis, "Recompute ... club rankings" on
  * /admin/club-rankings) -- see ../../instrumentation.ts for what schedules this to run
  * automatically overnight.
- *
- * Runs in-process, not via the execFile worker pattern the request-triggered actions
- * use (recomputeRatingsInWorker.ts) -- that workaround exists to dodge Cloudflare's
- * ~100s proxy timeout on a synchronous HTTP request, which doesn't apply to a
- * background timer with no request waiting on it.
  */
 export async function runNightlyRecompute(): Promise<void> {
   const seasons = await prisma.season.findMany({
@@ -30,23 +74,11 @@ export async function runNightlyRecompute(): Promise<void> {
       data: { kind: "NIGHTLY_RECOMPUTE", seasonId: season.id, triggeredBy: "nightly" },
     });
 
-    // Each season gets its own try/catch so one season's failure (e.g. the Elo
-    // transaction timeout that motivated this file's JobRun tracking) doesn't abort
-    // every later season silently -- previously an uncaught throw here would exit the
-    // whole for-loop, leaving unrelated seasons' rankings stale with no record of why.
+    // Each season gets its own try/catch so one season's failure doesn't abort every
+    // later season silently -- previously an uncaught throw here would exit the whole
+    // for-loop, leaving unrelated seasons' rankings stale with no record of why.
     try {
-      // Colley -> Elo -> Massey stays sequential across engines (each one's own
-      // per-age-group loop is already concurrent -- see computeEloRatingsForSeason's
-      // comment -- capped well under the shared Prisma pool's default size since this
-      // runs in-process alongside live admin traffic, unlike the manually-triggered
-      // recompute's own spawned worker process). Shared asOfDate/weekEndingDate/cache
-      // for the same reasons as recomputeRatingsWorkerEntry.ts.
-      const asOfDate = new Date();
-      const weekEndingDate = new Date();
-      const partitionMatchesCache: PartitionMatchesCache = new Map();
-      await computeColleyRatingsForSeason(season.id, asOfDate, weekEndingDate);
-      await computeEloRatingsForSeason(season.id, asOfDate, weekEndingDate, partitionMatchesCache);
-      await computeMasseyRatingsForSeason(season.id, asOfDate, weekEndingDate, partitionMatchesCache);
+      await triggerAndAwaitRatingsRecompute(season.id);
 
       const divisions = await prisma.division.findMany({
         where: { event: { seasonId: season.id } },

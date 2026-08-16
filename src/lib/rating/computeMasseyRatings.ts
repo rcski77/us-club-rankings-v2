@@ -2,11 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { getPartitionMatches, withDivisionWeights, type PartitionMatchesCache } from "./computeEloRatings";
 import { buildMasseyMatches, solveMassey } from "./massey";
 import { normalizeWeekEndingDate } from "./weekEndingDate";
-import {
-  mapWithConcurrency,
-  PARTITION_RECOMPUTE_CONCURRENCY,
-  PARTITION_TRANSACTION_MAX_WAIT,
-} from "@/lib/concurrency";
+import { PARTITION_TRANSACTION_MAX_WAIT } from "@/lib/concurrency";
 
 /**
  * Recomputes Massey ratings for one (season, ageGroup) partition as of asOfDate, and
@@ -86,32 +82,4 @@ export async function computeMasseyRatingsForPartition(
   }, { maxWait: PARTITION_TRANSACTION_MAX_WAIT, timeout: PARTITION_TRANSACTION_MAX_WAIT });
 
   return ranked;
-}
-
-/**
- * Recomputes Massey ratings for every distinct ageGroup with a TeamSeason row this
- * season. See computeEloRatingsForSeason's own comment -- same bounded-concurrency
- * partition loop, same shared-`cache` mechanism to avoid re-fetching each partition's
- * matches a second time when Elo already fetched them in the same recompute run.
- */
-export async function computeMasseyRatingsForSeason(
-  seasonId: string,
-  asOfDate: Date = new Date(),
-  weekEndingDate: Date = new Date(),
-  cache: PartitionMatchesCache = new Map(),
-) {
-  const teamSeasons = await prisma.teamSeason.findMany({
-    where: { seasonId },
-    select: { ageGroup: true },
-    distinct: ["ageGroup"],
-  });
-
-  const ageGroups = teamSeasons.map((ts) => ts.ageGroup);
-  const ranked = await mapWithConcurrency(ageGroups, PARTITION_RECOMPUTE_CONCURRENCY, (ageGroup) =>
-    computeMasseyRatingsForPartition(seasonId, ageGroup, asOfDate, weekEndingDate, cache),
-  );
-
-  const results = new Map<number, Awaited<ReturnType<typeof computeMasseyRatingsForPartition>>>();
-  ageGroups.forEach((ageGroup, i) => results.set(ageGroup, ranked[i]));
-  return results;
 }

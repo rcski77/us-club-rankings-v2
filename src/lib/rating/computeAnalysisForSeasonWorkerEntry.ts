@@ -6,8 +6,8 @@ import { computeDivisionScoringSuggestion } from "./computeDivisionScoringSugges
 // version of admin/analysis/[seasonId]/[ageGroup]/page.tsx's runAnalysisForAll --
 // same per-division computeDivisionScoringSuggestion loop, just over every division
 // in the season instead of one age group's worth, so it needs the same off-request-
-// thread treatment recomputeRatingsWorkerEntry.ts/computeClubRankingWorkerEntry.ts
-// already use for season-wide loops (see those files' own comments for why).
+// thread treatment computeClubRankingWorkerEntry.ts already uses for season-wide
+// loops (see that file's own comment for why).
 async function main(): Promise<void> {
   const { seasonId } = JSON.parse(process.argv[2]) as { seasonId: string };
 

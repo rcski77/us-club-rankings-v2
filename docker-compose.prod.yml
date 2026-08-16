@@ -75,6 +75,7 @@ services:
       - .env.prod
     environment:
       DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/us_club_rankings
+      RANKING_COMPUTE_URL: http://ranking-compute:4100
     ports:
       - "3003:3000"
     depends_on:
@@ -82,6 +83,38 @@ services:
         condition: service_healthy
       migrate:
         condition: service_completed_successfully
+
+  # Runs the Colley/Elo/Massey ratings recompute -- CPU-heavy, spawns several child
+  # processes of its own per run (see src/lib/rating/rankingComputeServer.ts) --
+  # physically apart from `app` so a recompute can never compete with `app` for
+  # CPU/memory while it's serving admin requests. `app` triggers it over HTTP
+  # (RANKING_COMPUTE_URL above); no `ports:` here -- reachable only from other
+  # services on this compose network, never published to the host or internet.
+  # Reuses `app`'s own image (same Dockerfile/build) since it needs the identical
+  # src/ tree, tsconfig.json, and full node_modules (tsx included) that image already
+  # has -- just a different command instead of `node server.js`.
+  ranking-compute:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: us-club-rankings-v2-ranking-compute
+    restart: unless-stopped
+    env_file:
+      - .env.prod
+    environment:
+      DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/us_club_rankings
+    command: ["node", "--import", "tsx", "src/lib/rating/rankingComputeServer.ts"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    deploy:
+      resources:
+        # Conservative starting point on the current 4-vCPU host -- raise once the
+        # VM's vCPU allocation grows and PARTITION_PROCESS_CONCURRENCY (see
+        # src/lib/concurrency.ts) is raised alongside it.
+        limits:
+          cpus: "2"
+          memory: 2g
 
   postgres:
     image: postgres:16

@@ -17,6 +17,18 @@ Bootstrap admin login: email/password come from `SEED_ADMIN_EMAIL`/
 dev values). Change the password after first login in a real deployment; for local
 dev it doesn't matter.
 
+Team Rankings' "Recompute ratings" button and the nightly job both trigger the
+ratings recompute over HTTP against a separate `ranking-compute` service (see
+`src/lib/rating/rankingComputeServer.ts` and `RANKING_COMPUTE_URL` in `.env`) — run
+it in a second terminal alongside `npm run dev`:
+
+```bash
+npm run ranking-compute
+```
+
+Without it running, "Recompute ratings" will fail fast (`ECONNREFUSED`) and mark the
+JobRun `FAILED` rather than hang — see `/admin/job-runs`.
+
 ## Local Postgres via Docker
 
 This project runs local Postgres through Docker Desktop (`docker-compose.yml` at the
