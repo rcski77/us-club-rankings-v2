@@ -109,20 +109,25 @@ services:
         condition: service_healthy
     deploy:
       resources:
-        # cpus: conservative starting point on the current 4-vCPU host -- raise once
-        # the VM's vCPU allocation grows and PARTITION_PROCESS_CONCURRENCY (see
-        # src/lib/concurrency.ts) is raised alongside it.
+        # VM raised from 4 to 6 vCPUs / 8 to 16GB RAM specifically to give this room.
         #
-        # memory: started at 2g, which was too tight for 2 concurrent partition
-        # processes' real footprint -- confirmed live on prod: usage sat pinned at
-        # ~97-99% of the 2g limit for the whole run instead of cleanly OOM-killing,
-        # which pushed the host into swap (free -h showed ~900MB swap in use) and
-        # caused severe thrashing rather than a crash -- one transaction that should
-        # take under a minute took 49.8 minutes and blew its own 5-minute timeout.
-        # Host has ~5.8GB available at cpus: "2" concurrency's actual usage, so 4g
-        # leaves comfortable headroom for Postgres/app/other containers on this box.
+        # memory: started at 2g, too tight for 2 concurrent partition processes' real
+        # footprint -- confirmed live on prod: usage sat pinned at ~97-99% of the 2g
+        # limit for the whole run instead of cleanly OOM-killing, pushing the host
+        # into swap (~900MB) and causing severe thrashing rather than a crash (one
+        # transaction that should take under a minute took 49.8 minutes). Raised to
+        # 4g, which fixed the swap/thrashing symptom (confirmed: swap dropped to
+        # ~128MB on the next run) but not the failure -- see cpus below.
+        #
+        # cpus: started at 2 (conservative on the then-4-vCPU host). With memory
+        # fixed but cpus still capped at 2, the next run still failed slow (one
+        # transaction took 23.4 min instead of under a minute, no swap/memory
+        # symptom this time) -- consistent with Docker's CFS bandwidth quota
+        # throttling two CPU-heavy partition processes crammed into a 2-core budget.
+        # Raised to 4 now that the host has 6 cores to spare, leaving 2 for
+        # Postgres/app/other containers on this box.
         limits:
-          cpus: "2"
+          cpus: "4"
           memory: 4g
 
   postgres:
