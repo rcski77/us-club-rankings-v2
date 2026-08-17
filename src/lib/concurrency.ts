@@ -50,10 +50,14 @@ export const PARTITION_TRANSACTION_MAX_WAIT = 30_000;
 //
 // Separate OS processes don't have that failure mode: no single JS thread to block,
 // and each process's own Prisma pool only holds a connection for as long as its own
-// query/transaction needs one. Still starting conservative at 2, not the target 4,
-// and raising it only after live verification on prod's real data volume -- the
-// homelab host has just 4 vCPUs today (shared with Postgres and the app itself), so
-// even process-level parallelism can still starve the host if pushed too far too
-// fast. Raise once the VM's vCPU allocation grows and a staged live test at the new
-// value passes clean.
-export const PARTITION_PROCESS_CONCURRENCY = 2;
+// query/transaction needs one. Started conservative at 2 on the then-4-vCPU host,
+// which surfaced a real (if unrelated) bottleneck: one giant createMany call per
+// partition stalling Node's event loop on its own, confirmed live via
+// pg_stat_activity and fixed by chunking that insert (see computeEloRatings.ts).
+// With that fixed, and the VM raised to 6 vCPUs / 16GB (ranking-compute's own
+// container limits raised to cpus: "4", memory: 4g alongside it), raised to the
+// original target of 4. If this regresses, drop back to 2 rather than raising
+// container limits further -- the createMany fix removed the actual bottleneck, so a
+// failure at 4 now would mean real resource contention, not a hidden serialization
+// stall.
+export const PARTITION_PROCESS_CONCURRENCY = 4;
