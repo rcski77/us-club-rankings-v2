@@ -126,9 +126,16 @@ services:
         # throttling two CPU-heavy partition processes crammed into a 2-core budget.
         # Raised to 4 now that the host has 6 cores to spare, leaving 2 for
         # Postgres/app/other containers on this box.
+        #
+        # memory, again: raising PARTITION_PROCESS_CONCURRENCY (src/lib/concurrency.ts)
+        # 2 -> 4 outgrew 4g -- confirmed live: usage pinned at ~100% and host swap
+        # climbed to ~2GB for the run's duration (it still succeeded, just slower and
+        # closer to the edge than it should run). Host has 15GB total with ~10GB free
+        # at the time, so raised to 8g for real headroom instead of chasing the ceiling
+        # again on the next concurrency or data-volume increase.
         limits:
           cpus: "4"
-          memory: 4g
+          memory: 8g
 
   postgres:
     image: postgres:16
