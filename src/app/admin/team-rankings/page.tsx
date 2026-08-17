@@ -35,6 +35,16 @@ const VIEWS = [
 type View = (typeof VIEWS)[number]["value"];
 type SortDir = "asc" | "desc";
 
+// Distinct light tints for Power Rankings' four rank columns (overall + one per
+// engine) so the eye can track a single column straight down while scrolling a wide,
+// mostly-numeric table.
+const RANK_COL_BG = {
+  rank: "bg-slate-100",
+  colley: "bg-blue-50",
+  elo: "bg-emerald-50",
+  massey: "bg-amber-50",
+} as const;
+
 /** Kicks off Colley, Elo, and Massey ratings for the whole season in one action -- the
  * three engines used to have separate buttons, but staff always want all three current
  * together, not one at a time.
@@ -239,12 +249,14 @@ function SortableHeader({
   activeSort,
   dir,
   baseParams,
+  thClassName,
 }: {
   sortKey: string;
   label: string;
   activeSort?: string;
   dir: SortDir;
   baseParams: URLSearchParams;
+  thClassName?: string;
 }) {
   const isActive = activeSort === sortKey;
   const nextDir: SortDir = isActive && dir === "asc" ? "desc" : "asc";
@@ -252,7 +264,7 @@ function SortableHeader({
   params.set("sort", sortKey);
   params.set("dir", nextDir);
   return (
-    <th className={thClass}>
+    <th className={thClassName ? `${thClass} ${thClassName}` : thClass}>
       <Link href={`/admin/team-rankings?${params}`} className="hover:underline" scroll={false}>
         {label}
         {isActive && (dir === "asc" ? " ▲" : " ▼")}
@@ -418,7 +430,7 @@ async function PowerRankingTable({
       <table className={tableClass}>
         <thead>
           <tr>
-            <SortableHeader sortKey="rank" label="Rank" activeSort={sort} dir={dir} baseParams={baseParams} />
+            <SortableHeader sortKey="rank" label="Rank" activeSort={sort} dir={dir} baseParams={baseParams} thClassName={RANK_COL_BG.rank} />
             <SortableHeader sortKey="team" label="Team" activeSort={sort} dir={dir} baseParams={baseParams} />
             <SortableHeader sortKey="club" label="Club" activeSort={sort} dir={dir} baseParams={baseParams} />
             <SortableHeader
@@ -434,6 +446,7 @@ async function PowerRankingTable({
               activeSort={sort}
               dir={dir}
               baseParams={baseParams}
+              thClassName={RANK_COL_BG.colley}
             />
             <SortableHeader
               sortKey="colleyRating"
@@ -455,6 +468,7 @@ async function PowerRankingTable({
               activeSort={sort}
               dir={dir}
               baseParams={baseParams}
+              thClassName={RANK_COL_BG.elo}
             />
             <SortableHeader
               sortKey="eloRating"
@@ -476,6 +490,7 @@ async function PowerRankingTable({
               activeSort={sort}
               dir={dir}
               baseParams={baseParams}
+              thClassName={RANK_COL_BG.massey}
             />
             <SortableHeader
               sortKey="masseyRating"
@@ -496,7 +511,7 @@ async function PowerRankingTable({
         <tbody>
           {rows.map(({ team, colley, elo, massey }) => (
             <tr key={team.id}>
-              <td className={tdClass}>{rankByTeamId.get(team.id) ?? "—"}</td>
+              <td className={`${tdClass} ${RANK_COL_BG.rank}`}>{rankByTeamId.get(team.id) ?? "—"}</td>
               <td className={tdClass}>
                 <Link href={`/admin/teams/${team.id}?from=team-rankings`} prefetch={false} className="text-slate-900 underline">
                   {team.name}
@@ -509,13 +524,13 @@ async function PowerRankingTable({
                   return avg !== undefined ? avg.toFixed(1) : "—";
                 })()}
               </td>
-              <td className={tdClass}>{colley?.rank ?? "—"}</td>
+              <td className={`${tdClass} ${RANK_COL_BG.colley}`}>{colley?.rank ?? "—"}</td>
               <td className={tdClass}>{colley ? colley.rating.toFixed(4) : "—"}</td>
               <td className={tdClass}>{colley?.comparisons ?? "—"}</td>
-              <td className={tdClass}>{elo?.rank ?? "—"}</td>
+              <td className={`${tdClass} ${RANK_COL_BG.elo}`}>{elo?.rank ?? "—"}</td>
               <td className={tdClass}>{elo ? elo.rating.toFixed(4) : "—"}</td>
               <td className={tdClass}>{elo?.comparisons ?? "—"}</td>
-              <td className={tdClass}>{massey?.rank ?? "—"}</td>
+              <td className={`${tdClass} ${RANK_COL_BG.massey}`}>{massey?.rank ?? "—"}</td>
               <td className={tdClass}>{massey ? massey.rating.toFixed(2) : "—"}</td>
               <td className={tdClass}>{massey?.comparisons ?? "—"}</td>
             </tr>
