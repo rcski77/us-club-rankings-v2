@@ -16,8 +16,8 @@ const PUBLISHED_RANK_LIMIT = 100;
 export const metadata: Metadata = { title: "Five-Year Club Rankings" };
 
 const SOURCES = [
-  { value: "NPS", label: "NPS" },
   { value: "COMBINED", label: "Combined" },
+  { value: "NPS", label: "NPS" },
 ] as const;
 
 export default async function PublicFiveYearClubRankingsPage({
