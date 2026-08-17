@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { prisma } from "@/lib/prisma";
-import { tableClass, thClass, tdClass, stripedTbodyClass, jobRunStatusBadgeClass } from "@/lib/ui";
+import { tableClass, thClass, tdClass, stripedTbodyClass, jobRunStatusBadgeClass, errorBannerClass, successBannerClass } from "@/lib/ui";
 import type { JobRunKind } from "@/generated/prisma/enums";
 
 export const metadata: Metadata = { title: "Job Runs" };
@@ -16,6 +16,13 @@ const KIND_LABELS: Record<JobRunKind, string> = {
 // before it could mark SUCCEEDED/FAILED -- every trigger's own "started" banner tells
 // staff to expect a minute or two, so nothing legitimate stays RUNNING this long.
 const STALE_RUNNING_MINUTES = 15;
+
+// The nightly job runs once a day (see scheduleNightlyRecompute.ts) -- 36h gives a
+// full day's margin before flagging silence, so a single slow night or a redeploy
+// that briefly delays the timer doesn't false-positive. This is the "nobody's
+// watching" gap that let the 8/14 nightly failure go unnoticed: the JobRun row was
+// always there, but nothing surfaced it unless someone thought to look.
+const NIGHTLY_STALE_HOURS = 36;
 
 function formatDuration(startedAt: Date, finishedAt: Date | null): string {
   const end = finishedAt ?? new Date();
@@ -35,13 +42,28 @@ function formatDuration(startedAt: Date, finishedAt: Date | null): string {
  * trace at all.
  */
 export default async function JobRunsPage() {
-  const runs = await prisma.jobRun.findMany({
-    orderBy: { startedAt: "desc" },
-    take: 100,
-    include: { season: { select: { label: true } } },
-  });
+  const nightlyStaleThreshold = new Date(Date.now() - NIGHTLY_STALE_HOURS * 60 * 60 * 1000);
+
+  const [runs, recentNightlyRuns] = await Promise.all([
+    prisma.jobRun.findMany({
+      orderBy: { startedAt: "desc" },
+      take: 100,
+      include: { season: { select: { label: true } } },
+    }),
+    prisma.jobRun.findMany({
+      where: { kind: "NIGHTLY_RECOMPUTE", startedAt: { gte: nightlyStaleThreshold } },
+      orderBy: { startedAt: "desc" },
+      include: { season: { select: { label: true } } },
+    }),
+  ]);
 
   const staleThreshold = new Date(Date.now() - STALE_RUNNING_MINUTES * 60 * 1000);
+
+  // Checked here, not just left to whoever happens to open this page and eyeball the
+  // table below -- the whole point is catching a nightly failure (or the scheduler
+  // silently dying, per NIGHTLY_STALE_HOURS) without staff having to think to look.
+  const failedNightlyRuns = recentNightlyRuns.filter((r) => r.status === "FAILED");
+  const lastSuccessfulNightly = recentNightlyRuns.find((r) => r.status === "SUCCEEDED");
 
   return (
     <div>
@@ -50,6 +72,29 @@ export default async function JobRunsPage() {
         Recent background recompute runs (ratings, club rankings, analysis, and the nightly job), most recent
         first. This is diagnostic only — trigger a new run from Team Rankings, Club Rankings, or Analysis.
       </p>
+
+      {recentNightlyRuns.length === 0 ? (
+        <p className={errorBannerClass}>
+          <strong>No nightly recompute has run in the last {NIGHTLY_STALE_HOURS} hours.</strong> The scheduled
+          timer (instrumentation.ts / scheduleNightlyRecompute.ts) may have stopped firing — check the app
+          container&apos;s logs, or that it hasn&apos;t been redeployed/restarted in a way that dropped the timer.
+        </p>
+      ) : failedNightlyRuns.length > 0 ? (
+        <p className={errorBannerClass}>
+          <strong>Last night&apos;s automatic recompute failed</strong> for{" "}
+          {failedNightlyRuns.map((r) => r.season.label).join(", ")} — see the FAILED row{failedNightlyRuns.length > 1 ? "s" : ""}{" "}
+          below for the error.
+        </p>
+      ) : lastSuccessfulNightly ? (
+        <p className={successBannerClass}>
+          Nightly recompute is healthy — last successful run {lastSuccessfulNightly.finishedAt?.toLocaleString()}.
+        </p>
+      ) : (
+        <p className={successBannerClass}>
+          Nightly recompute started within the last {NIGHTLY_STALE_HOURS} hours and hasn&apos;t failed — still
+          running or awaiting its first result in this window.
+        </p>
+      )}
 
       {runs.length === 0 ? (
         <p className="text-sm text-slate-500">No recompute runs recorded yet.</p>
