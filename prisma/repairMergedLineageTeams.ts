@@ -12,9 +12,9 @@ import { decodeAesTeamCode, isAesTeamCodeParseError } from "../src/lib/import/ae
  * How it happened: resolve.ts matched a returning team by lineageKey (club + region +
  * team number + gender, deliberately no age) to ANY team of that program not yet
  * enrolled this season. In the first event of a new season nobody is enrolled yet, so
- * a club's same-numbered squads at every age all matched one returning team. resolve.ts
- * now requires the returning team's prior-season age to fit (one younger, or the same)
- * and lets each be claimed by only one age per batch.
+ * a club's same-numbered teams at every age all matched one returning team. resolve.ts
+ * now requires a returning team to be the same age group as last season (a club's team
+ * code is the team year to year) and lets each be claimed by only one age per batch.
  *
  * --apply deletes, for each merged team, its finishes in that season's events and its
  * TeamSeason enrollment for that season. Then, for each event listed: start a new

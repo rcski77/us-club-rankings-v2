@@ -182,11 +182,18 @@ guess.
 
 ## Team identity across seasons
 
-A team's roster ages up every year, so the same squad's AES code changes its age digit
-season to season (e.g. `g14frogs1nt` this year, `g15frogs1nt` next). `Team` is
-therefore a season-independent identity (name + club); `TeamSeason` holds what varies
-per season (age group, squad number, that season's code). `Team.lineageKey` exists to
-help the *Teams admin UI* suggest "this is probably the same program as last year" —
-it is not currently used for anything else, but the original design intended it to
-power cross-season rating carry-forward (Phase 4/5's Elo/Massey work) before the
-Team/TeamSeason split made that need for a fuzzy heuristic mostly moot.
+**A club's team code is the team, year to year** (confirmed by the user, 2026-10-28).
+"Cinci Attack 17 Red" is `b17cattk2ov` every season: the code stays with the team,
+and the *players* move up to the next age group's team. So a team does **not** age
+up. Last season's `b16cattk2ov` is still "16 Red" this season, under the same code.
+(An earlier version of this note said the opposite.)
+
+`Team` is the season-independent identity (name + club); `TeamSeason` holds the
+per-season facts (age group, squad number, that season's code). `Team.lineageKey`
+(gender + club code + region + team number, no age) is how the standings import finds
+a returning team the first time a season sees its code. resolve.ts only links a
+candidate whose prior-season age group is the **same** as the code's age, and lets
+each be claimed by one age per import. Without that check, a new season's first
+event merged a club's same-numbered teams at every age into one team (26 Nike
+FreezeFest, Cinci Attack 12-18 Red); `prisma/repairMergedLineageTeams.ts` repairs
+teams merged that way. Cross-season rating carry-forward is still not built.

@@ -32,7 +32,7 @@ type TeamRef = {
   id: string;
   lineageKey: string | null;
   // The team's age group in its most recent season BEFORE the batch's season, if any
-  // -- what a returning team's age is checked against (it should be one older now).
+  // -- a returning team must still be the same age group (see resolveRow).
   priorAgeGroup: number | null;
 };
 type ClubRef = {
@@ -459,13 +459,13 @@ function resolveRow(row: RowInput, ctx: ResolveContext) {
       // nominal age (label.ageGroup) -- those differ for a team playing up in a
       // combined/mismatched division, and it's the team's own age that identifies it.
       //
-      // A returning team must also fit by age: players age up, so last season's 16s
-      // are this season's 17s -- prefer a candidate whose most recent prior-season age
-      // is exactly one younger, then one at the same age (a squad repeating its age
-      // group). Any other prior age is a different squad of the same program, and no
-      // candidate fitting means a NEW team. Without the age check, the first event of
-      // a new season (when no one is enrolled yet) matched a club's same-numbered
-      // squads at every age onto one returning team.
+      // A returning team must be the same age group as last season: a club's team code
+      // IS the team year to year ("Cinci Attack 17 Red" is b17cattk2ov every season) --
+      // the players move up through the club's teams, the code stays with the team. So
+      // a candidate whose most recent prior-season age differs is a different team of
+      // the same program, and no candidate fitting means a NEW team. Without the age
+      // check, the first event of a new season (when no one is enrolled yet) matched a
+      // club's same-numbered teams at every age onto one returning team.
       const candidates = ctx.teamsByLineageKey.get(lineageKey) ?? [];
       const sameAgeMatch = candidates.find(
         (t) => ctx.teamSeasonByTeamId.get(t.id)?.ageGroup === decoded.ageGroup,
@@ -475,10 +475,7 @@ function resolveRow(row: RowInput, ctx: ResolveContext) {
         const claimedAge = ctx.lineageClaims.get(t.id);
         return claimedAge === undefined || claimedAge === decoded.ageGroup;
       });
-      const returningMatch =
-        returning.find((t) => t.priorAgeGroup === decoded.ageGroup - 1) ??
-        returning.find((t) => t.priorAgeGroup === decoded.ageGroup) ??
-        null;
+      const returningMatch = returning.find((t) => t.priorAgeGroup === decoded.ageGroup) ?? null;
       const byLineage = sameAgeMatch ?? returningMatch;
       if (byLineage) {
         teamMatchType = "EXISTING";
