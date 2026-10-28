@@ -266,6 +266,7 @@ export default async function EventDetailPage({
     },
   });
   if (!event) notFound();
+  const scheduleLabelByUrl = new Map(event.schedules.map((s) => [s.url, s.label]));
 
   const createDivisionWithEvent = createDivision.bind(null, eventId);
   const updateEventWithId = updateEvent.bind(null, eventId);
@@ -374,12 +375,16 @@ export default async function EventDetailPage({
 
       <section className="mb-8">
         <h2 className="mb-2 text-lg font-medium">Imports</h2>
+        {/* A batch keeps a frozen copy of its schedule's URL, not a link to the row (see
+            ImportBatch.scheduleUrl), so its label is looked up by URL -- a removed
+            schedule link just shows a dash. */}
         {event.importBatches.length > 0 && (
           <table className={`${tableClass} mb-3`}>
             <thead>
               <tr>
                 <th className={thClass}>Type</th>
                 <th className={thClass}>Status</th>
+                <th className={thClass}>Label</th>
                 <th className={thClass}>Schedule</th>
                 <th className={thClass}>Created</th>
               </tr>
@@ -393,6 +398,7 @@ export default async function EventDetailPage({
                     </Link>
                   </td>
                   <td className={tdClass}>{IMPORT_STATUS_LABELS[b.status] ?? b.status}</td>
+                  <td className={tdClass}>{(b.scheduleUrl && scheduleLabelByUrl.get(b.scheduleUrl)) || "—"}</td>
                   <td className={`${tdClass} max-w-[16rem] truncate text-xs text-slate-500`}>
                     {b.scheduleUrl ?? "—"}
                   </td>
