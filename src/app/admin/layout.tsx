@@ -1,6 +1,6 @@
 import { auth, signOut } from "@/auth";
-import Link from "next/link";
 import { redirect } from "next/navigation";
+import { AdminNav } from "./AdminNav";
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const session = await auth();
@@ -14,58 +14,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     <div className="flex min-h-screen">
       <aside className="w-56 shrink-0 border-r bg-slate-50 p-4">
         <div className="mb-6 font-semibold">US Club Rankings</div>
-        <nav className="flex flex-col gap-1 text-sm">
-          <Link href="/admin" className="rounded px-2 py-1 hover:bg-slate-200">
-            Dashboard
-          </Link>
-          <Link href="/admin/events" className="rounded px-2 py-1 hover:bg-slate-200">
-            Events
-          </Link>
-          <Link href="/admin/division-genders" className="rounded px-2 py-1 hover:bg-slate-200">
-            Division Genders
-          </Link>
-          <Link href="/admin/imports" className="rounded px-2 py-1 hover:bg-slate-200">
-            Imports
-          </Link>
-          <Link href="/admin/team-rankings" className="rounded px-2 py-1 hover:bg-slate-200">
-            Team Rankings
-          </Link>
-          <Link href="/admin/club-rankings" className="rounded px-2 py-1 hover:bg-slate-200">
-            Club Rankings
-          </Link>
-          <Link href="/admin/analysis" className="rounded px-2 py-1 hover:bg-slate-200">
-            Analysis
-          </Link>
-          <Link href="/admin/job-runs" className="rounded px-2 py-1 hover:bg-slate-200">
-            Job Runs
-          </Link>
-          <Link href="/admin/point-templates" className="rounded px-2 py-1 hover:bg-slate-200">
-            Point Templates
-          </Link>
-          <Link href="/admin/teams" className="rounded px-2 py-1 hover:bg-slate-200">
-            Teams
-          </Link>
-          <Link href="/admin/clubs" className="rounded px-2 py-1 hover:bg-slate-200">
-            Clubs
-          </Link>
-          <Link href="/admin/club-groups" className="rounded px-2 py-1 hover:bg-slate-200">
-            Club Groups
-          </Link>
-          <Link href="/admin/regions" className="rounded px-2 py-1 hover:bg-slate-200">
-            Regions
-          </Link>
-          <Link href="/admin/seasons" className="rounded px-2 py-1 hover:bg-slate-200">
-            Seasons
-          </Link>
-          <Link href="/admin/exports" className="rounded px-2 py-1 hover:bg-slate-200">
-            Exports
-          </Link>
-          {user.role === "SUPER_ADMIN" && (
-            <Link href="/admin/users" className="rounded px-2 py-1 hover:bg-slate-200">
-              Users
-            </Link>
-          )}
-        </nav>
+        <AdminNav isSuperAdmin={user.role === "SUPER_ADMIN"} />
         <div className="mt-8 border-t pt-4 text-xs text-slate-500">
           <div>{user.email}</div>
           <div className="mb-2">{user.role}</div>
