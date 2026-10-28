@@ -28,7 +28,13 @@ type DivisionRef = {
 };
 type RegionRef = { id: string; code: string };
 type TeamSeasonRef = { teamId: string; externalTeamCode: string | null; ageGroup: number };
-type TeamRef = { id: string; lineageKey: string | null };
+type TeamRef = {
+  id: string;
+  lineageKey: string | null;
+  // The team's age group in its most recent season BEFORE the batch's season, if any
+  // -- what a returning team's age is checked against (it should be one older now).
+  priorAgeGroup: number | null;
+};
 type ClubRef = {
   id: string;
   externalCode: string | null;
@@ -59,6 +65,10 @@ type ResolveContext = {
   // different age. See docs/plan.md Phase 2 postmortem on the "TAV 14 Black merged
   // into 4 unrelated teams" bug this fixes.
   teamsByLineageKey: Map<string, TeamRef[]>;
+  // Returning teams already claimed by a row earlier in this batch, and at what age --
+  // so a club's same-numbered squads at different ages can't all claim the same
+  // returning team (the "Cinci Attack 12-18 Red" merge, docs/plan.md).
+  lineageClaims: Map<string, number>;
   teamSeasonByTeamId: Map<string, TeamSeasonRef>;
   clubsByExternalCode: Map<string, ClubRef[]>;
   existingFinishByKey: Map<string, string>;
@@ -94,8 +104,9 @@ export function isRegionIssueMessage(message: string): boolean {
 export async function resolveImportBatch(batchId: string): Promise<void> {
   const batch = await prisma.importBatch.findUniqueOrThrow({
     where: { id: batchId },
-    include: { event: true, files: { include: { rows: true } } },
+    include: { event: { include: { season: true } }, files: { include: { rows: true } } },
   });
+  const batchSeason = batch.event.season;
 
   const divisions = await prisma.division.findMany({ where: { eventId: batch.eventId } });
   const regions = await prisma.region.findMany();
@@ -130,7 +141,19 @@ export async function resolveImportBatch(batchId: string): Promise<void> {
   }
 
   const teamsWithLineage = neededLineageKeys.size
-    ? await prisma.team.findMany({ where: { lineageKey: { in: [...neededLineageKeys] } } })
+    ? await prisma.team.findMany({
+        where: { lineageKey: { in: [...neededLineageKeys] } },
+        select: {
+          id: true,
+          lineageKey: true,
+          seasons: {
+            where: { season: { startDate: { lt: batchSeason.startDate } } },
+            orderBy: { season: { startDate: "desc" } },
+            take: 1,
+            select: { ageGroup: true },
+          },
+        },
+      })
     : [];
   const clubs = neededClubCodes.size
     ? await prisma.club.findMany({ where: { externalCode: { in: [...neededClubCodes] } } })
@@ -172,7 +195,7 @@ export async function resolveImportBatch(batchId: string): Promise<void> {
   for (const t of teamsWithLineage) {
     if (!t.lineageKey) continue;
     const list = teamsByLineageKey.get(t.lineageKey) ?? [];
-    list.push(t);
+    list.push({ id: t.id, lineageKey: t.lineageKey, priorAgeGroup: t.seasons[0]?.ageGroup ?? null });
     teamsByLineageKey.set(t.lineageKey, list);
   }
 
@@ -193,6 +216,7 @@ export async function resolveImportBatch(batchId: string): Promise<void> {
     regionByCode,
     teamSeasonByExternalCode,
     teamsByLineageKey,
+    lineageClaims: new Map(),
     teamSeasonByTeamId,
     clubsByExternalCode,
     existingFinishByKey,
@@ -434,15 +458,32 @@ function resolveRow(row: RowInput, ctx: ResolveContext) {
       // against this TEAM's own decoded age (decoded.ageGroup), not the division's
       // nominal age (label.ageGroup) -- those differ for a team playing up in a
       // combined/mismatched division, and it's the team's own age that identifies it.
+      //
+      // A returning team must also fit by age: players age up, so last season's 16s
+      // are this season's 17s -- prefer a candidate whose most recent prior-season age
+      // is exactly one younger, then one at the same age (a squad repeating its age
+      // group). Any other prior age is a different squad of the same program, and no
+      // candidate fitting means a NEW team. Without the age check, the first event of
+      // a new season (when no one is enrolled yet) matched a club's same-numbered
+      // squads at every age onto one returning team.
       const candidates = ctx.teamsByLineageKey.get(lineageKey) ?? [];
       const sameAgeMatch = candidates.find(
         (t) => ctx.teamSeasonByTeamId.get(t.id)?.ageGroup === decoded.ageGroup,
       );
-      const unenrolledMatch = candidates.find((t) => !ctx.teamSeasonByTeamId.has(t.id));
-      const byLineage = sameAgeMatch ?? unenrolledMatch ?? null;
+      const returning = candidates.filter((t) => {
+        if (ctx.teamSeasonByTeamId.has(t.id)) return false;
+        const claimedAge = ctx.lineageClaims.get(t.id);
+        return claimedAge === undefined || claimedAge === decoded.ageGroup;
+      });
+      const returningMatch =
+        returning.find((t) => t.priorAgeGroup === decoded.ageGroup - 1) ??
+        returning.find((t) => t.priorAgeGroup === decoded.ageGroup) ??
+        null;
+      const byLineage = sameAgeMatch ?? returningMatch;
       if (byLineage) {
         teamMatchType = "EXISTING";
         matchedTeamId = byLineage.id;
+        if (!sameAgeMatch) ctx.lineageClaims.set(byLineage.id, decoded.ageGroup);
       } else {
         teamMatchType = "NEW";
       }
