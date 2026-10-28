@@ -20,6 +20,8 @@ import {
 } from "./actions";
 import { TeamCombobox } from "./TeamCombobox";
 import { SubmitButton } from "@/components/SubmitButton";
+
+const GENDER_LABEL = { GIRLS: "Girls", BOYS: "Boys", COED: "Coed" } as const;
 import {
   inputClass,
   selectClass,
@@ -27,6 +29,7 @@ import {
   secondaryButtonClass,
   smallSecondaryButtonClass,
   errorBannerClass,
+  genderBadgeClass,
   tableClass,
   thClass,
   tdClass,
@@ -110,6 +113,7 @@ export default async function DivisionDetailPage({
       />
       <h1 className="mb-1 text-2xl font-semibold">{division.name}</h1>
       <p className="mb-6 text-sm text-slate-500">
+        <span className={genderBadgeClass(division.gender)}>{GENDER_LABEL[division.gender]}</span>{" "}
         {division.ageGroup}u · {division.tierLabel}
         {division.tierLevel ? ` ${division.tierLevel}` : ""} ·{" "}
         <span className={isConfirmed ? "font-medium text-green-700" : "font-medium text-amber-700"}>
@@ -132,7 +136,7 @@ export default async function DivisionDetailPage({
         <p className={errorBannerClass}>Only super admins can delete records.</p>
       )}
       {error === "division-invalid" && (
-        <p className={errorBannerClass}>Name, age group, and tier are required.</p>
+        <p className={errorBannerClass}>Name, age group, gender, and tier are required.</p>
       )}
 
       <section className="mb-8">
@@ -152,6 +156,16 @@ export default async function DivisionDetailPage({
               required
               className={`${inputClass} w-20`}
             />
+          </label>
+          <label className="flex flex-col gap-1 text-sm">
+            Gender
+            <select name="gender" className={selectClass} defaultValue={division.gender}>
+              {(["GIRLS", "BOYS", "COED"] as const).map((g) => (
+                <option key={g} value={g}>
+                  {GENDER_LABEL[g]}
+                </option>
+              ))}
+            </select>
           </label>
           <label className="flex flex-col gap-1 text-sm">
             Tier
@@ -179,7 +193,9 @@ export default async function DivisionDetailPage({
         <p className="mt-1 text-xs text-slate-500">
           Correcting the age group here does not retroactively update the &quot;ignore
           age&quot; flag on finishes already entered — re-check those below if they
-          were affected.
+          were affected. Changing gender re-runs the scoring suggestion against that
+          gender&apos;s teams; team rankings follow each team&apos;s own gender, not the
+          division&apos;s.
         </p>
       </section>
 
