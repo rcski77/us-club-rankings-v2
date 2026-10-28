@@ -7,6 +7,7 @@ import { computeDivisionScoringSuggestion } from "@/lib/rating/computeDivisionSc
 import { requireSuperAdmin } from "@/lib/authz";
 import { redirect } from "next/navigation";
 import type { DivisionGender } from "@/generated/prisma/client";
+import { applyDivisionGender } from "@/lib/divisionGenderAudit";
 
 function divisionPath(eventId: string, divisionId: string) {
   return `/admin/events/${eventId}/divisions/${divisionId}`;
@@ -42,27 +43,13 @@ export async function updateDivisionDetails(eventId: string, divisionId: string,
     redirect(`${divisionPath(eventId, divisionId)}?error=division-invalid`);
   }
 
-  const before = await prisma.division.findUniqueOrThrow({
+  await prisma.division.update({
     where: { id: divisionId },
-    select: { gender: true, _count: { select: { scoringSnapshots: true } } },
+    data: { name, ageGroup, tierLabel: tierLabel as (typeof TIER_LABELS)[number], tierLevel },
   });
-
-  const division = await prisma.division.update({
-    where: { id: divisionId },
-    data: { name, ageGroup, tierLabel: tierLabel as (typeof TIER_LABELS)[number], tierLevel, gender },
-  });
-
   // Division.gender picks which girls/boys population the division's field strength
-  // and scoring suggestion are measured against (see teamGender.ts's
-  // partitionGenderForDivision), so a corrected label makes any existing suggestion
-  // stale -- refresh it against the right population. preserveStatus: this only
-  // refreshes the stats, it never reopens a CONFIRMED division or turns a DRAFT one
-  // into SUGGESTED. Team rankings themselves bucket by Team.gender, not this field,
-  // so they don't need recomputing here; Elo/Massey's division weights pick the
-  // change up on the next ratings recompute.
-  if (division.gender !== before.gender && before._count.scoringSnapshots > 0) {
-    await computeDivisionScoringSuggestion(divisionId, { preserveStatus: true });
-  }
+  // and scoring suggestion are measured against -- see applyDivisionGender.
+  await applyDivisionGender(divisionId, gender);
 
   redirect(divisionPath(eventId, divisionId));
 }

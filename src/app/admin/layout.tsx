@@ -21,6 +21,9 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           <Link href="/admin/events" className="rounded px-2 py-1 hover:bg-slate-200">
             Events
           </Link>
+          <Link href="/admin/division-genders" className="rounded px-2 py-1 hover:bg-slate-200">
+            Division Genders
+          </Link>
           <Link href="/admin/imports" className="rounded px-2 py-1 hover:bg-slate-200">
             Imports
           </Link>

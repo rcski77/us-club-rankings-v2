@@ -1,6 +1,7 @@
 import "dotenv/config";
 import { prisma } from "../src/lib/prisma";
 import type { DivisionGender } from "../src/generated/prisma/client";
+import { applyDivisionGender, findMislabeledDivisions } from "../src/lib/divisionGenderAudit";
 
 /**
  * Audit (read-only by default): finds every Team whose Team.gender column disagrees
@@ -13,6 +14,10 @@ import type { DivisionGender } from "../src/generated/prisma/client";
  * --apply: sets Team.gender from the codes when every coded season agrees. Teams
  * whose own codes disagree across seasons are reported only -- those are real
  * cross-gender merges for splitMixedGenderTeams.ts / manual handling.
+ *
+ * Then checks divisions: any whose Girls/Boys label disagrees with the majority of its
+ * teams (see divisionGenderAudit.ts -- also browsable at /admin/division-genders).
+ * Runs after the team pass since it reads Team.gender; --apply relabels those too.
  */
 function genderFromCode(code: string | null): DivisionGender | null {
   const c = (code ?? "").trim().toLowerCase();
@@ -58,6 +63,16 @@ async function main() {
   console.log(
     `\n${fixable} fixable mismatch(es)${apply ? " (applied)" : ""}, ${mixed} mixed-code team(s), out of ${teams.length} teams.`,
   );
+
+  const divisions = await findMislabeledDivisions();
+  console.log("");
+  for (const d of divisions) {
+    console.log(
+      `DIVISION  ${d.eventName} / ${d.divisionName} (id ${d.divisionId}) ${d.currentGender} -> ${d.suggestedGender} (${d.girlsTeams} girls / ${d.boysTeams} boys teams)`,
+    );
+    if (apply) await applyDivisionGender(d.divisionId, d.suggestedGender);
+  }
+  console.log(`${divisions.length} mislabeled division(s)${apply ? " (applied)" : ""}.`);
 }
 
 main().finally(() => prisma.$disconnect());

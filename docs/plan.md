@@ -1687,6 +1687,19 @@ pre-change baseline exactly (3,607 NPS rows; 23,325 latest Colley/Elo/Massey row
 Boys got Colley/Elo/Massey ratings for 250 teams. Boys NPS stays empty until the boys
 divisions' scoring is confirmed; all 15 were SUGGESTED, with suggestions generated
 against the girls population, so re-run analysis on them before confirming.
+Follow-ups the same day:
+- **Division gender can be corrected in the UI**, on the division edit form.
+- **Imports** set a division's gender by majority of its team codes, so a mixed
+  division stays one division (`src/lib/import/divisionGender.ts`).
+- **New `/admin/division-genders` report** ("Division Genders" in the sidebar), backed
+  by `src/lib/divisionGenderAudit.ts`. It lists divisions whose label disagrees with
+  the majority of their teams and has per-row and "Fix all" buttons.
+  `db:audit-team-gender` prints the same list (`--apply` fixes them).
+- **Priority is boys Power rankings, not NPS.** Power doesn't need boys point curves
+  confirmed: Elo/Massey use match results only, and Colley uses match results wherever
+  a division has them. Confirmed scoring only matters for Colley's standings fallback,
+  in divisions with no imported matches. All 15 dev-DB boys divisions have match
+  results.
 
 **`TeamRatingHistory` weekEndingDate dedup fix (2026-07-29).** Found while verifying
 the gender filter above: `computeColleyRatings`/`computeEloRatingsForPartition`/
