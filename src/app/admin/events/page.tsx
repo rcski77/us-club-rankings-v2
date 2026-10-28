@@ -1,30 +1,39 @@
 import type { Metadata } from "next";
 import { prisma } from "@/lib/prisma";
 import Link from "next/link";
-import { inputClass, tableClass, thClass, tdClass, primaryButtonClass, successBannerClass } from "@/lib/ui";
+import { inputClass, selectClass, tableClass, thClass, tdClass, primaryButtonClass, successBannerClass } from "@/lib/ui";
 
 export const metadata: Metadata = { title: "Events" };
 
 export default async function EventsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ success?: string; q?: string; sort?: string }>;
+  searchParams: Promise<{ success?: string; q?: string; sort?: string; season?: string }>;
 }) {
-  const { success, q, sort } = await searchParams;
+  const { success, q, sort, season } = await searchParams;
   const dateDir = sort === "date_asc" ? "asc" : "desc";
 
-  const events = await prisma.event.findMany({
-    where: q
-      ? { name: { contains: q, mode: "insensitive" } }
-      : undefined,
-    include: { season: true, divisions: { select: { scoringStatus: true } } },
-    orderBy: { startDate: dateDir },
-  });
+  // Independent queries -- see the Promise.all convention. No season selected = all
+  // seasons, so an event created for next season before it's made active still shows.
+  const [events, seasons] = await Promise.all([
+    prisma.event.findMany({
+      where: {
+        ...(q ? { name: { contains: q, mode: "insensitive" as const } } : {}),
+        ...(season ? { seasonId: season } : {}),
+      },
+      include: { season: true, divisions: { select: { scoringStatus: true } } },
+      orderBy: { startDate: dateDir },
+    }),
+    prisma.season.findMany({ orderBy: { startDate: "desc" }, select: { id: true, label: true } }),
+  ]);
 
   const nextDateSort = dateDir === "asc" ? "date_desc" : "date_asc";
   const sortLinkParams = new URLSearchParams();
   if (q) sortLinkParams.set("q", q);
+  if (season) sortLinkParams.set("season", season);
   sortLinkParams.set("sort", nextDateSort);
+  const clearParams = new URLSearchParams();
+  if (sort) clearParams.set("sort", sort);
 
   return (
     <div>
@@ -47,13 +56,21 @@ export default async function EventsPage({
           placeholder="Search by name…"
           className={`${inputClass} max-w-sm`}
         />
+        <select name="season" defaultValue={season ?? ""} className={selectClass} aria-label="Season">
+          <option value="">All seasons</option>
+          {seasons.map((s) => (
+            <option key={s.id} value={s.id}>
+              {s.label}
+            </option>
+          ))}
+        </select>
         {sort && <input type="hidden" name="sort" value={sort} />}
         <button type="submit" className={primaryButtonClass}>
           Search
         </button>
-        {q && (
+        {(q || season) && (
           <Link
-            href={sort ? `/admin/events?sort=${sort}` : "/admin/events"}
+            href={clearParams.size ? `/admin/events?${clearParams}` : "/admin/events"}
             className="self-center text-sm text-slate-500 underline"
           >
             Clear
@@ -101,7 +118,7 @@ export default async function EventsPage({
           {events.length === 0 && (
             <tr>
               <td className={tdClass} colSpan={6}>
-                {q ? "No events match your search." : "No events yet."}
+                {q || season ? "No events match your filters." : "No events yet."}
               </td>
             </tr>
           )}
