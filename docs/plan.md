@@ -1733,6 +1733,32 @@ min, ~43 of it the per-division scoring loop.
   moved. Locally a full nightly now takes ~30 s.
 - **Recompute script logging:** `db:recompute-team-rankings` now logs a Job Run.
 
+**In-progress events / provisional finishes (2026-10-28).** Power leagues (e.g. THE
+Chicago Point Series) have no finish ranks until the end of the season. The standings
+import skipped every unranked team, and match import resolves teams and divisions only
+from an event's finishes, so every match was skipped too.
+
+How it works now:
+- **Checkbox:** each platform's "Fetch standings" form has an "Event still in progress"
+  checkbox (`ImportBatch.inProgress`). When ticked, teams with no rank are kept as
+  **provisional finishes**. `TeamFinish.rank` is now nullable.
+- **Resolve and commit** accept blank ranks only for in-progress batches. A provisional
+  re-import never clears an existing rank or its points.
+- **Matches** then resolve normally and feed Power rankings, since Elo/Massey and
+  Colley's match path don't need ranks.
+- **Points:** confirming a division (from the division page or by accepting a
+  suggestion) is blocked with `error=unranked` while any finish is unranked. NPS
+  ignores provisional finishes, which have no points.
+
+Verified on dev against AES `PTAwMDAwNDYwNDU90` ("THE Chicago Point Series 18/17's #1"):
+- Standings: 52 → 125 teams imported (73 provisional).
+- Matches: 382 imported, 0 skipped (previously 229 skipped).
+- All 73 provisional teams got Elo/Colley/Massey ratings.
+- A weekly re-import left every finish unchanged.
+
+Known gap: TM2's league-standings fallback only lists teams that already have a
+standings row.
+
 **`TeamRatingHistory` weekEndingDate dedup fix (2026-07-29).** Found while verifying
 the gender filter above: `computeColleyRatings`/`computeEloRatingsForPartition`/
 `computeMasseyRatingsForPartition`'s delete-and-replace snapshot pattern
