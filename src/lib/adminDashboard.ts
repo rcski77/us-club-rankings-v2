@@ -211,3 +211,68 @@ export async function getFreshness(activeSeasonId: string | undefined): Promise<
     lastNightly,
   };
 }
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+const UPCOMING_DAYS = 21;
+const IMPORT_REMINDER_DAYS = 30;
+
+/** Today's calendar date in Eastern time as a UTC-midnight Date -- Event start/end
+ * dates are date-only values stored at UTC midnight, so this compares like with like. */
+function todayEastern(): Date {
+  const ymd = new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+  return new Date(`${ymd}T00:00:00.000Z`);
+}
+
+export type DashboardEvent = {
+  id: string;
+  name: string;
+  startDate: Date;
+  endDate: Date;
+  location: string | null;
+  scheduleCount: number;
+};
+
+/**
+ * Events that haven't finished yet (next few weeks), plus finished events whose
+ * results haven't been imported -- no COMMITTED team-finishes batch -- so staff get
+ * reminded once the weekend is over. Events with a committed batch drop off the
+ * reminder list on their own.
+ */
+export async function getEventSchedule() {
+  const today = todayEastern();
+  const select = {
+    id: true,
+    name: true,
+    startDate: true,
+    endDate: true,
+    city: true,
+    state: true,
+    _count: { select: { schedules: true } },
+  } as const;
+
+  const [upcoming, needsImport] = await Promise.all([
+    prisma.event.findMany({
+      where: { endDate: { gte: today }, startDate: { lte: new Date(today.getTime() + UPCOMING_DAYS * DAY_MS) } },
+      orderBy: { startDate: "asc" },
+      select,
+    }),
+    prisma.event.findMany({
+      where: {
+        endDate: { lt: today, gte: new Date(today.getTime() - IMPORT_REMINDER_DAYS * DAY_MS) },
+        importBatches: { none: { importType: "TEAM_FINISHES", status: "COMMITTED" } },
+      },
+      orderBy: { endDate: "desc" },
+      select,
+    }),
+  ]);
+
+  const shape = (e: (typeof upcoming)[number]): DashboardEvent => ({
+    id: e.id,
+    name: e.name,
+    startDate: e.startDate,
+    endDate: e.endDate,
+    location: [e.city, e.state].filter(Boolean).join(", ") || null,
+    scheduleCount: e._count.schedules,
+  });
+  return { upcoming: upcoming.map(shape), needsImport: needsImport.map(shape) };
+}
