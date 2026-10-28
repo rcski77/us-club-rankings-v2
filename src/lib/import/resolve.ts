@@ -4,6 +4,7 @@ import { decodeAesTeamCode, isAesTeamCodeParseError, divisionGenderFromTeamCodeG
 import { isDivisionLabelParseError, parseAgeGroupLabel } from "./divisionLabel";
 import { parseAesTeamNameField } from "./teamNameField";
 import { computeLineageKey } from "./lineageKey";
+import { divisionGenderCounts, divisionLabelKey, majorityDivisionGender } from "./divisionGender";
 
 type RowInput = {
   id: string;
@@ -62,6 +63,10 @@ type ResolveContext = {
   clubsByExternalCode: Map<string, ClubRef[]>;
   existingFinishByKey: Map<string, string>;
   claimedKeys: Set<string>;
+  // Every row's team-code gender, grouped by division label (see divisionGender.ts) --
+  // a division's gender is the majority across all of its rows in the batch, so a
+  // mixed division matches/creates one division instead of splitting by row.
+  rowGendersByLabel: Map<string, (DivisionGender | null)[]>;
 };
 
 function divisionKeyOf(ageGroup: number, gender: string, tierLabel: string, tierLevel: string | null): string {
@@ -128,6 +133,16 @@ export async function resolveImportBatch(batchId: string): Promise<void> {
     ? await prisma.club.findMany({ where: { externalCode: { in: [...neededClubCodes] } } })
     : [];
 
+  const rowGendersByLabel = new Map<string, (DivisionGender | null)[]>();
+  for (const row of allRows) {
+    const decoded = decodeAesTeamCode(row.teamCodeRaw);
+    const gender = isAesTeamCodeParseError(decoded) ? null : divisionGenderFromTeamCodeGender(decoded.gender);
+    const key = divisionLabelKey(row.ageGroupLabelRaw);
+    const list = rowGendersByLabel.get(key) ?? [];
+    list.push(gender);
+    rowGendersByLabel.set(key, list);
+  }
+
   const divisionByKey = new Map<string, DivisionRef[]>();
   for (const d of divisions) {
     const key = divisionKeyOf(d.ageGroup, d.gender, d.tierLabel, d.tierLevel);
@@ -179,6 +194,7 @@ export async function resolveImportBatch(batchId: string): Promise<void> {
     clubsByExternalCode,
     existingFinishByKey,
     claimedKeys: new Set(),
+    rowGendersByLabel,
   };
 
   const results = allRows.map((row) => ({ id: row.id, data: resolveRow(row, ctx) }));
@@ -244,6 +260,18 @@ function resolveRow(row: RowInput, ctx: ResolveContext) {
   }
   const effectiveGender: DivisionGender = rowGender ?? "GIRLS";
 
+  // The division's own gender: majority across every row sharing this label, so a
+  // mixed division stays together (the team itself keeps effectiveGender above).
+  const labelGenders = ctx.rowGendersByLabel.get(divisionLabelKey(row.ageGroupLabelRaw)) ?? [rowGender];
+  const divisionGender = majorityDivisionGender(labelGenders);
+  const genderCounts = divisionGenderCounts(labelGenders);
+  if (genderCounts.girls > 0 && genderCounts.boys > 0) {
+    escalate(
+      "WARNING",
+      `Mixed division: ${genderCounts.girls} girls and ${genderCounts.boys} boys team codes under "${row.ageGroupLabelRaw}" — kept as one ${divisionGender === "BOYS" ? "Boys" : "Girls"} division (majority).`,
+    );
+  }
+
   const nameField = parseAesTeamNameField(row.teamNameRaw);
 
   const rank = Number(row.rankRaw);
@@ -276,7 +304,7 @@ function resolveRow(row: RowInput, ctx: ResolveContext) {
     matchedDivisionId = row.overrideDivisionId;
     effectiveDivisionKey = `id:${row.overrideDivisionId}`;
   } else {
-    const key = divisionKeyOf(label.ageGroup, effectiveGender, label.tierLabel, label.tierLevel);
+    const key = divisionKeyOf(label.ageGroup, divisionGender, label.tierLabel, label.tierLevel);
     const candidates = ctx.divisionByKey.get(key) ?? [];
     const rawLabel = row.ageGroupLabelRaw.trim().toLowerCase();
     const existing =
