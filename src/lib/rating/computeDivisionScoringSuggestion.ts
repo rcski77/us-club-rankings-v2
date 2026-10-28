@@ -30,6 +30,11 @@ import {
  * runAnalysisForAll). Does not touch DivisionPointBand or TeamFinish.points -- that
  * only happens on accept (see actions.ts).
  *
+ * `skipIfUnchanged` (bulk refreshes -- the nightly job and "Run analysis"): when every
+ * computed number matches the division's latest snapshot, no new snapshot is written,
+ * so a division's history only gains an entry when something actually moved. Status is
+ * still applied either way, same as before.
+ *
  * Per division, prefers the Elo-based DCI blend (see dci.ts) over the original
  * Colley-based FSS/elitePresence blend once at least ELO_COVERAGE_THRESHOLD of the
  * division's teams have Elo ratings (i.e. imported Match data) -- mirrors
@@ -43,7 +48,7 @@ import {
  */
 export async function computeDivisionScoringSuggestion(
   divisionId: string,
-  options: { preserveStatus?: boolean } = {},
+  options: { preserveStatus?: boolean; skipIfUnchanged?: boolean } = {},
 ) {
   const division = await prisma.division.findUniqueOrThrow({
     where: { id: divisionId },
@@ -108,24 +113,37 @@ export async function computeDivisionScoringSuggestion(
   });
   const suggestedTemplateId = percentile === null ? null : suggestTemplate(percentile, templates);
 
-  const snapshot = await prisma.$transaction(async (tx) => {
-    const created = await tx.divisionScoringSnapshot.create({
-      data: {
-        divisionId,
-        ratingEngineUsed,
-        teamCount: fieldStrength.teamCount,
-        ratedTeamCount: fieldStrength.ratedTeamCount,
-        percentTeamsRated: fieldStrength.percentTeamsRated,
-        fss,
-        elitePresence,
-        percentile,
-        scoreBand,
-        matchVolume: fieldStrength.matchVolume,
-        bucketCounts: fieldStrength.bucketCounts,
-        warnings: fieldStrength.warnings,
-        suggestedTemplateId,
-      },
+  const data = {
+    divisionId,
+    ratingEngineUsed,
+    teamCount: fieldStrength.teamCount,
+    ratedTeamCount: fieldStrength.ratedTeamCount,
+    percentTeamsRated: fieldStrength.percentTeamsRated,
+    fss,
+    elitePresence,
+    percentile,
+    scoreBand,
+    matchVolume: fieldStrength.matchVolume,
+    bucketCounts: fieldStrength.bucketCounts,
+    warnings: fieldStrength.warnings,
+    suggestedTemplateId,
+  };
+
+  if (options.skipIfUnchanged) {
+    const latest = await prisma.divisionScoringSnapshot.findFirst({
+      where: { divisionId },
+      orderBy: { createdAt: "desc" },
     });
+    if (latest && snapshotFieldsKey(latest) === snapshotFieldsKey(data)) {
+      if (!options.preserveStatus && division.scoringStatus !== "SUGGESTED") {
+        await prisma.division.update({ where: { id: divisionId }, data: { scoringStatus: "SUGGESTED" } });
+      }
+      return latest;
+    }
+  }
+
+  const snapshot = await prisma.$transaction(async (tx) => {
+    const created = await tx.divisionScoringSnapshot.create({ data });
     if (!options.preserveStatus) {
       await tx.division.update({ where: { id: divisionId }, data: { scoringStatus: "SUGGESTED" } });
     }
@@ -133,4 +151,47 @@ export async function computeDivisionScoringSuggestion(
   });
 
   return snapshot;
+}
+
+/** The computed fields of a scoring snapshot as a comparable string -- used to tell
+ * whether a refresh produced anything new (see skipIfUnchanged). Ignores id, status
+ * and timestamps. Key order is normalized, since Postgres jsonb (bucketCounts) doesn't
+ * keep the order an object was written in. */
+function snapshotFieldsKey(s: {
+  ratingEngineUsed: string | null;
+  teamCount: number;
+  ratedTeamCount: number;
+  percentTeamsRated: number;
+  fss: number | null;
+  elitePresence: number | null;
+  percentile: number | null;
+  scoreBand: string | null;
+  matchVolume: number | null;
+  bucketCounts: unknown;
+  warnings: unknown;
+  suggestedTemplateId: string | null;
+}): string {
+  return stableStringify([
+    s.ratingEngineUsed,
+    s.teamCount,
+    s.ratedTeamCount,
+    s.percentTeamsRated,
+    s.fss,
+    s.elitePresence,
+    s.percentile,
+    s.scoreBand,
+    s.matchVolume,
+    s.bucketCounts,
+    s.warnings,
+    s.suggestedTemplateId,
+  ]);
+}
+
+function stableStringify(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(stableStringify).join(",")}]`;
+  if (value && typeof value === "object") {
+    const entries = Object.entries(value as Record<string, unknown>).sort(([a], [b]) => a.localeCompare(b));
+    return `{${entries.map(([k, v]) => `${JSON.stringify(k)}:${stableStringify(v)}`).join(",")}}`;
+  }
+  return JSON.stringify(value ?? null);
 }

@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { computeDivisionScoringSuggestion } from "@/lib/rating/computeDivisionScoringSuggestion";
 import { computeClubRankingForSeason } from "@/lib/ranking/computeClubRanking";
+import { WEEKLY_SNAPSHOT_DOW } from "@/lib/rating/pruneRatingHistory";
 
 // Generous over the ~21-31 min durations observed so far, so a slow-but-healthy run
 // isn't mistaken for a stuck one -- but still bounded, so a ranking-compute crash that
@@ -80,8 +81,15 @@ export async function runNightlyRecompute(): Promise<void> {
     try {
       await triggerAndAwaitRatingsRecompute(season.id);
 
+      // Unconfirmed divisions are re-scored every night (their suggestion is what staff
+      // pick a point curve from). CONFIRMED divisions' points are already fixed -- their
+      // refresh only updates the Analysis page's stats -- so they're re-scored once a
+      // week, on the same Tuesday run that keeps the weekly rating snapshot (see
+      // pruneRatingHistory.ts). Either way a snapshot is only saved when something
+      // actually changed (skipIfUnchanged).
+      const isWeeklyRun = new Date().getUTCDay() === WEEKLY_SNAPSHOT_DOW;
       const divisions = await prisma.division.findMany({
-        where: { event: { seasonId: season.id } },
+        where: { event: { seasonId: season.id }, ...(isWeeklyRun ? {} : { scoringStatus: { not: "CONFIRMED" } }) },
         select: { id: true, scoringStatus: true },
       });
       for (const division of divisions) {
@@ -89,6 +97,7 @@ export async function runNightlyRecompute(): Promise<void> {
         // editing -- see computeDivisionScoringSuggestion's preserveStatus doc comment.
         await computeDivisionScoringSuggestion(division.id, {
           preserveStatus: division.scoringStatus === "CONFIRMED",
+          skipIfUnchanged: true,
         });
       }
 
