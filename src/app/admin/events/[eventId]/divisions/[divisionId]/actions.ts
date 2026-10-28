@@ -148,6 +148,10 @@ export async function confirmDivisionScoring(eventId: string, divisionId: string
   if (division.pointBands.length === 0) {
     redirect(`${divisionPath(eventId, divisionId)}?error=nobands`);
   }
+  // Provisional finishes (an event still in progress) have no rank to award points by.
+  if (division.finishes.some((f) => f.rank === null)) {
+    redirect(`${divisionPath(eventId, divisionId)}?error=unranked`);
+  }
 
   // Confirming here bypasses the suggestion-review screen (manual apply-template
   // flow), which is the only other place a DivisionScoringSnapshot gets created.
@@ -159,7 +163,7 @@ export async function confirmDivisionScoring(eventId: string, divisionId: string
     ...division.finishes.map((f) =>
       prisma.teamFinish.update({
         where: { id: f.id },
-        data: { points: resolvePoints(f.rank, division.pointBands) },
+        data: { points: resolvePoints(f.rank!, division.pointBands) },
       }),
     ),
     prisma.division.update({ where: { id: divisionId }, data: { scoringStatus: "CONFIRMED" } }),

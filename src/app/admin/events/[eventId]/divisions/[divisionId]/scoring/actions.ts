@@ -32,6 +32,10 @@ export async function acceptSuggestion(eventId: string, divisionId: string, snap
   if (finishes.length === 0) {
     redirect(`${scoringPath(eventId, divisionId)}?error=nofinishes`);
   }
+  // Provisional finishes (an event still in progress) have no rank to award points by.
+  if (finishes.some((f) => f.rank === null)) {
+    redirect(`${scoringPath(eventId, divisionId)}?error=unranked`);
+  }
 
   const bands = snapshot.suggestedTemplate.bands;
 
@@ -43,7 +47,7 @@ export async function acceptSuggestion(eventId: string, divisionId: string, snap
     ...finishes.map((f) =>
       prisma.teamFinish.update({
         where: { id: f.id },
-        data: { points: resolvePoints(f.rank, bands) },
+        data: { points: resolvePoints(f.rank!, bands) },
       }),
     ),
     prisma.division.update({ where: { id: divisionId }, data: { scoringStatus: "CONFIRMED" } }),

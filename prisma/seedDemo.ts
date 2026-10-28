@@ -149,7 +149,7 @@ async function main() {
   for (const f of finalDivision.finishes) {
     await prisma.teamFinish.update({
       where: { id: f.id },
-      data: { points: resolvePoints(f.rank, finalDivision.pointBands) },
+      data: { points: resolvePoints(f.rank!, finalDivision.pointBands) },
     });
   }
   await prisma.division.update({ where: { id: divisionId }, data: { scoringStatus: "CONFIRMED" } });

@@ -62,7 +62,9 @@ export async function commitImportBatch(batchId: string): Promise<CommitResult> 
 
   const unresolvedRows = rows.filter(
     (r) =>
-      r.parsedRank == null ||
+      // A null rank is fine in an "event still in progress" batch -- that's a
+      // provisional finish (see resolve.ts), not missing data.
+      (r.parsedRank == null && !batch.inProgress) ||
       r.parsedAgeGroup == null ||
       r.parsedTeamAgeGroup == null ||
       r.parsedTierLabel == null ||
@@ -320,14 +322,14 @@ export async function commitImportBatch(batchId: string): Promise<CommitResult> 
       const finishesToCreate: {
         divisionId: string;
         teamId: string;
-        rank: number;
+        rank: number | null;
         tiebreakOrder: number | null;
         points: number | null;
         ignoreAge: boolean;
       }[] = [];
       const finishesToUpdate: {
         id: string;
-        rank: number;
+        rank: number | null;
         tiebreakOrder: number | null;
         points: number | null;
         ignoreAge: boolean;
@@ -347,12 +349,14 @@ export async function commitImportBatch(batchId: string): Promise<CommitResult> 
           divisionCache.set(divisionId, division);
         }
 
-        const rank = row.parsedRank!;
+        // Null = provisional: an "event still in progress" batch with no final rank yet.
+        const rank = row.parsedRank;
         // Points stay null until the division is separately confirmed -- matches
         // manual-entry behavior. Exception: a correction re-import into a division
         // that's already CONFIRMED resolves points immediately so the finish doesn't
         // silently fall out of an already-locked-in ranking.
-        const points = division.scoringStatus === "CONFIRMED" ? resolvePoints(rank, division.pointBands) : null;
+        const points =
+          rank !== null && division.scoringStatus === "CONFIRMED" ? resolvePoints(rank, division.pointBands) : null;
         // A team playing up (or down) from the division's nominal age still earns
         // these points, but its rating comparisons should route to its own natural
         // age group, not the division's -- see docs/plan.md's combined-division notes.
@@ -366,12 +370,14 @@ export async function commitImportBatch(batchId: string): Promise<CommitResult> 
             points,
             ignoreAge,
           });
-          pendingAuditFlags.push({
-            type: "REIMPORT_UPDATE",
-            teamId,
-            divisionId,
-            message: `Updated existing finish to rank ${rank} from re-import.`,
-          });
+          if (rank !== null) {
+            pendingAuditFlags.push({
+              type: "REIMPORT_UPDATE",
+              teamId,
+              divisionId,
+              message: `Updated existing finish to rank ${rank} from re-import.`,
+            });
+          }
         } else {
           finishesToCreate.push({
             divisionId,
@@ -406,7 +412,14 @@ export async function commitImportBatch(batchId: string): Promise<CommitResult> 
       for (const f of finishesToUpdate) {
         await tx.teamFinish.update({
           where: { id: f.id },
-          data: { rank: f.rank, tiebreakOrder: f.tiebreakOrder, points: f.points, ignoreAge: f.ignoreAge },
+          // A provisional row (no rank yet) never clears a rank -- or the points that
+          // came with it -- that the finish already has; undefined leaves them as is.
+          data: {
+            rank: f.rank ?? undefined,
+            points: f.rank === null ? undefined : f.points,
+            tiebreakOrder: f.tiebreakOrder,
+            ignoreAge: f.ignoreAge,
+          },
         });
       }
 
@@ -461,9 +474,10 @@ export async function commitImportBatch(batchId: string): Promise<CommitResult> 
   for (const row of rows) {
     const divisionId = effectiveDivisionId(row);
     const teamId = effectiveTeamId(row);
-    const rank = row.parsedRank!;
+    const rank = row.parsedRank;
 
     const finalMessages: string[] = [];
+    if (rank === null) finalMessages.push("Provisional finish — no final rank yet (event still in progress).");
     if (divisionIdByRowId.has(row.id)) finalMessages.push("New division created from this import.");
     if (clubIdByRowId.has(row.id)) finalMessages.push("New club created from this import.");
     if (teamIdByRowId.has(row.id)) finalMessages.push("New team created from this import.");
@@ -472,7 +486,7 @@ export async function commitImportBatch(batchId: string): Promise<CommitResult> 
     }
     const regionIssue = row.messages.find(isRegionIssueMessage);
     if (regionIssue) finalMessages.push(regionIssue);
-    if (row.existingTeamFinishId) {
+    if (row.existingTeamFinishId && rank !== null) {
       finalMessages.push(`Updated existing finish to rank ${rank} from re-import.`);
     }
 

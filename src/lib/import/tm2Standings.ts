@@ -98,7 +98,13 @@ export type FetchTm2StandingsResult = {
  * (resolve.ts, commit.ts, the review UI) can consume them unchanged -- mirrors
  * aesStandings.ts/vbscheduleStandings.ts.
  */
-export async function fetchTm2StandingsRows(eventId: string): Promise<FetchTm2StandingsResult> {
+// `includeUnranked`: the "event still in progress" import (e.g. a power league with no
+// standings until the end) -- a team with a code but no finish rank yet is kept, with a
+// blank rank, instead of skipped, so it becomes a provisional finish (see resolve.ts).
+export async function fetchTm2StandingsRows(
+  eventId: string,
+  options: { includeUnranked?: boolean } = {},
+): Promise<FetchTm2StandingsResult> {
   const eventInfo = await fetchTm2EventInfo(eventId);
 
   const rawByDivision: Record<number, ApiSchedulerTeam[] | { league: ApiLeagueStandingRow[]; teams: ApiSchedulerTeam[] }> = {};
@@ -112,7 +118,7 @@ export async function fetchTm2StandingsRows(eventId: string): Promise<FetchTm2St
     if (teams.length > 0) {
       rawByDivision[division.divisionId] = teams;
       for (const team of teams) {
-        if (!team.alternate_identifier || team.final_finish_position_number == null) {
+        if (!team.alternate_identifier || (team.final_finish_position_number == null && !options.includeUnranked)) {
           skippedCount += 1;
           continue;
         }
@@ -120,7 +126,7 @@ export async function fetchTm2StandingsRows(eventId: string): Promise<FetchTm2St
         rows.push({
           rowNumber,
           ageGroupLabel: division.name,
-          rank: String(team.final_finish_position_number),
+          rank: team.final_finish_position_number == null ? "" : String(team.final_finish_position_number),
           teamNameField: team.name ?? "",
           teamCode: team.alternate_identifier,
           clubName: team.club_name?.trim() || null,
@@ -139,7 +145,7 @@ export async function fetchTm2StandingsRows(eventId: string): Promise<FetchTm2St
     const teamsById = new Map(allTeams.map((t) => [t.id, t]));
     for (const standing of leagueStandings) {
       const team = teamsById.get(standing.team_id);
-      if (!team?.alternate_identifier || standing.place == null) {
+      if (!team?.alternate_identifier || (standing.place == null && !options.includeUnranked)) {
         skippedCount += 1;
         continue;
       }
@@ -147,7 +153,7 @@ export async function fetchTm2StandingsRows(eventId: string): Promise<FetchTm2St
       rows.push({
         rowNumber,
         ageGroupLabel: division.name,
-        rank: String(standing.place),
+        rank: standing.place == null ? "" : String(standing.place),
         teamNameField: team.name ?? "",
         teamCode: team.alternate_identifier,
         clubName: team.club_name?.trim() || null,

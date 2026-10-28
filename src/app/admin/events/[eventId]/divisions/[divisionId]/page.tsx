@@ -127,6 +127,12 @@ export default async function DivisionDetailPage({
 
       {error === "invalid" && <p className={errorBannerClass}>Invalid band values.</p>}
       {error === "duplicate" && <p className={errorBannerClass}>A band already starts at that rank.</p>}
+      {error === "unranked" && (
+        <p className={errorBannerClass}>
+          Some teams don&apos;t have a final rank yet (the event is still in progress). Re-import the
+          final standings before confirming.
+        </p>
+      )}
       {error === "nobands" && (
         <p className={errorBannerClass}>
           Apply a point template or add at least one band before confirming.
@@ -391,7 +397,8 @@ export default async function DivisionDetailPage({
                         name="rank"
                         type="number"
                         min={1}
-                        defaultValue={f.rank}
+                        defaultValue={f.rank ?? ""}
+                        placeholder="—"
                         className={`${inputClass} w-16`}
                       />
                       <button type="submit" className={smallSecondaryButtonClass}>

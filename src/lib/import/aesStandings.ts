@@ -70,7 +70,13 @@ export type FetchAesStandingsResult = {
  * API gives us, which the CSV path doesn't have), so the rest of the import pipeline
  * (resolve.ts, commit.ts, the review UI) can consume them unchanged.
  */
-export async function fetchAesStandingsRows(aesEventId: string): Promise<FetchAesStandingsResult> {
+// `includeUnranked`: the "event still in progress" import (e.g. a power league with no
+// standings until the end) -- a team with a code but no finish rank yet is kept, with a
+// blank rank, instead of skipped, so it becomes a provisional finish (see resolve.ts).
+export async function fetchAesStandingsRows(
+  aesEventId: string,
+  options: { includeUnranked?: boolean } = {},
+): Promise<FetchAesStandingsResult> {
   const eventInfo = await fetchAesEventInfo(aesEventId);
 
   const rawByDivision: Record<number, ApiStandingTeam[]> = {};
@@ -83,7 +89,7 @@ export async function fetchAesStandingsRows(aesEventId: string): Promise<FetchAe
     rawByDivision[division.divisionId] = teams;
 
     for (const team of teams) {
-      if (!team.TeamCode || team.FinishRank == null) {
+      if (!team.TeamCode || (team.FinishRank == null && !options.includeUnranked)) {
         skippedCount += 1;
         continue;
       }
@@ -91,7 +97,7 @@ export async function fetchAesStandingsRows(aesEventId: string): Promise<FetchAe
       rows.push({
         rowNumber,
         ageGroupLabel: team.Division?.Name ?? division.name,
-        rank: String(team.FinishRank),
+        rank: team.FinishRank == null ? "" : String(team.FinishRank),
         teamNameField: team.TeamName ?? "",
         teamCode: team.TeamCode,
         clubName: team.Club?.Name?.trim() || null,
