@@ -11,8 +11,9 @@ import {
   tableClass,
   thClass,
   tdClass,
+  tabLinkClass,
 } from "@/lib/ui";
-import { RANKING_GENDERS, RANKING_GENDER_LABEL, parseRankingGender } from "@/lib/teamGender";
+import { RANKING_GENDERS, RANKING_GENDER_LABEL, parseRankingGender, rankingGenderParam } from "@/lib/teamGender";
 import { ClubCombobox } from "@/components/ClubCombobox";
 
 export const metadata: Metadata = { title: "Teams" };
@@ -42,15 +43,16 @@ async function createTeam(formData: FormData) {
     },
   });
 
-  redirect(`/admin/teams?seasonId=${seasonId}`);
+  redirect(`/admin/teams?seasonId=${seasonId}&gender=${rankingGenderParam(gender)}`);
 }
 
 export default async function TeamsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string; seasonId?: string }>;
+  searchParams: Promise<{ error?: string; seasonId?: string; gender?: string }>;
 }) {
-  const { error, seasonId: seasonIdParam } = await searchParams;
+  const { error, seasonId: seasonIdParam, gender: genderParam } = await searchParams;
+  const gender = parseRankingGender(genderParam);
   // clubs and seasons don't depend on each other's results.
   const [clubs, seasons] = await Promise.all([
     prisma.club.findMany({
@@ -65,7 +67,7 @@ export default async function TeamsPage({
 
   const teams = selectedSeasonId
     ? await prisma.team.findMany({
-        where: { seasons: { some: { seasonId: selectedSeasonId } } },
+        where: { seasons: { some: { seasonId: selectedSeasonId } }, gender },
         include: { club: true, seasons: { where: { seasonId: selectedSeasonId } } },
         orderBy: { name: "asc" },
         take: 200,
@@ -87,6 +89,7 @@ export default async function TeamsPage({
 
       {seasons.length > 0 && (
         <form action="/admin/teams" className="mb-4 flex items-end gap-3">
+          <input type="hidden" name="gender" value={rankingGenderParam(gender)} />
           <label className="flex flex-col gap-1 text-sm">
             Season
             <select name="seasonId" className={selectClass} defaultValue={selectedSeasonId}>
@@ -102,6 +105,19 @@ export default async function TeamsPage({
           </button>
         </form>
       )}
+
+      <div className="mb-4 flex gap-1 border-b">
+        {RANKING_GENDERS.map((g) => (
+          <Link
+            key={g}
+            href={`/admin/teams?${new URLSearchParams({ ...(selectedSeasonId ? { seasonId: selectedSeasonId } : {}), gender: rankingGenderParam(g) })}`}
+            prefetch={false}
+            className={tabLinkClass(g === gender)}
+          >
+            {RANKING_GENDER_LABEL[g]}
+          </Link>
+        ))}
+      </div>
 
       <table className={`${tableClass} mb-8`}>
         <thead>
@@ -134,7 +150,7 @@ export default async function TeamsPage({
           {teams.length === 0 && (
             <tr>
               <td className={tdClass} colSpan={5}>
-                No teams for this season yet.
+                No {RANKING_GENDER_LABEL[gender].toLowerCase()} teams for this season yet.
               </td>
             </tr>
           )}
