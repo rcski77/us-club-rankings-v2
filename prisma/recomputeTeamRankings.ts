@@ -21,23 +21,39 @@ async function main() {
     process.argv[2] ?? (await prisma.season.findFirst({ where: { isActive: true }, select: { id: true } }))?.id;
   if (!seasonId) throw new Error("No seasonId given and no active season found.");
 
-  const partitions = await listRankingPartitions(seasonId);
-  console.log(`Recomputing ${partitions.length} partition(s) for season ${seasonId}...`);
+  // Logged like the Recompute ratings button's runs, so it shows up on /admin/job-runs
+  // (a long recompute loads the shared database -- staff should be able to see one ran).
+  const jobRun = await prisma.jobRun.create({
+    data: { kind: "RATINGS_RECOMPUTE", seasonId, detail: "db:recompute-team-rankings (incl. NPS)", triggeredBy: "script" },
+  });
 
-  for (const { ageGroup, gender } of partitions) await computeRanking(seasonId, ageGroup, gender);
-  console.log("NPS done.");
+  try {
+    const partitions = await listRankingPartitions(seasonId);
+    console.log(`Recomputing ${partitions.length} partition(s) for season ${seasonId}...`);
 
-  const now = new Date().toISOString();
-  const dates = { asOfDate: now, weekEndingDate: now };
-  await mapWithConcurrency(partitions, PARTITION_PROCESS_CONCURRENCY, ({ ageGroup, gender }) =>
-    runInWorker("lib/rating/computeColleyPartitionWorkerEntry.ts", { seasonId, ageGroup, gender, ...dates }),
-  );
-  console.log("Colley done.");
-  await mapWithConcurrency(partitions, PARTITION_PROCESS_CONCURRENCY, ({ ageGroup, gender }) =>
-    runInWorker("lib/rating/computeEloMasseyPartitionWorkerEntry.ts", { seasonId, ageGroup, gender, ...dates }),
-  );
-  console.log("Elo + Massey done.");
-  console.log(`Pruned ${await pruneRatingHistory(seasonId)} old rating snapshot row(s).`);
+    for (const { ageGroup, gender } of partitions) await computeRanking(seasonId, ageGroup, gender);
+    console.log("NPS done.");
+
+    const now = new Date().toISOString();
+    const dates = { asOfDate: now, weekEndingDate: now };
+    await mapWithConcurrency(partitions, PARTITION_PROCESS_CONCURRENCY, ({ ageGroup, gender }) =>
+      runInWorker("lib/rating/computeColleyPartitionWorkerEntry.ts", { seasonId, ageGroup, gender, ...dates }),
+    );
+    console.log("Colley done.");
+    await mapWithConcurrency(partitions, PARTITION_PROCESS_CONCURRENCY, ({ ageGroup, gender }) =>
+      runInWorker("lib/rating/computeEloMasseyPartitionWorkerEntry.ts", { seasonId, ageGroup, gender, ...dates }),
+    );
+    console.log("Elo + Massey done.");
+    console.log(`Pruned ${await pruneRatingHistory(seasonId)} old rating snapshot row(s).`);
+
+    await prisma.jobRun.update({ where: { id: jobRun.id }, data: { status: "SUCCEEDED", finishedAt: new Date() } });
+  } catch (err) {
+    await prisma.jobRun.update({
+      where: { id: jobRun.id },
+      data: { status: "FAILED", finishedAt: new Date(), error: err instanceof Error ? err.message : String(err) },
+    });
+    throw err;
+  }
 }
 
 main().finally(() => prisma.$disconnect());
