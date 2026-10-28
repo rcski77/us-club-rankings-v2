@@ -63,6 +63,7 @@ async function runAnalysisForAll(seasonId: string, ageGroup: number, gender: Ran
     // preserveStatus doc comment.
     await computeDivisionScoringSuggestion(division.id, {
       preserveStatus: division.scoringStatus === "CONFIRMED",
+      skipIfUnchanged: true,
     });
   }
 

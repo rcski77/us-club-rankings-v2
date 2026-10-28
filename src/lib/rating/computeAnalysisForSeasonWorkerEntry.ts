@@ -22,6 +22,7 @@ async function main(): Promise<void> {
     // preserveStatus doc comment.
     await computeDivisionScoringSuggestion(division.id, {
       preserveStatus: division.scoringStatus === "CONFIRMED",
+      skipIfUnchanged: true,
     });
   }
 }

@@ -1716,6 +1716,23 @@ Follow-ups the same day:
   - **Girls/boys splits** on the tiles. Job-health thresholds moved to
     `src/lib/jobs/jobHealth.ts`, shared with `/admin/job-runs`.
 
+**Rating history retention + nightly speedups (2026-10-28).** Prod's nightly took ~52
+min, ~43 of it the per-division scoring loop.
+- **Retention:** `TeamRatingHistory` is trimmed after every ratings recompute to each
+  partition's latest snapshot plus the Tuesday snapshot as a weekly record
+  (`src/lib/rating/pruneRatingHistory.ts`). It used to keep one per nightly run, about
+  55k rows/day in prod.
+- **Latest-snapshot reads:** every reader now uses only the latest snapshot
+  (`src/lib/rating/latestRatings.ts`). Before, they loaded every snapshot and kept each
+  team's newest in Node. The per-team lookup goes through the index, which took the
+  loop from ~321 ms to ~16 ms per division on prod-shaped dev data. Percentiles shift
+  slightly, because teams with only a stale rating no longer count.
+- **Nightly scoring loop:** re-scores unconfirmed divisions every night and confirmed
+  ones only on the Tuesday run. Bulk refreshes (nightly and both "Run analysis"
+  buttons) pass `skipIfUnchanged`, so a scoring snapshot is only saved when its numbers
+  moved. Locally a full nightly now takes ~30 s.
+- **Recompute script logging:** `db:recompute-team-rankings` now logs a Job Run.
+
 **`TeamRatingHistory` weekEndingDate dedup fix (2026-07-29).** Found while verifying
 the gender filter above: `computeColleyRatings`/`computeEloRatingsForPartition`/
 `computeMasseyRatingsForPartition`'s delete-and-replace snapshot pattern

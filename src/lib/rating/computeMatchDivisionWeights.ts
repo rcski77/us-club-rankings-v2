@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { computeDivisionFieldStrength } from "./computeDivisionFieldStrength";
 import { computeDivisionWeight } from "./divisionWeight";
 import { computeFssPercentile } from "./suggestPointTemplate";
+import { getLatestPartitionRatings } from "./latestRatings";
 import { divisionGendersInPartition, partitionGenderForDivision, type RankingGender } from "@/lib/teamGender";
 import type { DivisionGender } from "@/generated/prisma/client";
 
@@ -23,15 +24,9 @@ export async function computeDivisionWeightsForPartition(
   ageGroup: number,
   gender: RankingGender,
 ): Promise<Map<string, number>> {
-  const populationRows = await prisma.teamRatingHistory.findMany({
-    where: { seasonId, ageGroup, gender, ratingEngine: "COLLEY" },
-    orderBy: { weekEndingDate: "desc" },
-  });
-  const latestByTeam = new Map<string, number>();
-  for (const row of populationRows) {
-    if (!latestByTeam.has(row.teamId)) latestByTeam.set(row.teamId, row.rating);
-  }
-  const colleyPopulation = [...latestByTeam.values()];
+  const colleyPopulation = (await getLatestPartitionRatings(seasonId, ageGroup, gender, "COLLEY")).map(
+    (row) => row.rating,
+  );
 
   const divisions = await prisma.division.findMany({
     where: { ageGroup, gender: { in: divisionGendersInPartition(gender) }, event: { seasonId }, finishes: { some: {} } },
