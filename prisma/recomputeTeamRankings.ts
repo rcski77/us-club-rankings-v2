@@ -4,6 +4,7 @@ import { computeRanking } from "../src/lib/ranking/computeRanking";
 import { listRankingPartitions } from "../src/lib/ranking/rankingPartitions";
 import { mapWithConcurrency, PARTITION_PROCESS_CONCURRENCY } from "../src/lib/concurrency";
 import { runInWorker } from "../src/lib/import/runInWorker";
+import { pruneRatingHistory } from "../src/lib/rating/pruneRatingHistory";
 
 /**
  * Recomputes every team ranking for one season, girls and boys: NPS (computeRanking)
@@ -36,6 +37,7 @@ async function main() {
     runInWorker("lib/rating/computeEloMasseyPartitionWorkerEntry.ts", { seasonId, ageGroup, gender, ...dates }),
   );
   console.log("Elo + Massey done.");
+  console.log(`Pruned ${await pruneRatingHistory(seasonId)} old rating snapshot row(s).`);
 }
 
 main().finally(() => prisma.$disconnect());

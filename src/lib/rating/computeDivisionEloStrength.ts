@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { partitionGenderForDivision, type RankingGender } from "@/lib/teamGender";
+import { getLatestPartitionRatings, getLatestTeamRatings } from "./latestRatings";
 
 /**
  * The latest Elo rating for each of a division's teams that has one -- the Elo-engine
@@ -22,38 +23,21 @@ export async function getDivisionEloRatings(divisionId: string): Promise<Divisio
   const teamIds = division.finishes.map((f) => f.teamId);
   if (teamIds.length === 0) return [];
 
-  const history = await prisma.teamRatingHistory.findMany({
-    where: {
-      teamId: { in: teamIds },
-      seasonId: division.event.seasonId,
-      gender: partitionGenderForDivision(division.gender),
-      ratingEngine: "ELO",
-    },
-    orderBy: { weekEndingDate: "desc" },
-  });
-
-  const latestByTeam = new Map<string, DivisionEloRating>();
-  for (const row of history) {
-    if (!latestByTeam.has(row.teamId)) {
-      latestByTeam.set(row.teamId, { teamId: row.teamId, rating: row.rating, matchesPlayed: row.comparisons });
-    }
-  }
-  return Array.from(latestByTeam.values());
+  const latest = await getLatestTeamRatings(
+    teamIds,
+    division.event.seasonId,
+    partitionGenderForDivision(division.gender),
+    "ELO",
+  );
+  return latest.map((row) => ({ teamId: row.teamId, rating: row.rating, matchesPlayed: row.comparisons }));
 }
 
-/** Every team's latest Elo rating across a whole (season, ageGroup, gender) -- the population Strength of Field is percentiled against. */
+/** Every team's Elo rating in a (season, ageGroup, gender)'s latest snapshot -- the population Strength of Field is percentiled against. */
 export async function getEloPopulationRatings(
   seasonId: string,
   ageGroup: number,
   gender: RankingGender,
 ): Promise<number[]> {
-  const history = await prisma.teamRatingHistory.findMany({
-    where: { seasonId, ageGroup, gender, ratingEngine: "ELO" },
-    orderBy: { weekEndingDate: "desc" },
-  });
-  const latestByTeam = new Map<string, number>();
-  for (const row of history) {
-    if (!latestByTeam.has(row.teamId)) latestByTeam.set(row.teamId, row.rating);
-  }
-  return Array.from(latestByTeam.values());
+  const population = await getLatestPartitionRatings(seasonId, ageGroup, gender, "ELO");
+  return population.map((row) => row.rating);
 }

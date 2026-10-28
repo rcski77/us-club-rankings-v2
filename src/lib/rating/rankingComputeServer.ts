@@ -10,6 +10,7 @@ import { prisma } from "@/lib/prisma";
 import { mapWithConcurrency, PARTITION_PROCESS_CONCURRENCY } from "@/lib/concurrency";
 import { runInWorker } from "@/lib/import/runInWorker";
 import { listRankingPartitions } from "@/lib/ranking/rankingPartitions";
+import { pruneRatingHistory } from "@/lib/rating/pruneRatingHistory";
 
 const PORT = Number(process.env.RANKING_COMPUTE_PORT ?? 4100);
 
@@ -40,6 +41,9 @@ async function runRecompute(seasonId: string, jobRunId: string): Promise<void> {
     await mapWithConcurrency(partitions, PARTITION_PROCESS_CONCURRENCY, ({ ageGroup, gender }) =>
       runInWorker("lib/rating/computeEloMasseyPartitionWorkerEntry.ts", { seasonId, ageGroup, gender, ...dates }),
     );
+    // Only after every partition has its fresh snapshot -- keeps the latest plus the
+    // weekly Tuesday snapshots (see pruneRatingHistory.ts).
+    await pruneRatingHistory(seasonId);
 
     await prisma.jobRun.update({
       where: { id: jobRunId },

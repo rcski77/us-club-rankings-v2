@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { computeDivisionFieldStrength } from "./computeDivisionFieldStrength";
 import { getDivisionEloRatings, getEloPopulationRatings } from "./computeDivisionEloStrength";
 import { partitionGenderForDivision } from "@/lib/teamGender";
+import { getLatestPartitionRatings } from "./latestRatings";
 import {
   computeDci,
   computeEliteThreshold,
@@ -84,18 +85,9 @@ export async function computeDivisionScoringSuggestion(
     // The full (season, ageGroup, gender) rating population -- percentile is computed against
     // this, not against other divisions' FSS values, which is what makes it
     // self-calibrating without needing historical DivisionScoringSnapshot data yet.
-    const population = await prisma.teamRatingHistory.findMany({
-      where: { seasonId: division.event.seasonId, ageGroup: division.ageGroup, gender, ratingEngine: "COLLEY" },
-      orderBy: { weekEndingDate: "desc" },
-    });
-    const latestByTeam = new Map<string, { rating: number; rank: number }>();
-    for (const row of population) {
-      if (!latestByTeam.has(row.teamId)) latestByTeam.set(row.teamId, { rating: row.rating, rank: row.rank });
-    }
-    const populationRatings = Array.from(latestByTeam.values()).map((v) => v.rating);
-    const totalEliteTeamsInPopulation = Array.from(latestByTeam.values()).filter(
-      (v) => v.rank <= ELITE_RANK_THRESHOLD,
-    ).length;
+    const population = await getLatestPartitionRatings(division.event.seasonId, division.ageGroup, gender, "COLLEY");
+    const populationRatings = population.map((v) => v.rating);
+    const totalEliteTeamsInPopulation = population.filter((v) => v.rank <= ELITE_RANK_THRESHOLD).length;
 
     const fssPercentile =
       fieldStrength.fss === null ? null : computeFssPercentile(fieldStrength.fss, populationRatings);

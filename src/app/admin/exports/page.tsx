@@ -24,8 +24,10 @@ export default async function ExportsPage() {
     // Combined blend falls back to whichever side exists, and boys rankings typically
     // have Power ratings well before any boys division's scoring is confirmed for NPS.
     Promise.all([
-      prisma.rankingResult.findMany({ distinct: ["seasonId", "gender"], select: { seasonId: true, gender: true } }),
-      prisma.teamRatingHistory.findMany({ distinct: ["seasonId", "gender"], select: { seasonId: true, gender: true } }),
+      // groupBy, not findMany+distinct: Prisma's distinct dedupes in Node, which would
+      // pull every rating row of every snapshot into the app just to list seasons.
+      prisma.rankingResult.groupBy({ by: ["seasonId", "gender"] }),
+      prisma.teamRatingHistory.groupBy({ by: ["seasonId", "gender"] }),
     ])
       .then((lists) => lists.flat())
       .then(async (rows) => {
