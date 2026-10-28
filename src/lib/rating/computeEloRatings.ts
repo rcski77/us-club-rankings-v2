@@ -8,14 +8,14 @@ import {
   explainEloChange,
 } from "./elo";
 import { computeMatchDivisionWeights } from "./computeMatchDivisionWeights";
-import { isBoysTeamCode } from "@/lib/teamGender";
+import type { RankingGender } from "@/lib/teamGender";
 import { normalizeWeekEndingDate } from "./weekEndingDate";
 import { PARTITION_TRANSACTION_MAX_WAIT } from "@/lib/concurrency";
 
 /**
  * Gathers the same match set computeEloRatingsForPartition() rates from -- every
  * completed Match belonging to a division that has a relevant (natural-age-group)
- * TeamFinish in this (season, ageGroup) partition, up to asOfDate. Factored out so
+ * TeamFinish in this (season, ageGroup, gender) partition, up to asOfDate. Factored out so
  * getTeamEloHistory() can replay the identical graph a team's rating actually came
  * from, not a narrower "just this team's matches" slice (Elo's replay is
  * order/graph-dependent -- see elo.ts). Exported so computeMasseyRatings.ts can reuse
@@ -53,14 +53,15 @@ import { PARTITION_TRANSACTION_MAX_WAIT } from "@/lib/concurrency";
 export async function getPartitionMatches(
   seasonId: string,
   ageGroup: number,
+  gender: RankingGender,
   asOfDate: Date,
   cache?: PartitionMatchesCache,
 ) {
-  if (!cache) return fetchPartitionMatches(seasonId, ageGroup, asOfDate);
-  const key = `${seasonId}|${ageGroup}|${asOfDate.getTime()}`;
+  if (!cache) return fetchPartitionMatches(seasonId, ageGroup, gender, asOfDate);
+  const key = `${seasonId}|${ageGroup}|${gender}|${asOfDate.getTime()}`;
   let pending = cache.get(key);
   if (!pending) {
-    pending = fetchPartitionMatches(seasonId, ageGroup, asOfDate);
+    pending = fetchPartitionMatches(seasonId, ageGroup, gender, asOfDate);
     cache.set(key, pending);
   }
   return pending;
@@ -68,30 +69,26 @@ export async function getPartitionMatches(
 
 export type PartitionMatchesCache = Map<string, ReturnType<typeof fetchPartitionMatches>>;
 
-async function fetchPartitionMatches(seasonId: string, ageGroup: number, asOfDate: Date) {
+async function fetchPartitionMatches(seasonId: string, ageGroup: number, gender: RankingGender, asOfDate: Date) {
   const finishes = await prisma.teamFinish.findMany({
     where: {
       division: { event: { seasonId, startDate: { lte: asOfDate } } },
     },
-    include: { division: true },
+    include: { division: true, team: { select: { gender: true } } },
   });
 
   const teamSeasons = await prisma.teamSeason.findMany({ where: { seasonId } });
   const naturalAgeGroup = new Map(teamSeasons.map((ts) => [ts.teamId, ts.ageGroup]));
-  // Girls rankings only for now -- see teamGender.ts. Shared by Elo and Massey (both
-  // call this helper), so filtering here covers both engines and getTeamEloHistory in
-  // one place. Filtered out before divisionIds is built, so a boys-only division pulls
-  // in no matches at all here (the "ignore the division" effect), not just a discarded
-  // final rating. A mixed division (girls and boys teams both with relevant finishes)
-  // still pulls in every match below, including genuine cross-gender ones -- those are
-  // separately filtered out just after the query (see the allMatches/matches split).
-  const boysTeamIds = new Set(
-    teamSeasons.filter((ts) => isBoysTeamCode(ts.externalTeamCode)).map((ts) => ts.teamId),
-  );
-
+  // Only this partition's gender (see teamGender.ts). Shared by Elo and Massey (both
+  // call this helper), so filtering here covers both engines in one place. Filtered
+  // before divisionIds is built, so a division with no teams of this gender pulls in
+  // no matches at all here, not just a discarded final rating. A mixed division (girls
+  // and boys teams both with finishes) still pulls in every match below, including
+  // genuine cross-gender ones -- those are separately filtered out just after the
+  // query (see the allMatches/matches split).
   const relevant = finishes.filter(
     (f) =>
-      !boysTeamIds.has(f.teamId) &&
+      f.team.gender === gender &&
       ((f.division.ageGroup === ageGroup && !f.ignoreAge) ||
         (f.ignoreAge && naturalAgeGroup.get(f.teamId) === ageGroup)),
   );
@@ -147,7 +144,7 @@ export async function withDivisionWeights(matches: PartitionMatch[]) {
 }
 
 /**
- * Recomputes Elo ratings for one (season, ageGroup) partition as of asOfDate, and
+ * Recomputes Elo ratings for one (season, ageGroup, gender) partition as of asOfDate, and
  * persists a weekly TeamRatingHistory snapshot dated weekEndingDate, mirroring
  * computeColleyRatings()'s delete-and-replace-by-partition pattern and its ignoreAge
  * resolution (a finish's division counts toward the team's natural age group, per
@@ -172,11 +169,12 @@ export async function withDivisionWeights(matches: PartitionMatch[]) {
  * this function already computed, kept so getTeamEloHistory() can read a team's
  * match-by-match trace directly instead of re-replaying the whole partition on every
  * team-page view (see that model's schema comment). Delete-and-replace by
- * (seasonId, ageGroup), same pattern as the TeamRatingHistory snapshot below.
+ * (seasonId, ageGroup, gender), same pattern as the TeamRatingHistory snapshot below.
  */
 export async function computeEloRatingsForPartition(
   seasonId: string,
   ageGroup: number,
+  gender: RankingGender,
   asOfDate: Date,
   weekEndingDateRaw: Date,
   cache?: PartitionMatchesCache,
@@ -185,7 +183,7 @@ export async function computeEloRatingsForPartition(
   // delete-and-replace below actually replaces instead of piling up.
   const weekEndingDate = normalizeWeekEndingDate(weekEndingDateRaw);
 
-  const { matches, relevantTeamIds } = await getPartitionMatches(seasonId, ageGroup, asOfDate, cache);
+  const { matches, relevantTeamIds } = await getPartitionMatches(seasonId, ageGroup, gender, asOfDate, cache);
   const eloMatches = buildEloMatches(await withDivisionWeights(matches));
   const steps = computeEloHistory(eloMatches);
 
@@ -215,7 +213,7 @@ export async function computeEloRatingsForPartition(
 
   // One row per side of a step whose team is relevant to this partition -- a team's
   // home partition is always its own natural age group (see getTeamEloHistory), so a
-  // team can only ever be relevant in exactly one (seasonId, ageGroup) run per season.
+  // team can only ever be relevant in exactly one (seasonId, ageGroup, gender) run per season.
   const stepRows: {
     matchId: string;
     teamId: string;
@@ -285,7 +283,7 @@ export async function computeEloRatingsForPartition(
   // enough contention that even a small write can occasionally miss the 5s default.
   await prisma.$transaction(async (tx) => {
     await tx.teamRatingHistory.deleteMany({
-      where: { seasonId, ageGroup, weekEndingDate, ratingEngine: "ELO" },
+      where: { seasonId, ageGroup, gender, weekEndingDate, ratingEngine: "ELO" },
     });
     if (ranked.length > 0) {
       await tx.teamRatingHistory.createMany({
@@ -293,6 +291,7 @@ export async function computeEloRatingsForPartition(
           teamId: r.teamId,
           seasonId,
           ageGroup,
+          gender,
           weekEndingDate,
           ratingEngine: "ELO" as const,
           rating: r.rating,
@@ -315,9 +314,9 @@ export async function computeEloRatingsForPartition(
   const STEP_ROWS_BATCH_SIZE = 5_000;
   await prisma.$transaction(
     async (tx) => {
-      await tx.teamEloMatchStep.deleteMany({ where: { seasonId, ageGroup } });
+      await tx.teamEloMatchStep.deleteMany({ where: { seasonId, ageGroup, gender } });
       for (let i = 0; i < stepRows.length; i += STEP_ROWS_BATCH_SIZE) {
-        const batch = stepRows.slice(i, i + STEP_ROWS_BATCH_SIZE).map((s) => ({ ...s, seasonId, ageGroup }));
+        const batch = stepRows.slice(i, i + STEP_ROWS_BATCH_SIZE).map((s) => ({ ...s, seasonId, ageGroup, gender }));
         await tx.teamEloMatchStep.createMany({ data: batch });
       }
     },
@@ -367,9 +366,10 @@ export async function getEventEloSummaries(
   eventId: string,
   seasonId: string,
   ageGroup: number,
+  gender: RankingGender,
   asOfDate: Date,
 ): Promise<Map<string, EventEloSummary>> {
-  const { matches } = await getPartitionMatches(seasonId, ageGroup, asOfDate);
+  const { matches } = await getPartitionMatches(seasonId, ageGroup, gender, asOfDate);
   const matchById = new Map(matches.map((m) => [m.id, m]));
   const steps = computeEloHistory(buildEloMatches(await withDivisionWeights(matches)));
 

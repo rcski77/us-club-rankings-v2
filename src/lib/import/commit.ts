@@ -3,6 +3,7 @@ import { uniqueSlug } from "@/lib/slug";
 import { resolvePoints } from "@/lib/scoring/resolvePoints";
 import { recomputeRankingsForDivision } from "@/lib/ranking/computeRanking";
 import { computeLineageKey } from "./lineageKey";
+import { majorityDivisionGender } from "./divisionGender";
 import { isRegionIssueMessage } from "./resolve";
 import { blockingReason } from "./rowBlocking";
 
@@ -120,7 +121,9 @@ export async function commitImportBatch(batchId: string): Promise<CommitResult> 
       for (const group of newDivisionGroups.values()) {
         const first = group[0];
         const ageGroup = first.parsedAgeGroup!;
-        const gender = first.parsedDivisionGender!;
+        // Majority of the group's team-code genders, not just the first row's -- see
+        // divisionGender.ts (parsedDivisionGender is each row's own TEAM gender).
+        const gender = majorityDivisionGender(group.map((r) => r.parsedDivisionGender));
         const tierLabel = first.parsedTierLabel!;
         const tierLevel = first.parsedTierLevel;
         const name = first.ageGroupLabelRaw.trim();

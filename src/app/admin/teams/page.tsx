@@ -12,6 +12,7 @@ import {
   thClass,
   tdClass,
 } from "@/lib/ui";
+import { RANKING_GENDERS, RANKING_GENDER_LABEL, parseRankingGender } from "@/lib/teamGender";
 import { ClubCombobox } from "@/components/ClubCombobox";
 
 export const metadata: Metadata = { title: "Teams" };
@@ -25,6 +26,8 @@ async function createTeam(formData: FormData) {
   const ageGroup = Number(formData.get("ageGroup"));
   const teamNumber = String(formData.get("teamNumber") ?? "").trim();
   const externalTeamCode = String(formData.get("externalTeamCode") ?? "").trim() || null;
+  // Which girls/boys ranking bucket the team lands in (see teamGender.ts).
+  const gender = parseRankingGender(String(formData.get("gender") ?? ""));
 
   if (!seasonId || !name || !ageGroup || !teamNumber) {
     redirect(`/admin/teams?seasonId=${seasonId}&error=invalid`);
@@ -34,6 +37,7 @@ async function createTeam(formData: FormData) {
     data: {
       clubId,
       name,
+      gender,
       seasons: { create: { seasonId, ageGroup, teamNumber, externalTeamCode } },
     },
   });
@@ -172,6 +176,16 @@ export default async function TeamsPage({
                 required
                 className={`${inputClass} w-20`}
               />
+            </label>
+            <label className="flex flex-col gap-1 text-sm">
+              Gender
+              <select name="gender" className={selectClass} defaultValue="GIRLS">
+                {RANKING_GENDERS.map((g) => (
+                  <option key={g} value={g}>
+                    {RANKING_GENDER_LABEL[g]}
+                  </option>
+                ))}
+              </select>
             </label>
             <label className="flex flex-col gap-1 text-sm">
               Code

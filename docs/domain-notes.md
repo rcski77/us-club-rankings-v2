@@ -26,6 +26,15 @@ groups and sometimes multiple squads within one age group (legacy naming convent
   preliminary sense of who's good, which then informs how every other event gets
   judged. In the future rating engine, anchor events seed the rating system rather
   than being judged by it.
+- **Girls and boys rank separately.** Every team ranking (NPS, Colley/Elo/Massey,
+  Combined) is computed per (season, age group, gender), with a team's gender taken from
+  its AES team code's leading `g`/`b` (stored as `Team.gender`). Club rankings are still
+  girls-only. See `docs/plan.md`'s "Gender-partitioned team rankings" entry.
+  A **division's** gender on import is the majority of its teams' code genders (tie
+  → girls), decided once per division label, so a mixed division stays one division;
+  the import flags it as mixed. It never comes from the division name, which is only a
+  cross-check (`src/lib/import/divisionGender.ts`). It can be corrected on the
+  division's edit form.
 - A team's **season ranking** = sum of its best 3 point-finishes across the season
   (worst finishes beyond the top 3 are discarded). Ties in total points share a rank
   (competition-ranking style: 1, 2, 2, 4 — not 1, 2, 2, 3).

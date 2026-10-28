@@ -1,17 +1,17 @@
 import { prisma } from "@/lib/prisma";
-import { isBoysTeamCode } from "@/lib/teamGender";
+import { partitionGenderForDivision, type RankingGender } from "@/lib/teamGender";
 
 const BEST_N = 3;
 const ALGORITHM_VERSION = "phase1-points-only";
 
 /**
- * Recomputes the official points-based ranking for one (season, ageGroup) partition:
- * gather CONFIRMED-division finishes for that age group (or ignoreAge finishes whose
- * TEAM's natural age group -- per that team's TeamSeason row -- matches), sum each
- * team's best 3 point finishes, rank descending, and replace the prior computed set.
- * See plan section 4.3.
+ * Recomputes the official points-based ranking for one (season, ageGroup, gender)
+ * partition: gather CONFIRMED-division finishes for that age group (or ignoreAge
+ * finishes whose TEAM's natural age group -- per that team's TeamSeason row --
+ * matches) by teams of that gender, sum each team's best 3 point finishes, rank
+ * descending, and replace the prior computed set. See plan section 4.3.
  */
-export async function computeRanking(seasonId: string, ageGroup: number) {
+export async function computeRanking(seasonId: string, ageGroup: number, gender: RankingGender) {
   // Fetch every CONFIRMED finish within this season's events (not just this age
   // group) because an ignoreAge finish can live in a division of a *different* age
   // group but still count toward this one -- see the `relevant` filter below.
@@ -20,7 +20,7 @@ export async function computeRanking(seasonId: string, ageGroup: number) {
       points: { not: null },
       division: { event: { seasonId }, scoringStatus: "CONFIRMED" },
     },
-    include: { division: true },
+    include: { division: true, team: { select: { gender: true } } },
   });
 
   // A team's "natural" age group for this season -- needed to resolve ignoreAge
@@ -28,21 +28,15 @@ export async function computeRanking(seasonId: string, ageGroup: number) {
   // but should still count toward the age group it's actually enrolled at this season.
   const teamSeasons = await prisma.teamSeason.findMany({ where: { seasonId } });
   const naturalAgeGroup = new Map(teamSeasons.map((ts) => [ts.teamId, ts.ageGroup]));
-  // Girls rankings only for now -- boys support is planned but not built (see
-  // teamGender.ts). Filtering out boys' finishes here also has the effect of
-  // "ignoring" any division that's boys-only (no girls TeamFinish rows to survive
-  // the filter), without needing a separate division-level check.
-  const boysTeamIds = new Set(
-    teamSeasons.filter((ts) => isBoysTeamCode(ts.externalTeamCode)).map((ts) => ts.teamId),
-  );
 
-  // A finish counts toward this ageGroup's ranking if either:
+  // A finish counts toward this ageGroup's ranking if the team is this partition's
+  // gender (see teamGender.ts) and either:
   //  - the division itself is this age group (the normal case), or
   //  - ignoreAge is set and the TEAM's natural age group (per its TeamSeason row for
   //    this season) is this one (played up/down but should still count for their own).
   const relevant = finishes.filter(
     (f) =>
-      !boysTeamIds.has(f.teamId) &&
+      f.team.gender === gender &&
       ((f.division.ageGroup === ageGroup && !f.ignoreAge) ||
         (f.ignoreAge && naturalAgeGroup.get(f.teamId) === ageGroup)),
   );
@@ -89,7 +83,7 @@ export async function computeRanking(seasonId: string, ageGroup: number) {
   });
 
   await prisma.$transaction(async (tx) => {
-    await tx.rankingResult.deleteMany({ where: { seasonId, ageGroup } });
+    await tx.rankingResult.deleteMany({ where: { seasonId, ageGroup, gender } });
 
     // Bulk-insert every team's result in one round trip (createManyAndReturn hands
     // back the generated ids), then bulk-insert every contribution row in another --
@@ -99,6 +93,7 @@ export async function computeRanking(seasonId: string, ageGroup: number) {
       data: ranked.map((t) => ({
         seasonId,
         ageGroup,
+        gender,
         teamId: t.teamId,
         totalPoints: t.totalPoints,
         rank: t.rank,
@@ -116,12 +111,19 @@ export async function computeRanking(seasonId: string, ageGroup: number) {
   });
 }
 
-/** Recomputes every distinct age group touched by finishes in the given division. */
+/**
+ * Recomputes every distinct (age group, gender) partition touched by finishes in the
+ * given division -- the division's own gender bucket plus that of every team with a
+ * finish in it (a mixed division touches both).
+ */
 export async function recomputeRankingsForDivision(divisionId: string) {
   const division = await prisma.division.findUniqueOrThrow({
     where: { id: divisionId },
-    include: { event: true, finishes: true },
+    include: { event: true, finishes: { include: { team: { select: { gender: true } } } } },
   });
+
+  const genders = new Set<RankingGender>([partitionGenderForDivision(division.gender)]);
+  for (const f of division.finishes) genders.add(partitionGenderForDivision(f.team.gender));
 
   const ageGroups = new Set<number>([division.ageGroup]);
 
@@ -137,6 +139,8 @@ export async function recomputeRankingsForDivision(divisionId: string) {
   }
 
   for (const ageGroup of ageGroups) {
-    await computeRanking(division.event.seasonId, ageGroup);
+    for (const gender of genders) {
+      await computeRanking(division.event.seasonId, ageGroup, gender);
+    }
   }
 }

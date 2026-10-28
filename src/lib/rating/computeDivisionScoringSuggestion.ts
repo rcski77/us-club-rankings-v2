@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { computeDivisionFieldStrength } from "./computeDivisionFieldStrength";
 import { getDivisionEloRatings, getEloPopulationRatings } from "./computeDivisionEloStrength";
+import { partitionGenderForDivision } from "@/lib/teamGender";
 import {
   computeDci,
   computeEliteThreshold,
@@ -47,6 +48,8 @@ export async function computeDivisionScoringSuggestion(
     where: { id: divisionId },
     include: { event: true },
   });
+  // A boys division is measured against the boys population, girls/coed against girls.
+  const gender = partitionGenderForDivision(division.gender);
 
   const fieldStrength = await computeDivisionFieldStrength(divisionId);
   const eloRatings = await getDivisionEloRatings(divisionId);
@@ -62,11 +65,11 @@ export async function computeDivisionScoringSuggestion(
     ratingEngineUsed = "ELO";
     const ratings = eloRatings.map((r) => r.rating);
     const eloMatchVolume = eloRatings.reduce((sum, r) => sum + r.matchesPlayed, 0);
-    const eloPopulation = await getEloPopulationRatings(division.event.seasonId, division.ageGroup);
+    const eloPopulation = await getEloPopulationRatings(division.event.seasonId, division.ageGroup, gender);
 
     fss = computeTopQuartileMean(ratings);
     // eloPopulation always includes this division's own rated teams (same
-    // season+ageGroup query), so it's never empty here -- the `?? 1500` fallback is
+    // season+ageGroup+gender query), so it's never empty here -- the `?? 1500` fallback is
     // pure type-safety, not expected to ever actually apply.
     const eliteThreshold = computeEliteThreshold(eloPopulation) ?? 1500;
     elitePresence = computeIntrinsicElitePresence(ratings, eliteThreshold);
@@ -78,11 +81,11 @@ export async function computeDivisionScoringSuggestion(
         : computeDci(elitePresence, strengthOfFieldPercentile, scaleFactor);
   } else {
     ratingEngineUsed = "COLLEY";
-    // The full (season, ageGroup) rating population -- percentile is computed against
+    // The full (season, ageGroup, gender) rating population -- percentile is computed against
     // this, not against other divisions' FSS values, which is what makes it
     // self-calibrating without needing historical DivisionScoringSnapshot data yet.
     const population = await prisma.teamRatingHistory.findMany({
-      where: { seasonId: division.event.seasonId, ageGroup: division.ageGroup, ratingEngine: "COLLEY" },
+      where: { seasonId: division.event.seasonId, ageGroup: division.ageGroup, gender, ratingEngine: "COLLEY" },
       orderBy: { weekEndingDate: "desc" },
     });
     const latestByTeam = new Map<string, { rating: number; rank: number }>();

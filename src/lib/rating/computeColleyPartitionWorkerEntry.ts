@@ -1,4 +1,5 @@
 import { computeColleyRatings } from "./computeColleyRatings";
+import type { RankingGender } from "@/lib/teamGender";
 
 // One partition's worth of the Colley phase, run in its own OS process (spawned via
 // execFile by rankingComputeServer.ts's mapWithConcurrency fan-out) so several
@@ -8,13 +9,14 @@ import { computeColleyRatings } from "./computeColleyRatings";
 // {ok,data|error}-JSON-out, explicit process.exit(0) contract every other
 // *WorkerEntry.ts file uses -- see runInWorker.ts.
 async function main(): Promise<void> {
-  const { seasonId, ageGroup, asOfDate, weekEndingDate } = JSON.parse(process.argv[2]) as {
+  const { seasonId, ageGroup, gender, asOfDate, weekEndingDate } = JSON.parse(process.argv[2]) as {
     seasonId: string;
     ageGroup: number;
+    gender: RankingGender;
     asOfDate: string;
     weekEndingDate: string;
   };
-  await computeColleyRatings(seasonId, ageGroup, new Date(asOfDate), new Date(weekEndingDate));
+  await computeColleyRatings(seasonId, ageGroup, gender, new Date(asOfDate), new Date(weekEndingDate));
 }
 
 main()

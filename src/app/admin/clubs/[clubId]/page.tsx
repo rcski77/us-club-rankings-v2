@@ -16,6 +16,7 @@ import {
 } from "@/lib/ui";
 import { updateClub, leaveRankingGroup } from "./actions";
 import { computeCombinedRankByTeam } from "@/lib/rating/powerRankings";
+import { partitionGenderForDivision } from "@/lib/teamGender";
 import { RankHistoryChart, type RankHistoryPoint } from "./RankHistoryChart";
 
 export async function generateMetadata({
@@ -104,20 +105,25 @@ export default async function ClubDetailPage({
 
   // National rank = the Combined Rankings blend (50% NPS rank + 50% Power Avg Rank),
   // same number shown on /admin/team-rankings' Combine tab -- computed per (season,
-  // ageGroup), so only fetch it for the age groups this club actually fields a team
-  // in this season, not all of AGE_GROUPS.
-  const activeAgeGroups = activeSeason
+  // ageGroup, gender), so only fetch it for the (age group, girls/boys) partitions this
+  // club actually fields a team in this season, not all of AGE_GROUPS.
+  const activePartitions = activeSeason
     ? Array.from(
-        new Set(
+        new Map(
           club.teams.flatMap((t) =>
-            t.seasons.filter((ts) => ts.seasonId === activeSeason.id).map((ts) => ts.ageGroup),
+            t.seasons
+              .filter((ts) => ts.seasonId === activeSeason.id)
+              .map((ts) => {
+                const gender = partitionGenderForDivision(t.gender);
+                return [`${gender}:${ts.ageGroup}`, { ageGroup: ts.ageGroup, gender }] as const;
+              }),
           ),
-        ),
+        ).values(),
       )
     : [];
   const combinedRankMaps = activeSeason
     ? await Promise.all(
-        activeAgeGroups.map((ageGroup) => computeCombinedRankByTeam(activeSeason.id, ageGroup)),
+        activePartitions.map(({ ageGroup, gender }) => computeCombinedRankByTeam(activeSeason.id, ageGroup, gender)),
       )
     : [];
   const nationalRankByTeamId = new Map<string, number>();

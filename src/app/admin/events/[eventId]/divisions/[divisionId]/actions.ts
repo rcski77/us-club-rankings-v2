@@ -6,6 +6,8 @@ import { resolvePoints } from "@/lib/scoring/resolvePoints";
 import { computeDivisionScoringSuggestion } from "@/lib/rating/computeDivisionScoringSuggestion";
 import { requireSuperAdmin } from "@/lib/authz";
 import { redirect } from "next/navigation";
+import type { DivisionGender } from "@/generated/prisma/client";
+import { applyDivisionGender } from "@/lib/divisionGenderAudit";
 
 function divisionPath(eventId: string, divisionId: string) {
   return `/admin/events/${eventId}/divisions/${divisionId}`;
@@ -23,13 +25,21 @@ const TIER_LABELS = [
   "CLASSIC",
 ] as const;
 
+const DIVISION_GENDERS: readonly DivisionGender[] = ["GIRLS", "BOYS", "COED"];
+
 export async function updateDivisionDetails(eventId: string, divisionId: string, formData: FormData) {
   const name = String(formData.get("name") ?? "").trim();
   const ageGroup = Number(formData.get("ageGroup"));
   const tierLabel = String(formData.get("tierLabel") ?? "");
   const tierLevel = String(formData.get("tierLevel") ?? "").trim() || null;
+  const gender = String(formData.get("gender") ?? "") as DivisionGender;
 
-  if (!name || !ageGroup || !TIER_LABELS.includes(tierLabel as (typeof TIER_LABELS)[number])) {
+  if (
+    !name ||
+    !ageGroup ||
+    !TIER_LABELS.includes(tierLabel as (typeof TIER_LABELS)[number]) ||
+    !DIVISION_GENDERS.includes(gender)
+  ) {
     redirect(`${divisionPath(eventId, divisionId)}?error=division-invalid`);
   }
 
@@ -37,6 +47,9 @@ export async function updateDivisionDetails(eventId: string, divisionId: string,
     where: { id: divisionId },
     data: { name, ageGroup, tierLabel: tierLabel as (typeof TIER_LABELS)[number], tierLevel },
   });
+  // Division.gender picks which girls/boys population the division's field strength
+  // and scoring suggestion are measured against -- see applyDivisionGender.
+  await applyDivisionGender(divisionId, gender);
 
   redirect(divisionPath(eventId, divisionId));
 }

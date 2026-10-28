@@ -21,6 +21,8 @@
     "db:import-legacy-club-rankings": "tsx prisma/importLegacyClubRankings.ts",
     "db:import-legacy-five-year-rankings": "tsx prisma/importLegacyFiveYearRankings.ts",
     "backtest:elo": "tsx prisma/backtestElo.ts",
+    "db:recompute-team-rankings": "tsx prisma/recomputeTeamRankings.ts",
+    "db:audit-team-gender": "tsx prisma/auditTeamGender.ts",
     "analyze:elite-threshold": "tsx prisma/analyzeEliteThreshold.ts"
   },
   "dependencies": {

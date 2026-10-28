@@ -3,9 +3,10 @@ import { getPartitionMatches, withDivisionWeights, type PartitionMatchesCache } 
 import { buildMasseyMatches, solveMassey } from "./massey";
 import { normalizeWeekEndingDate } from "./weekEndingDate";
 import { PARTITION_TRANSACTION_MAX_WAIT } from "@/lib/concurrency";
+import type { RankingGender } from "@/lib/teamGender";
 
 /**
- * Recomputes Massey ratings for one (season, ageGroup) partition as of asOfDate, and
+ * Recomputes Massey ratings for one (season, ageGroup, gender) partition as of asOfDate, and
  * persists a weekly TeamRatingHistory snapshot dated weekEndingDate, mirroring
  * computeEloRatingsForPartition()'s pattern exactly (same getPartitionMatches, same
  * delete-and-replace transaction) but with the batch least-squares Massey solve in
@@ -30,6 +31,7 @@ import { PARTITION_TRANSACTION_MAX_WAIT } from "@/lib/concurrency";
 export async function computeMasseyRatingsForPartition(
   seasonId: string,
   ageGroup: number,
+  gender: RankingGender,
   asOfDate: Date,
   weekEndingDateRaw: Date,
   cache?: PartitionMatchesCache,
@@ -38,7 +40,7 @@ export async function computeMasseyRatingsForPartition(
   // delete-and-replace below actually replaces instead of piling up.
   const weekEndingDate = normalizeWeekEndingDate(weekEndingDateRaw);
 
-  const { matches, relevantTeamIds } = await getPartitionMatches(seasonId, ageGroup, asOfDate, cache);
+  const { matches, relevantTeamIds } = await getPartitionMatches(seasonId, ageGroup, gender, asOfDate, cache);
   const weighted = await withDivisionWeights(matches);
   const masseyMatches = buildMasseyMatches(
     weighted.map((m) => ({
@@ -63,7 +65,7 @@ export async function computeMasseyRatingsForPartition(
 
   await prisma.$transaction(async (tx) => {
     await tx.teamRatingHistory.deleteMany({
-      where: { seasonId, ageGroup, weekEndingDate, ratingEngine: "MASSEY" },
+      where: { seasonId, ageGroup, gender, weekEndingDate, ratingEngine: "MASSEY" },
     });
     if (ranked.length > 0) {
       await tx.teamRatingHistory.createMany({
@@ -71,6 +73,7 @@ export async function computeMasseyRatingsForPartition(
           teamId: r.teamId,
           seasonId,
           ageGroup,
+          gender,
           weekEndingDate,
           ratingEngine: "MASSEY" as const,
           rating: r.rating,

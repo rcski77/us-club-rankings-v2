@@ -9,18 +9,19 @@ import { createServer } from "node:http";
 import { prisma } from "@/lib/prisma";
 import { mapWithConcurrency, PARTITION_PROCESS_CONCURRENCY } from "@/lib/concurrency";
 import { runInWorker } from "@/lib/import/runInWorker";
+import { listRankingPartitions } from "@/lib/ranking/rankingPartitions";
 
 const PORT = Number(process.env.RANKING_COMPUTE_PORT ?? 4100);
 
 /**
  * Runs the full Colley -> Elo+Massey recompute for one season, fanning each phase
- * out across age-group partitions as separate OS processes (see
+ * out across (age group, gender) partitions as separate OS processes (see
  * PARTITION_PROCESS_CONCURRENCY's own comment for why that's what actually gets
  * genuine parallelism here, unlike the in-process async concurrency this replaced).
  *
  * Colley must finish for every age group before Elo/Massey starts for any of them --
  * not just convention, a real dependency: computeDivisionWeightsForPartition reads
- * TeamRatingHistory COLLEY rows for a given (seasonId, ageGroup), and a division can
+ * TeamRatingHistory COLLEY rows for a given (seasonId, ageGroup, gender), and a division can
  * span partitions via a playing-up team, so an Elo/Massey partition can depend on a
  * *different* partition's just-computed Colley results. Elo and Massey are mutually
  * independent of each other (Massey depends only on Colley), so they run together in
@@ -30,19 +31,14 @@ async function runRecompute(seasonId: string, jobRunId: string): Promise<void> {
   try {
     const asOfDate = new Date();
     const weekEndingDate = new Date();
-    const teamSeasons = await prisma.teamSeason.findMany({
-      where: { seasonId },
-      select: { ageGroup: true },
-      distinct: ["ageGroup"],
-    });
-    const ageGroups = teamSeasons.map((ts) => ts.ageGroup);
+    const partitions = await listRankingPartitions(seasonId);
     const dates = { asOfDate: asOfDate.toISOString(), weekEndingDate: weekEndingDate.toISOString() };
 
-    await mapWithConcurrency(ageGroups, PARTITION_PROCESS_CONCURRENCY, (ageGroup) =>
-      runInWorker("lib/rating/computeColleyPartitionWorkerEntry.ts", { seasonId, ageGroup, ...dates }),
+    await mapWithConcurrency(partitions, PARTITION_PROCESS_CONCURRENCY, ({ ageGroup, gender }) =>
+      runInWorker("lib/rating/computeColleyPartitionWorkerEntry.ts", { seasonId, ageGroup, gender, ...dates }),
     );
-    await mapWithConcurrency(ageGroups, PARTITION_PROCESS_CONCURRENCY, (ageGroup) =>
-      runInWorker("lib/rating/computeEloMasseyPartitionWorkerEntry.ts", { seasonId, ageGroup, ...dates }),
+    await mapWithConcurrency(partitions, PARTITION_PROCESS_CONCURRENCY, ({ ageGroup, gender }) =>
+      runInWorker("lib/rating/computeEloMasseyPartitionWorkerEntry.ts", { seasonId, ageGroup, gender, ...dates }),
     );
 
     await prisma.jobRun.update({

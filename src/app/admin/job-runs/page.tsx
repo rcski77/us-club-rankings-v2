@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { prisma } from "@/lib/prisma";
 import { tableClass, thClass, tdClass, stripedTbodyClass, jobRunStatusBadgeClass, errorBannerClass, successBannerClass } from "@/lib/ui";
 import type { JobRunKind } from "@/generated/prisma/enums";
+import { NIGHTLY_STALE_HOURS, STALE_RUNNING_MINUTES } from "@/lib/jobs/jobHealth";
 
 export const metadata: Metadata = { title: "Job Runs" };
 
@@ -11,18 +12,6 @@ const KIND_LABELS: Record<JobRunKind, string> = {
   ANALYSIS_RECOMPUTE: "Analysis recompute",
   NIGHTLY_RECOMPUTE: "Nightly recompute",
 };
-
-// A RUNNING row this old almost certainly belongs to a run whose parent process died
-// before it could mark SUCCEEDED/FAILED -- every trigger's own "started" banner tells
-// staff to expect a minute or two, so nothing legitimate stays RUNNING this long.
-const STALE_RUNNING_MINUTES = 15;
-
-// The nightly job runs once a day (see scheduleNightlyRecompute.ts) -- 36h gives a
-// full day's margin before flagging silence, so a single slow night or a redeploy
-// that briefly delays the timer doesn't false-positive. This is the "nobody's
-// watching" gap that let the 8/14 nightly failure go unnoticed: the JobRun row was
-// always there, but nothing surfaced it unless someone thought to look.
-const NIGHTLY_STALE_HOURS = 36;
 
 function formatDuration(startedAt: Date, finishedAt: Date | null): string {
   const end = finishedAt ?? new Date();

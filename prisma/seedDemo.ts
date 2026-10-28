@@ -154,8 +154,8 @@ async function main() {
   }
   await prisma.division.update({ where: { id: divisionId }, data: { scoringStatus: "CONFIRMED" } });
 
-  await computeRanking(seasonId, 14);
-  await computeRanking(seasonId, 13);
+  await computeRanking(seasonId, 14, "GIRLS");
+  await computeRanking(seasonId, 13, "GIRLS");
 
   console.log("Seeded demo data:");
   console.log(`  Season: ${season.label}`);
