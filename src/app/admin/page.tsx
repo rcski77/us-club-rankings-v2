@@ -163,6 +163,16 @@ export default async function AdminDashboardPage() {
         </div>
       </section>
 
+      {eventSchedule.needsLinks.length > 0 && (
+        <section className="mb-8">
+          <h2 className="mb-1 text-lg font-medium">Add schedule links</h2>
+          <p className="mb-2 text-sm text-slate-600">
+            These events start within 3 days and have no schedule link yet.
+          </p>
+          <EventList events={eventSchedule.needsLinks} empty="" />
+        </section>
+      )}
+
       {eventSchedule.needsImport.length > 0 && (
         <section className="mb-8">
           <h2 className="mb-1 text-lg font-medium">Ready to import</h2>

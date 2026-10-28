@@ -215,6 +215,8 @@ export async function getFreshness(activeSeasonId: string | undefined): Promise<
 const DAY_MS = 24 * 60 * 60 * 1000;
 const UPCOMING_DAYS = 21;
 const IMPORT_REMINDER_DAYS = 30;
+/** Schedule links are normally published by this many days before an event starts. */
+const SCHEDULE_LINK_LEAD_DAYS = 3;
 
 /** Today's calendar date in Eastern time as a UTC-midnight Date -- Event start/end
  * dates are date-only values stored at UTC midnight, so this compares like with like. */
@@ -235,7 +237,8 @@ export type DashboardEvent = {
 /**
  * Events that haven't finished yet (next few weeks), plus finished events whose
  * results haven't been imported -- no COMMITTED team-finishes batch -- so staff get
- * reminded once the weekend is over. Events with a committed batch drop off the
+ * reminded once the weekend is over. Also events starting within
+ * SCHEDULE_LINK_LEAD_DAYS that still have no schedule link. Events with a committed batch drop off the
  * reminder list on their own.
  */
 export async function getEventSchedule() {
@@ -250,7 +253,7 @@ export async function getEventSchedule() {
     _count: { select: { schedules: true } },
   } as const;
 
-  const [upcoming, needsImport] = await Promise.all([
+  const [upcoming, needsImport, needsLinks] = await Promise.all([
     prisma.event.findMany({
       where: { endDate: { gte: today }, startDate: { lte: new Date(today.getTime() + UPCOMING_DAYS * DAY_MS) } },
       orderBy: { startDate: "asc" },
@@ -264,6 +267,16 @@ export async function getEventSchedule() {
       orderBy: { endDate: "desc" },
       select,
     }),
+    // Events are entered ahead of time without links; nudge once links should exist.
+    prisma.event.findMany({
+      where: {
+        endDate: { gte: today },
+        startDate: { lte: new Date(today.getTime() + SCHEDULE_LINK_LEAD_DAYS * DAY_MS) },
+        schedules: { none: {} },
+      },
+      orderBy: { startDate: "asc" },
+      select,
+    }),
   ]);
 
   const shape = (e: (typeof upcoming)[number]): DashboardEvent => ({
@@ -274,5 +287,5 @@ export async function getEventSchedule() {
     location: [e.city, e.state].filter(Boolean).join(", ") || null,
     scheduleCount: e._count.schedules,
   });
-  return { upcoming: upcoming.map(shape), needsImport: needsImport.map(shape) };
+  return { upcoming: upcoming.map(shape), needsImport: needsImport.map(shape), needsLinks: needsLinks.map(shape) };
 }
