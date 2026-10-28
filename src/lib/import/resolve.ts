@@ -314,10 +314,16 @@ function resolveRow(row: RowInput, ctx: ResolveContext) {
     const key = divisionKeyOf(label.ageGroup, divisionGender, label.tierLabel, label.tierLevel);
     const candidates = ctx.divisionByKey.get(key) ?? [];
     const rawLabel = row.ageGroupLabelRaw.trim().toLowerCase();
+    // An exact label match always wins. Otherwise a lone same-signature division is
+    // reused (the same division re-imported under different wording) -- unless this
+    // batch also carries that division's own exact label: then it's spoken for, and
+    // this row's different label is a different division. Without that check, THE
+    // Chicago Point Series' in-progress "18/17's THE Chicago Point Series" teams (no
+    // tier keyword -> 18 Boys Open) merged into the already-imported "18's VSL".
+    const exact = candidates.find((d) => d.name.trim().toLowerCase() === rawLabel) ?? null;
+    const lone = candidates.length === 1 ? candidates[0] : null;
     const existing =
-      candidates.length <= 1
-        ? (candidates[0] ?? null)
-        : (candidates.find((d) => d.name.trim().toLowerCase() === rawLabel) ?? null);
+      exact ?? (lone && !ctx.rowGendersByLabel.has(divisionLabelKey(lone.name)) ? lone : null);
     if (candidates.length > 1 && !existing) {
       escalate(
         "WARNING",
