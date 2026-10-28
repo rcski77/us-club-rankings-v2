@@ -1,5 +1,4 @@
 import { prisma } from "@/lib/prisma";
-import { Prisma } from "@/generated/prisma/client";
 import type { RatingEngine } from "@/generated/prisma/enums";
 import type { RankingGender } from "@/lib/teamGender";
 
@@ -38,6 +37,11 @@ export async function getLatestPartitionRatings(
  * each one is rated in, within one season and girls/boys bucket -- for a division's
  * teams, which can span age groups (a team playing up is rated in its own natural age
  * group). Same "latest snapshot only" rule as getLatestPartitionRatings.
+ *
+ * A team is rated in its natural age group (its TeamSeason row), so only those age
+ * groups' latest dates are looked up -- each a single indexed findFirst, rather than a
+ * GROUP BY over every snapshot of the season (which cost ~140ms per call on a
+ * prod-sized history and ran twice per division in the nightly scoring loop).
  */
 export async function getLatestTeamRatings(
   teamIds: string[],
@@ -46,15 +50,31 @@ export async function getLatestTeamRatings(
   ratingEngine: RatingEngine,
 ): Promise<LatestRating[]> {
   if (teamIds.length === 0) return [];
-  return prisma.$queryRaw<LatestRating[]>`
-    SELECT h."teamId", h."rating", h."rank", h."comparisons"
-    FROM "TeamRatingHistory" h
-    JOIN (
-      SELECT "ageGroup", MAX("weekEndingDate") AS latest
-      FROM "TeamRatingHistory"
-      WHERE "seasonId" = ${seasonId} AND "gender"::text = ${gender} AND "ratingEngine"::text = ${ratingEngine}
-      GROUP BY "ageGroup"
-    ) l ON l."ageGroup" = h."ageGroup" AND l.latest = h."weekEndingDate"
-    WHERE h."seasonId" = ${seasonId} AND h."gender"::text = ${gender} AND h."ratingEngine"::text = ${ratingEngine}
-      AND h."teamId" IN (${Prisma.join(teamIds)})`;
+  const teamSeasons = await prisma.teamSeason.findMany({
+    where: { seasonId, teamId: { in: teamIds } },
+    select: { ageGroup: true },
+  });
+  const ageGroups = [...new Set(teamSeasons.map((ts) => ts.ageGroup))];
+  const latest = await Promise.all(
+    ageGroups.map((ageGroup) =>
+      prisma.teamRatingHistory.findFirst({
+        where: { seasonId, ageGroup, gender, ratingEngine },
+        orderBy: { weekEndingDate: "desc" },
+        select: { ageGroup: true, weekEndingDate: true },
+      }),
+    ),
+  );
+  const snapshots = latest.filter((row): row is NonNullable<typeof row> => row !== null);
+  if (snapshots.length === 0) return [];
+
+  return prisma.teamRatingHistory.findMany({
+    where: {
+      teamId: { in: teamIds },
+      seasonId,
+      gender,
+      ratingEngine,
+      OR: snapshots.map((s) => ({ ageGroup: s.ageGroup, weekEndingDate: s.weekEndingDate })),
+    },
+    select: { teamId: true, rating: true, rank: true, comparisons: true },
+  });
 }
