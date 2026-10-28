@@ -118,6 +118,19 @@ export default async function AdminDashboardPage() {
       <h1 className="mb-4 text-2xl font-semibold">Dashboard</h1>
 
       <section className="mb-8">
+        <h2 className="mb-2 text-lg font-medium">Totals</h2>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+          {tiles.map((tile) => (
+            <div key={tile.label} className={`rounded border p-4 ${tileColorClasses[tile.color]}`}>
+              <div className="text-2xl font-semibold text-slate-900">{tile.value.toLocaleString()}</div>
+              <div className="text-sm text-slate-600">{tile.label}</div>
+              {tile.sublabel && <div className="mt-1 text-xs text-slate-500">{tile.sublabel}</div>}
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="mb-8">
         <h2 className="mb-2 text-lg font-medium">Needs attention</h2>
         {attention.length === 0 ? (
           <p className="text-sm text-slate-500">Nothing needs attention right now.</p>
@@ -188,19 +201,6 @@ export default async function AdminDashboardPage() {
             "never"
           )}
         </p>
-      </section>
-
-      <section>
-        <h2 className="mb-2 text-lg font-medium">Totals</h2>
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-          {tiles.map((tile) => (
-            <div key={tile.label} className={`rounded border p-4 ${tileColorClasses[tile.color]}`}>
-              <div className="text-2xl font-semibold text-slate-900">{tile.value.toLocaleString()}</div>
-              <div className="text-sm text-slate-600">{tile.label}</div>
-              {tile.sublabel && <div className="mt-1 text-xs text-slate-500">{tile.sublabel}</div>}
-            </div>
-          ))}
-        </div>
       </section>
     </div>
   );
