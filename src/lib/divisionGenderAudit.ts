@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import type { DivisionGender, DivisionScoringStatus } from "@/generated/prisma/enums";
-import { majorityDivisionGender } from "@/lib/import/divisionGender";
+import { majorityFromCounts } from "@/lib/import/divisionGender";
 import { computeDivisionScoringSuggestion } from "@/lib/rating/computeDivisionScoringSuggestion";
 
 export type DivisionGenderMismatch = {
@@ -30,8 +30,31 @@ export type DivisionGenderMismatch = {
  * as GIRLS, same as on import. Optionally scoped to one season.
  */
 export async function findMislabeledDivisions(seasonId?: string): Promise<DivisionGenderMismatch[]> {
+  // Girls/boys team counts per division, aggregated in SQL -- this runs on every
+  // dashboard load, and pulling every finish into the app to count it was a large
+  // share of that page's server time on prod-sized data.
+  const counts = await prisma.$queryRaw<{ divisionId: string; gender: DivisionGender; girls: bigint; boys: bigint }[]>`
+    SELECT d."id" AS "divisionId", d."gender"::text AS gender,
+           COUNT(*) FILTER (WHERE t."gender" = 'GIRLS') AS girls,
+           COUNT(*) FILTER (WHERE t."gender" = 'BOYS') AS boys
+    FROM "Division" d
+    JOIN "Event" e ON e."id" = d."eventId"
+    JOIN "TeamFinish" f ON f."divisionId" = d."id"
+    JOIN "Team" t ON t."id" = f."teamId"
+    WHERE d."gender" <> 'COED' AND (${seasonId ?? null}::text IS NULL OR e."seasonId" = ${seasonId ?? null})
+    GROUP BY d."id", d."gender"`;
+
+  const mismatchCounts = new Map<string, { girls: number; boys: number; suggestedGender: DivisionGender }>();
+  for (const c of counts) {
+    const girls = Number(c.girls);
+    const boys = Number(c.boys);
+    const suggestedGender = majorityFromCounts(girls, boys);
+    if (suggestedGender !== c.gender) mismatchCounts.set(c.divisionId, { girls, boys, suggestedGender });
+  }
+  if (mismatchCounts.size === 0) return [];
+
   const divisions = await prisma.division.findMany({
-    where: { gender: { not: "COED" }, finishes: { some: {} }, ...(seasonId ? { event: { seasonId } } : {}) },
+    where: { id: { in: [...mismatchCounts.keys()] } },
     select: {
       id: true,
       name: true,
@@ -39,15 +62,12 @@ export async function findMislabeledDivisions(seasonId?: string): Promise<Divisi
       gender: true,
       scoringStatus: true,
       event: { select: { id: true, name: true, startDate: true } },
-      finishes: { select: { team: { select: { gender: true } } } },
     },
   });
 
   const mismatches: DivisionGenderMismatch[] = [];
   for (const d of divisions) {
-    const teamGenders = d.finishes.map((f) => f.team.gender);
-    const suggestedGender = majorityDivisionGender(teamGenders);
-    if (suggestedGender === d.gender) continue;
+    const { girls, boys, suggestedGender } = mismatchCounts.get(d.id)!;
     mismatches.push({
       divisionId: d.id,
       divisionName: d.name,
@@ -58,8 +78,8 @@ export async function findMislabeledDivisions(seasonId?: string): Promise<Divisi
       scoringStatus: d.scoringStatus,
       currentGender: d.gender,
       suggestedGender,
-      girlsTeams: teamGenders.filter((g) => g === "GIRLS").length,
-      boysTeams: teamGenders.filter((g) => g === "BOYS").length,
+      girlsTeams: girls,
+      boysTeams: boys,
     });
   }
   return mismatches.sort(

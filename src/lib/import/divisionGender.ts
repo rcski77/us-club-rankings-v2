@@ -14,12 +14,12 @@ export function divisionLabelKey(ageGroupLabelRaw: string): string {
  * unrecognized code char gets (see resolve.ts).
  */
 export function majorityDivisionGender(genders: (DivisionGender | null | undefined)[]): DivisionGender {
-  let girls = 0;
-  let boys = 0;
-  for (const g of genders) {
-    if (g === "GIRLS") girls += 1;
-    else if (g === "BOYS") boys += 1;
-  }
+  const { girls, boys } = divisionGenderCounts(genders);
+  return majorityFromCounts(girls, boys);
+}
+
+/** The same majority rule from pre-counted girls/boys totals (e.g. a SQL aggregate). */
+export function majorityFromCounts(girls: number, boys: number): DivisionGender {
   return boys > girls ? "BOYS" : "GIRLS";
 }
 

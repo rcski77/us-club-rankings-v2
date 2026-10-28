@@ -2,7 +2,7 @@ import { prisma } from "@/lib/prisma";
 import type { JobRunStatus, RatingEngine } from "@/generated/prisma/enums";
 import { findMislabeledDivisions } from "@/lib/divisionGenderAudit";
 import { NIGHTLY_STALE_HOURS, STALE_RUNNING_MINUTES } from "@/lib/jobs/jobHealth";
-import { genderFromTeamCode, type RankingGender } from "@/lib/teamGender";
+import type { RankingGender } from "@/lib/teamGender";
 
 export type GenderCounts = Record<RankingGender, number>;
 
@@ -24,12 +24,23 @@ export async function getGenderSplits(activeSeasonId: string | undefined) {
     // A match's gender is its teams' -- cross-gender matches are rare exhibitions, so
     // teamA alone is good enough for a dashboard count.
     prisma.match.count({ where: { teamA: { gender: "BOYS" } } }),
+    // Teams in the current Power rankings: each (ageGroup, gender, engine) partition's
+    // latest snapshot, the same rows powerRankings.ts reads. Counted in SQL -- Prisma's
+    // `distinct` dedupes in Node, which here meant pulling every rating row of the
+    // season (one snapshot per nightly run) into the app on each dashboard load.
     activeSeasonId
-      ? prisma.teamRatingHistory.findMany({
-          where: { seasonId: activeSeasonId },
-          distinct: ["teamId"],
-          select: { gender: true },
-        })
+      ? prisma.$queryRaw<{ gender: string; teams: bigint }[]>`
+          SELECT h."gender"::text AS gender, COUNT(DISTINCT h."teamId") AS teams
+          FROM "TeamRatingHistory" h
+          JOIN (
+            SELECT "ageGroup", "gender", "ratingEngine", MAX("weekEndingDate") AS latest
+            FROM "TeamRatingHistory"
+            WHERE "seasonId" = ${activeSeasonId}
+            GROUP BY 1, 2, 3
+          ) l ON l."ageGroup" = h."ageGroup" AND l."gender" = h."gender"
+             AND l."ratingEngine" = h."ratingEngine" AND l.latest = h."weekEndingDate"
+          WHERE h."seasonId" = ${activeSeasonId}
+          GROUP BY 1`
       : [],
   ]);
 
@@ -43,8 +54,8 @@ export async function getGenderSplits(activeSeasonId: string | undefined) {
     divisions: fold(divisionGroups),
     boysMatches,
     powerRatedTeams: {
-      GIRLS: ratedTeams.filter((t) => t.gender !== "BOYS").length,
-      BOYS: ratedTeams.filter((t) => t.gender === "BOYS").length,
+      GIRLS: ratedTeams.filter((t) => t.gender !== "BOYS").reduce((sum, t) => sum + Number(t.teams), 0),
+      BOYS: ratedTeams.filter((t) => t.gender === "BOYS").reduce((sum, t) => sum + Number(t.teams), 0),
     } satisfies GenderCounts,
   };
 }
@@ -64,7 +75,7 @@ export async function getAttentionItems(activeSeasonId: string | undefined): Pro
     failedImports,
     unscoredDivisions,
     mislabeledDivisions,
-    teamCodes,
+    genderMismatchRows,
     unlinkedTeams,
     recentNightlyRuns,
     stuckRuns,
@@ -80,10 +91,14 @@ export async function getAttentionItems(activeSeasonId: string | undefined): Pro
         })
       : [],
     findMislabeledDivisions(activeSeasonId),
-    prisma.teamSeason.findMany({
-      where: { externalTeamCode: { not: null } },
-      select: { teamId: true, externalTeamCode: true, team: { select: { gender: true } } },
-    }),
+    // Same rule as teamGender.ts's genderFromTeamCode (leading "g"/"b"), counted in SQL
+    // rather than pulling every TeamSeason row into the app.
+    prisma.$queryRaw<{ teams: bigint }[]>`
+      SELECT COUNT(DISTINCT ts."teamId") AS teams
+      FROM "TeamSeason" ts
+      JOIN "Team" t ON t."id" = ts."teamId"
+      WHERE (lower(btrim(ts."externalTeamCode")) LIKE 'g%' AND t."gender" <> 'GIRLS')
+         OR (lower(btrim(ts."externalTeamCode")) LIKE 'b%' AND t."gender" <> 'BOYS')`,
     prisma.team.count({ where: { clubId: null } }),
     prisma.jobRun.findMany({
       where: { kind: "NIGHTLY_RECOMPUTE", startedAt: { gte: nightlyStaleThreshold } },
@@ -95,14 +110,7 @@ export async function getAttentionItems(activeSeasonId: string | undefined): Pro
     }),
   ]);
 
-  const genderMismatchTeams = new Set(
-    teamCodes
-      .filter((ts) => {
-        const codeGender = genderFromTeamCode(ts.externalTeamCode);
-        return codeGender !== null && codeGender !== ts.team.gender;
-      })
-      .map((ts) => ts.teamId),
-  ).size;
+  const genderMismatchTeams = Number(genderMismatchRows[0]?.teams ?? 0);
 
   const unscoredBoys = unscoredDivisions.find((g) => g.gender === "BOYS")?._count._all ?? 0;
   const unscoredGirls = unscoredDivisions
