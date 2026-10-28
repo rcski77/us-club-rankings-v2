@@ -315,10 +315,10 @@ model Division {
   gender            DivisionGender        @default(GIRLS) // this platform was
   // girls-only until a real Sportwrench event surfaced boy divisions (label prefix
   // "B18"/"G18") -- default GIRLS matches every division imported before this field
-  // existed, all confirmed girls-only in practice (see docs/domain-notes.md). Scoped
-  // to the import layer only: ranking/rating engines still partition by
-  // (season, ageGroup) alone, not gender -- see docs/plan.md's Sportwrench-import
-  // section for why that's an explicitly deferred follow-up, not an oversight.
+  // existed, all confirmed girls-only in practice (see docs/domain-notes.md). Ranking
+  // partitions use Team.gender, not this field; division-level computations (field
+  // strength, division weights) map it onto a partition via teamGender.ts's
+  // partitionGenderForDivision() (COED -> GIRLS).
   tierLabel         DivisionTierLabel
   tierLevel         String? // e.g. "I" / "II" -- separate roman-numeral axis
   scoringStatus     DivisionScoringStatus @default(DRAFT)
@@ -453,6 +453,7 @@ model TeamEloMatchStep {
   seasonId       String
   season         Season @relation(fields: [seasonId], references: [id])
   ageGroup       Int // the team's own natural age-group partition this step belongs to
+  gender         DivisionGender @default(GIRLS) // the partition's gender -- see RankingResult.gender
 
   won                  Boolean
   thisTeamSets         Int
@@ -470,18 +471,22 @@ model TeamEloMatchStep {
   createdAt DateTime @default(now())
 
   @@unique([matchId, teamId])
-  @@index([teamId, seasonId, ageGroup])
-  // The Elo recompute's delete-and-replace filters by (seasonId, ageGroup) alone (see
+  @@index([teamId, seasonId, ageGroup, gender])
+  // The Elo recompute's delete-and-replace filters by (seasonId, ageGroup, gender) alone (see
   // computeEloRatings.ts) -- the index above is unusable there since it leads with
   // teamId, forcing a full table scan that grows with total match-step volume across
   // every season/age-group, not just the partition being replaced.
-  @@index([seasonId, ageGroup])
+  @@index([seasonId, ageGroup, gender])
 }
 
 model RankingResult {
   id             String   @id @default(cuid())
   seasonId       String
   ageGroup       Int
+  gender         DivisionGender @default(GIRLS) // girls and boys rank in separate
+  // buckets: every ranking/rating partition is (seasonId, ageGroup, gender), gender
+  // taken from Team.gender (see teamGender.ts). Default GIRLS matches every row computed
+  // before this field existed -- boys teams were excluded from all engines then.
   teamId         String
   team           Team     @relation(fields: [teamId], references: [id])
   totalPoints    Int
@@ -492,8 +497,8 @@ model RankingResult {
 
   contributions RankingResultContribution[]
 
-  @@unique([seasonId, ageGroup, teamId])
-  @@index([seasonId, ageGroup, rank])
+  @@unique([seasonId, ageGroup, gender, teamId])
+  @@index([seasonId, ageGroup, gender, rank])
   @@index([teamId])
 }
 
@@ -515,6 +520,7 @@ model TeamRatingHistory {
   seasonId       String
   season         Season       @relation(fields: [seasonId], references: [id])
   ageGroup       Int
+  gender         DivisionGender @default(GIRLS) // see RankingResult.gender
   weekEndingDate DateTime
   ratingEngine   RatingEngine @default(COLLEY)
   rating         Float
@@ -525,8 +531,8 @@ model TeamRatingHistory {
   // warnings (Phase 3 FSS work).
   createdAt      DateTime     @default(now())
 
-  @@unique([teamId, seasonId, ageGroup, weekEndingDate, ratingEngine])
-  @@index([seasonId, ageGroup, weekEndingDate])
+  @@unique([teamId, seasonId, ageGroup, gender, weekEndingDate, ratingEngine])
+  @@index([seasonId, ageGroup, gender, weekEndingDate])
 }
 
 enum JobRunKind {

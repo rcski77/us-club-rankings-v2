@@ -19,9 +19,25 @@ import {
   stripedTbodyClass,
   scoringStatusBadgeClass,
   scoreBandBadgeClass,
+  tabLinkClass,
 } from "@/lib/ui";
 import { SubmitButton } from "@/components/SubmitButton";
 import { SeasonPathSelect } from "../../SeasonPathSelect";
+import {
+  RANKING_GENDERS,
+  RANKING_GENDER_LABEL,
+  divisionGendersInPartition,
+  parseRankingGender,
+  rankingGenderParam,
+  type RankingGender,
+} from "@/lib/teamGender";
+
+/** Girls/boys lives in a `?gender=` query param (girls by default) rather than the
+ * path, so every existing /admin/analysis/{season}/{ageGroup} link keeps working. */
+function genderQuery(gender: RankingGender, extra: Record<string, string> = {}) {
+  const params = new URLSearchParams({ gender: rankingGenderParam(gender), ...extra });
+  return `?${params}`;
+}
 
 export async function generateMetadata({
   params,
@@ -33,11 +49,11 @@ export async function generateMetadata({
   return { title: season ? `U${ageGroup} Analysis — ${season.label}` : "Analysis" };
 }
 
-async function runAnalysisForAll(seasonId: string, ageGroup: number) {
+async function runAnalysisForAll(seasonId: string, ageGroup: number, gender: RankingGender) {
   "use server";
 
   const divisions = await prisma.division.findMany({
-    where: { ageGroup, event: { seasonId } },
+    where: { ageGroup, gender: { in: divisionGendersInPartition(gender) }, event: { seasonId } },
     select: { id: true, scoringStatus: true },
   });
 
@@ -50,7 +66,7 @@ async function runAnalysisForAll(seasonId: string, ageGroup: number) {
     });
   }
 
-  redirect(`/admin/analysis/${seasonId}/${ageGroup}`);
+  redirect(`/admin/analysis/${seasonId}/${ageGroup}${genderQuery(gender)}`);
 }
 
 /**
@@ -63,7 +79,7 @@ async function runAnalysisForAll(seasonId: string, ageGroup: number) {
  * "started," not "complete," banner -- see recomputeAll in team-rankings/page.tsx for
  * the same pattern and its own comment on why that's the honest thing to show.
  */
-async function runAnalysisForSeason(seasonId: string, ageGroup: number) {
+async function runAnalysisForSeason(seasonId: string, ageGroup: number, gender: RankingGender) {
   "use server";
 
   const session = await auth();
@@ -81,12 +97,12 @@ async function runAnalysisForSeason(seasonId: string, ageGroup: number) {
       });
     });
 
-  redirect(`/admin/analysis/${seasonId}/${ageGroup}?analysisStarted=1`);
+  redirect(`/admin/analysis/${seasonId}/${ageGroup}${genderQuery(gender, { analysisStarted: "1" })}`);
 }
 
 /**
  * The Analysis view (docs/plan.md §2/§5) -- one row per Division in this
- * (season, ageGroup), showing its latest DivisionScoringSnapshot's FSS/percentile/
+ * (season, ageGroup, gender), showing its latest DivisionScoringSnapshot's FSS/percentile/
  * score band/bucket breakdown side by side. Doubles as the suggestion algorithm's
  * justification UI: staff can sanity-check one division's suggestion against every
  * other division's in the same age group, the way the legacy Analysis screen let them
@@ -107,10 +123,17 @@ const AGE_GROUPS = [12, 13, 14, 15, 16, 17, 18];
 
 type SortKey = "fss" | "elitePresence" | "percentile" | "eloWeight" | "maxPoints" | `bucket:${number}`;
 
-function sortLink(seasonId: string, ageGroup: number, key: SortKey, activeSort?: string, activeDir?: string) {
+function sortLink(
+  seasonId: string,
+  ageGroup: number,
+  gender: RankingGender,
+  key: SortKey,
+  activeSort?: string,
+  activeDir?: string,
+) {
   // First click on a column defaults to highest-first (desc); a second click toggles to asc.
   const nextDir = activeSort === key && activeDir === "desc" ? "asc" : "desc";
-  return `/admin/analysis/${seasonId}/${ageGroup}?sort=${encodeURIComponent(key)}&dir=${nextDir}`;
+  return `/admin/analysis/${seasonId}/${ageGroup}${genderQuery(gender, { sort: key, dir: nextDir })}`;
 }
 
 function sortIndicator(key: SortKey, activeSort?: string, activeDir?: string) {
@@ -123,11 +146,12 @@ export default async function AnalysisPage({
   searchParams,
 }: {
   params: Promise<{ seasonId: string; ageGroup: string }>;
-  searchParams: Promise<{ sort?: string; dir?: string; analysisStarted?: string }>;
+  searchParams: Promise<{ gender?: string; sort?: string; dir?: string; analysisStarted?: string }>;
 }) {
   const { seasonId, ageGroup: ageGroupParam } = await params;
   const ageGroup = Number(ageGroupParam);
-  const { sort, dir, analysisStarted } = await searchParams;
+  const { gender: genderParam, sort, dir, analysisStarted } = await searchParams;
+  const gender = parseRankingGender(genderParam);
 
   const season = await prisma.season.findUnique({ where: { id: seasonId } });
   if (!season || !ageGroup) notFound();
@@ -136,7 +160,7 @@ export default async function AnalysisPage({
   const [seasons, divisions] = await Promise.all([
     prisma.season.findMany({ orderBy: { startDate: "desc" } }),
     prisma.division.findMany({
-      where: { ageGroup, event: { seasonId } },
+      where: { ageGroup, gender: { in: divisionGendersInPartition(gender) }, event: { seasonId } },
       include: {
         event: true,
         pointBands: true,
@@ -150,7 +174,7 @@ export default async function AnalysisPage({
     }),
   ]);
 
-  const eloWeights = await computeDivisionWeightsForPartition(seasonId, ageGroup);
+  const eloWeights = await computeDivisionWeightsForPartition(seasonId, ageGroup, gender);
 
   // Once confirmed, a division's actual max points come from its own frozen
   // DivisionPointBand copy (prisma/CLAUDE.md's frozen-copy pattern), not the source
@@ -194,25 +218,30 @@ export default async function AnalysisPage({
     });
   }
 
-  const runAnalysisForAllWithParams = runAnalysisForAll.bind(null, seasonId, ageGroup);
-  const runAnalysisForSeasonWithParams = runAnalysisForSeason.bind(null, seasonId, ageGroup);
+  const runAnalysisForAllWithParams = runAnalysisForAll.bind(null, seasonId, ageGroup, gender);
+  const runAnalysisForSeasonWithParams = runAnalysisForSeason.bind(null, seasonId, ageGroup, gender);
 
   return (
     <div>
       <Breadcrumbs
         items={[
           { label: "Analysis", href: "/admin/analysis" },
-          { label: `${season.label} · ${ageGroup}u` },
+          { label: `${season.label} · ${RANKING_GENDER_LABEL[gender]} ${ageGroup}u` },
         ]}
       />
       <div className="mb-6 flex items-center justify-between">
         <h1 className="text-2xl font-semibold">
-          {season.label} · {ageGroup}u Analysis
+          {season.label} · {RANKING_GENDER_LABEL[gender]} {ageGroup}u Analysis
         </h1>
         <div className="flex items-end gap-3">
           <label className="flex flex-col gap-1 text-sm">
             Season
-            <SeasonPathSelect seasons={seasons} defaultValue={season.id} ageGroup={ageGroup} />
+            <SeasonPathSelect
+              seasons={seasons}
+              defaultValue={season.id}
+              ageGroup={ageGroup}
+              query={genderQuery(gender)}
+            />
           </label>
           <form action={runAnalysisForAllWithParams}>
             <SubmitButton className={primaryButtonClass} pendingText="Running…">
@@ -227,11 +256,24 @@ export default async function AnalysisPage({
         </div>
       </div>
 
+      <div className="mb-4 flex gap-1 border-b">
+        {RANKING_GENDERS.map((g) => (
+          <Link
+            key={g}
+            href={`/admin/analysis/${seasonId}/${ageGroup}${genderQuery(g)}`}
+            prefetch={false}
+            className={tabLinkClass(g === gender)}
+          >
+            {RANKING_GENDER_LABEL[g]}
+          </Link>
+        ))}
+      </div>
+
       <div className="mb-6 flex gap-1 border-b">
         {AGE_GROUPS.map((a) => (
           <Link
             key={a}
-            href={`/admin/analysis/${seasonId}/${a}`}
+            href={`/admin/analysis/${seasonId}/${a}${genderQuery(gender)}`}
             prefetch={false}
             className={
               a === ageGroup
@@ -262,33 +304,33 @@ export default async function AnalysisPage({
               <th className={thClass}>Teams</th>
               <th className={thClass}>Engine</th>
               <th className={thClass}>
-                <Link href={sortLink(seasonId, ageGroup, "fss", sort, dir)} className="hover:underline">
+                <Link href={sortLink(seasonId, ageGroup, gender, "fss", sort, dir)} className="hover:underline">
                   FSS{sortIndicator("fss", sort, dir)}
                 </Link>
               </th>
               <th className={thClass}>
                 <Link
-                  href={sortLink(seasonId, ageGroup, "elitePresence", sort, dir)}
+                  href={sortLink(seasonId, ageGroup, gender, "elitePresence", sort, dir)}
                   className="hover:underline"
                 >
                   Elite %{sortIndicator("elitePresence", sort, dir)}
                 </Link>
               </th>
               <th className={thClass}>
-                <Link href={sortLink(seasonId, ageGroup, "percentile", sort, dir)} className="hover:underline">
+                <Link href={sortLink(seasonId, ageGroup, gender, "percentile", sort, dir)} className="hover:underline">
                   Pctl{sortIndicator("percentile", sort, dir)}
                 </Link>
               </th>
               <th className={thClass}>Band</th>
               <th className={thClass}>
-                <Link href={sortLink(seasonId, ageGroup, "eloWeight", sort, dir)} className="hover:underline">
+                <Link href={sortLink(seasonId, ageGroup, gender, "eloWeight", sort, dir)} className="hover:underline">
                   Rating Weight{sortIndicator("eloWeight", sort, dir)}
                 </Link>
               </th>
               {BUCKET_THRESHOLDS.map((t) => (
                 <th key={t} className={thClass}>
                   <Link
-                    href={sortLink(seasonId, ageGroup, `bucket:${t}`, sort, dir)}
+                    href={sortLink(seasonId, ageGroup, gender, `bucket:${t}`, sort, dir)}
                     className="hover:underline"
                   >
                     Top {t}
@@ -297,7 +339,7 @@ export default async function AnalysisPage({
                 </th>
               ))}
               <th className={thClass}>
-                <Link href={sortLink(seasonId, ageGroup, "maxPoints", sort, dir)} className="hover:underline">
+                <Link href={sortLink(seasonId, ageGroup, gender, "maxPoints", sort, dir)} className="hover:underline">
                   Max Points{sortIndicator("maxPoints", sort, dir)}
                 </Link>
               </th>

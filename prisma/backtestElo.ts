@@ -37,7 +37,7 @@ async function gatherPartitions(prisma: PrismaClient): Promise<Partition[]> {
     });
 
     for (const { ageGroup } of teamSeasons) {
-      const { matches } = await getPartitionMatches(season.id, ageGroup, new Date());
+      const { matches } = await getPartitionMatches(season.id, ageGroup, "GIRLS", new Date());
       if (matches.length === 0) continue;
 
       const enriched = await withDivisionWeights(matches);

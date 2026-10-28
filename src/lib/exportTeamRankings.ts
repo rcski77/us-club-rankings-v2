@@ -1,8 +1,10 @@
 import ExcelJS from "exceljs";
 import { prisma } from "@/lib/prisma";
 import { getLatestPowerRatings, buildPowerRows, averagePowerRank, sortRows, assignRanksWithTies } from "@/lib/rating/powerRankings";
+import { RANKING_GENDER_LABEL, type RankingGender } from "@/lib/teamGender";
 
-// Generates a "Team Rankings" workbook for a season -- one sheet per age group, each
+// Generates a "Team Rankings" workbook for a season and one gender bucket (girls and
+// boys rank separately -- see teamGender.ts) -- one sheet per age group, each
 // listing that age group's top 100 Combined-ranked teams (50% NPS rank + 50% Power
 // Rankings' own Avg Rank -- same blend as the admin/public Combined Rankings tab, see
 // powerRankings.ts's computeCombinedRankByTeam), same rank cap used to define
@@ -35,13 +37,13 @@ function combinedScore(r: CombinedRow): number | undefined {
  * team-rankings/page.tsx, but also carries team/club display info through (the
  * shared computeCombinedRankByTeam in powerRankings.ts only returns a teamId->rank
  * map, which isn't enough to render a spreadsheet row). */
-async function buildCombinedRows(seasonId: string, ageGroup: number) {
+async function buildCombinedRows(seasonId: string, ageGroup: number, gender: RankingGender) {
   const [npsResults, powerData] = await Promise.all([
     prisma.rankingResult.findMany({
-      where: { seasonId, ageGroup },
+      where: { seasonId, ageGroup, gender },
       select: { teamId: true, rank: true, team: { select: { id: true, name: true, club: { select: { name: true, state: true } } } } },
     }),
-    getLatestPowerRatings(seasonId, ageGroup),
+    getLatestPowerRatings(seasonId, ageGroup, gender),
   ]);
   const powerRows = buildPowerRows(powerData);
 
@@ -64,13 +66,17 @@ async function buildCombinedRows(seasonId: string, ageGroup: number) {
     .map((r) => ({ ...r, rank: rankByTeamId.get(r.team.id) }));
 }
 
-export async function buildTeamRankingsWorkbook(seasonId: string): Promise<TeamRankingsExportResult> {
+export async function buildTeamRankingsWorkbook(
+  seasonId: string,
+  gender: RankingGender,
+): Promise<TeamRankingsExportResult> {
   const season = await prisma.season.findUnique({ where: { id: seasonId } });
   if (!season) return { ok: false, reason: "Season not found." };
 
-  const rowsByAgeGroup = await Promise.all(AGE_GROUPS.map((ageGroup) => buildCombinedRows(seasonId, ageGroup)));
+  const rowsByAgeGroup = await Promise.all(AGE_GROUPS.map((ageGroup) => buildCombinedRows(seasonId, ageGroup, gender)));
+  const genderLabel = RANKING_GENDER_LABEL[gender];
   if (rowsByAgeGroup.every((rows) => rows.length === 0)) {
-    return { ok: false, reason: `No team rankings computed for ${season.label} yet.` };
+    return { ok: false, reason: `No ${genderLabel.toLowerCase()} team rankings computed for ${season.label} yet.` };
   }
 
   const workbook = new ExcelJS.Workbook();
@@ -82,7 +88,7 @@ export async function buildTeamRankingsWorkbook(seasonId: string): Promise<TeamR
     if (rows.length === 0) return;
 
     const sheet = workbook.addWorksheet(`${ageGroup}u`);
-    sheet.addRow([`${season.label} ${ageGroup}U National Team Rankings — Combined`]).font = { bold: true, size: 14 };
+    sheet.addRow([`${season.label} ${genderLabel} ${ageGroup}U National Team Rankings — Combined`]).font = { bold: true, size: 14 };
     sheet.addRow([
       `Combined rank blends 50% NPS rank and 50% Power Rankings' Avg Rank (Colley/Elo/Massey average). Top ${PUBLISHED_RANK_LIMIT} shown.`,
     ]);

@@ -2,6 +2,7 @@ import "dotenv/config";
 import { prisma } from "../src/lib/prisma";
 import { computeLineageKey } from "../src/lib/import/lineageKey";
 import { computeRanking } from "../src/lib/ranking/computeRanking";
+import { RANKING_GENDERS } from "../src/lib/teamGender";
 import { divisionGenderFromTeamCodeGender } from "../src/lib/import/aesTeamCode";
 import type { DivisionGender } from "../src/generated/prisma/enums";
 
@@ -278,7 +279,8 @@ async function main() {
   console.log(`\nRecomputing rankings for ${touchedRankingPartitions.size} touched (season, ageGroup) partition(s)...`);
   for (const key of touchedRankingPartitions) {
     const [seasonId, ageGroupStr] = key.split("|");
-    await computeRanking(seasonId, Number(ageGroupStr));
+    // A split moves a team between gender buckets, so both sides need recomputing.
+    for (const gender of RANKING_GENDERS) await computeRanking(seasonId, Number(ageGroupStr), gender);
   }
   console.log("Done. Elo/Colley/Massey ratings and club rankings were NOT recomputed -- run those from their existing admin actions.");
 }

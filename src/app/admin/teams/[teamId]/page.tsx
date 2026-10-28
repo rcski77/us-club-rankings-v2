@@ -16,7 +16,9 @@ import {
   secondaryButtonClass,
   smallSecondaryButtonClass,
   errorBannerClass,
+  genderBadgeClass,
 } from "@/lib/ui";
+import { RANKING_GENDERS, RANKING_GENDER_LABEL, parseRankingGender } from "@/lib/teamGender";
 import { getTeamEloHistory } from "@/lib/rating/computeEloRatings";
 import { ClubCombobox } from "@/components/ClubCombobox";
 
@@ -35,10 +37,13 @@ async function updateTeam(teamId: string, formData: FormData) {
 
   const clubId = String(formData.get("clubId") ?? "") || null;
   const name = String(formData.get("name") ?? "").trim();
+  // Which girls/boys ranking bucket the team lands in (see teamGender.ts) -- takes
+  // effect in rankings on the next recompute.
+  const gender = parseRankingGender(String(formData.get("gender") ?? ""));
 
   if (!name) redirect(`/admin/teams/${teamId}?error=invalid`);
 
-  await prisma.team.update({ where: { id: teamId }, data: { clubId, name } });
+  await prisma.team.update({ where: { id: teamId }, data: { clubId, name, gender } });
   revalidatePath(`/admin/teams/${teamId}`);
 }
 
@@ -259,7 +264,10 @@ export default async function TeamDetailPage({
   return (
     <div>
       <Breadcrumbs items={[...parentCrumbs, { label: team.name }]} />
-      <h1 className="mb-6 text-2xl font-semibold">{team.name}</h1>
+      <h1 className="mb-6 flex items-center gap-3 text-2xl font-semibold">
+        {team.name}
+        <span className={genderBadgeClass(team.gender)}>{team.gender === "BOYS" ? "Boys" : "Girls"}</span>
+      </h1>
 
       {error === "invalid" && <p className={errorBannerClass}>Name is required.</p>}
       {error === "season-invalid" && (
@@ -282,6 +290,16 @@ export default async function TeamDetailPage({
           <label className="flex flex-col gap-1 text-sm">
             Club
             <ClubCombobox clubs={clubs} name="clubId" defaultClubId={team.clubId} />
+          </label>
+          <label className="flex flex-col gap-1 text-sm">
+            Gender
+            <select name="gender" className={selectClass} defaultValue={team.gender === "BOYS" ? "BOYS" : "GIRLS"}>
+              {RANKING_GENDERS.map((g) => (
+                <option key={g} value={g}>
+                  {RANKING_GENDER_LABEL[g]}
+                </option>
+              ))}
+            </select>
           </label>
           <button type="submit" className={`${primaryButtonClass} self-start`}>
             Save

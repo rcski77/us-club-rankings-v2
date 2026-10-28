@@ -52,7 +52,7 @@ async function main() {
   console.log("--- Elo population + today's actual dynamic threshold, per age group ---");
   const populationByAgeGroup = new Map<number, number[]>();
   for (const ageGroup of ageGroups) {
-    const ratings = await getEloPopulationRatings(season.id, ageGroup);
+    const ratings = await getEloPopulationRatings(season.id, ageGroup, "GIRLS");
     if (ratings.length === 0) continue;
     populationByAgeGroup.set(ageGroup, ratings);
     const sorted = [...ratings].sort((a, b) => a - b);

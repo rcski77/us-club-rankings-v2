@@ -68,3 +68,23 @@ export function scoreBandBadgeClass(
       return `${badgeBaseClass} bg-slate-200 text-slate-600`;
   }
 }
+
+// Team.gender / Division.gender (prisma/schema.prisma) -- girls and boys rank in
+// separate buckets (see src/lib/teamGender.ts).
+export function genderBadgeClass(gender: "GIRLS" | "BOYS" | "COED") {
+  switch (gender) {
+    case "GIRLS":
+      return `${badgeBaseClass} bg-pink-100 text-pink-800`;
+    case "BOYS":
+      return `${badgeBaseClass} bg-sky-100 text-sky-800`;
+    case "COED":
+      return `${badgeBaseClass} bg-slate-200 text-slate-600`;
+  }
+}
+
+// Underlined tab links (view/age-group/gender tab rows on the rankings pages).
+export function tabLinkClass(active: boolean) {
+  return active
+    ? "border-b-2 border-slate-900 px-3 py-2 text-sm font-medium text-slate-900"
+    : "border-b-2 border-transparent px-3 py-2 text-sm text-slate-500 hover:text-slate-900";
+}

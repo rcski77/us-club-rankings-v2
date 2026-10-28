@@ -134,8 +134,9 @@ export default async function PublicClubDetailPage({
     const perAgeGroup = await Promise.all(
       activeAgeGroups.map((ageGroup) =>
         Promise.all([
-          getLatestPowerRatings(activeSeason.id, ageGroup),
-          computeCombinedRankByTeam(activeSeason.id, ageGroup),
+          // Public pages show girls rankings only for now (see teamGender.ts).
+          getLatestPowerRatings(activeSeason.id, ageGroup, "GIRLS"),
+          computeCombinedRankByTeam(activeSeason.id, ageGroup, "GIRLS"),
         ]),
       ),
     );

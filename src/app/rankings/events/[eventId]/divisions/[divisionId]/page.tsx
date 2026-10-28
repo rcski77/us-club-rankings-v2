@@ -49,7 +49,8 @@ export default async function PublicDivisionDetailPage({
     orderBy: { rank: "asc" },
   });
   // Sequential awaits (not Promise.all) -- see docs/dev-environment.md.
-  const eloSummaries = await getEventEloSummaries(eventId, seasonId, division.ageGroup, division.event.endDate);
+  // Public pages show girls rankings only for now (see teamGender.ts).
+  const eloSummaries = await getEventEloSummaries(eventId, seasonId, division.ageGroup, "GIRLS", division.event.endDate);
 
   return (
     <div className="max-w-4xl">

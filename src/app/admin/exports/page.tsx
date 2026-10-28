@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import Link from "next/link";
 import { primaryButtonClass, tableClass, thClass, tdClass, stripedTbodyClass } from "@/lib/ui";
 import { LEGACY_IMPORT_ALGORITHM_VERSION } from "@/lib/ranking/computeFiveYearClubRanking";
+import { RANKING_GENDERS, RANKING_GENDER_LABEL, rankingGenderParam, type RankingGender } from "@/lib/teamGender";
 
 export const metadata: Metadata = { title: "Exports" };
 
@@ -11,25 +12,36 @@ export default async function ExportsPage() {
   // buildClubRankingsWorkbook() requires it for the 5-Year sheet's totals/rank (see
   // its own gate), so this page surfaces that requirement up front instead of letting
   // staff hit a 400 after clicking "Export."
-  const [results, seasons] = await Promise.all([
+  const [results, { seasons, gendersBySeason }] = await Promise.all([
     prisma.clubFiveYearRankingResult.findMany({
       distinct: ["endYear"],
       select: { endYear: true, computedAt: true, algorithmVersion: true },
       orderBy: { endYear: "desc" },
     }),
-    // Only seasons with at least one computed RankingResult are exportable -- same
-    // reasoning as the endYear gate above, applied to the Team Rankings workbook.
-    // RankingResult has no back-relation declared on Season, so filter by the
-    // distinct seasonIds it actually has rows for.
-    prisma.rankingResult
-      .findMany({ distinct: ["seasonId"], select: { seasonId: true } })
-      .then((rows) =>
-        prisma.season.findMany({
-          where: { id: { in: rows.map((r) => r.seasonId) } },
+    // Only seasons with computed team rankings are exportable -- same reasoning as the
+    // endYear gate above, applied to the Team Rankings workbook. Checked per gender
+    // bucket, and either NPS (RankingResult) or Power (TeamRatingHistory) counts: the
+    // Combined blend falls back to whichever side exists, and boys rankings typically
+    // have Power ratings well before any boys division's scoring is confirmed for NPS.
+    Promise.all([
+      prisma.rankingResult.findMany({ distinct: ["seasonId", "gender"], select: { seasonId: true, gender: true } }),
+      prisma.teamRatingHistory.findMany({ distinct: ["seasonId", "gender"], select: { seasonId: true, gender: true } }),
+    ])
+      .then((lists) => lists.flat())
+      .then(async (rows) => {
+        const gendersBySeason = new Map<string, Set<string>>();
+        for (const r of rows) {
+          const set = gendersBySeason.get(r.seasonId) ?? new Set<string>();
+          set.add(r.gender);
+          gendersBySeason.set(r.seasonId, set);
+        }
+        const seasons = await prisma.season.findMany({
+          where: { id: { in: [...gendersBySeason.keys()] } },
           select: { id: true, label: true, startDate: true },
           orderBy: { startDate: "desc" },
-        }),
-      ),
+        });
+        return { seasons, gendersBySeason };
+      }),
   ]);
 
   return (
@@ -89,7 +101,8 @@ export default async function ExportsPage() {
       <p className="mb-6 text-sm text-slate-500">
         Downloads a workbook with one sheet per age group (12u–18u), each listing that age
         group&apos;s top 100 Combined-ranked teams (50% NPS rank + 50% Power Rankings&apos; Avg
-        Rank) — the same blend as the Combined Rankings tab.
+        Rank) — the same blend as the Combined Rankings tab. Girls and boys rank separately,
+        so each has its own workbook.
       </p>
 
       <table className={tableClass}>
@@ -104,12 +117,17 @@ export default async function ExportsPage() {
             <tr key={s.id}>
               <td className={tdClass}>{s.label}</td>
               <td className={tdClass}>
-                <a
-                  href={`/admin/exports/download-teams?${new URLSearchParams({ season: s.id })}`}
-                  className={primaryButtonClass}
-                >
-                  Export .xlsx
-                </a>
+                <div className="flex gap-2">
+                  {RANKING_GENDERS.filter((g: RankingGender) => gendersBySeason.get(s.id)?.has(g)).map((g) => (
+                    <a
+                      key={g}
+                      href={`/admin/exports/download-teams?${new URLSearchParams({ season: s.id, gender: rankingGenderParam(g) })}`}
+                      className={primaryButtonClass}
+                    >
+                      {RANKING_GENDER_LABEL[g]} .xlsx
+                    </a>
+                  ))}
+                </div>
               </td>
             </tr>
           ))}

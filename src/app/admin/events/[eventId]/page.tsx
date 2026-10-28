@@ -17,6 +17,7 @@ import {
   tableClass,
   thClass,
   tdClass,
+  genderBadgeClass,
 } from "@/lib/ui";
 import { uniqueSlug } from "@/lib/slug";
 import DeleteEventButton from "./DeleteEventButton";
@@ -553,7 +554,12 @@ export default async function EventDetailPage({
                   {d.name}
                 </Link>
               </td>
-              <td className={tdClass}>{d.ageGroup}u</td>
+              <td className={tdClass}>
+                {d.ageGroup}u{" "}
+                <span className={genderBadgeClass(d.gender)}>
+                  {d.gender === "BOYS" ? "Boys" : d.gender === "COED" ? "Coed" : "Girls"}
+                </span>
+              </td>
               <td className={tdClass}>
                 {d.tierLabel}
                 {d.tierLevel ? ` ${d.tierLevel}` : ""}

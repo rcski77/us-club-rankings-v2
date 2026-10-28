@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { computeFieldStrength, type FieldStrengthResult } from "./fieldStrength";
+import { partitionGenderForDivision, type RankingGender } from "@/lib/teamGender";
 
 /**
  * Gathers the latest Colley rating for each team entered in a division and runs
@@ -7,6 +8,9 @@ import { computeFieldStrength, type FieldStrengthResult } from "./fieldStrength"
  * not also ageGroup: computeColleyRatings already resolves each team to its natural
  * age-group partition (the ignoreAge case), so a team has at most one current COLLEY
  * row per season regardless of which age group's division it's finishing in here.
+ * Only ratings from the division's own girls/boys bucket count (see teamGender.ts) --
+ * a boys team in a girls-tagged division (mis-tagged or genuinely mixed) has no
+ * rating on the scale this division is measured against.
  */
 async function fetchLatestRatedTeams(divisionId: string) {
   const division = await prisma.division.findUniqueOrThrow({
@@ -20,6 +24,7 @@ async function fetchLatestRatedTeams(divisionId: string) {
     where: {
       teamId: { in: teamIds },
       seasonId: division.event.seasonId,
+      gender: partitionGenderForDivision(division.gender),
       ratingEngine: "COLLEY",
     },
     orderBy: { weekEndingDate: "desc" },
@@ -59,7 +64,7 @@ export async function getDivisionRatedRatings(divisionId: string): Promise<numbe
 }
 
 /**
- * The full (season, ageGroup) Colley rating population -- one rating per team, its
+ * The full (season, ageGroup, gender) Colley rating population -- one rating per team, its
  * latest by week. Mirrors the population query computeDivisionScoringSuggestion.ts
  * uses for percentile calibration; reused here so the scoring-review screen's
  * histogram can show where a division's own ratings fall within that same population
@@ -68,9 +73,10 @@ export async function getDivisionRatedRatings(divisionId: string): Promise<numbe
 export async function getSeasonColleyRatingPopulation(
   seasonId: string,
   ageGroup: number,
+  gender: RankingGender,
 ): Promise<number[]> {
   const population = await prisma.teamRatingHistory.findMany({
-    where: { seasonId, ageGroup, ratingEngine: "COLLEY" },
+    where: { seasonId, ageGroup, gender, ratingEngine: "COLLEY" },
     orderBy: { weekEndingDate: "desc" },
   });
   const latestByTeam = new Map<string, number>();

@@ -10,6 +10,7 @@ import {
   tableClass,
   thClass,
   tdClass,
+  tabLinkClass,
 } from "@/lib/ui";
 import {
   ordinalSuffix,
@@ -22,6 +23,13 @@ import {
   type PowerRow,
 } from "@/lib/rating/powerRankings";
 import { SeasonFilterSelect } from "./SeasonFilterSelect";
+import {
+  RANKING_GENDERS,
+  RANKING_GENDER_LABEL,
+  parseRankingGender,
+  rankingGenderParam,
+  type RankingGender,
+} from "@/lib/teamGender";
 import { SubmitButton } from "@/components/SubmitButton";
 
 export const metadata: Metadata = { title: "Team Rankings" };
@@ -65,6 +73,7 @@ async function recomputeAll(formData: FormData) {
   const seasonId = String(formData.get("seasonId") ?? "");
   const view = String(formData.get("view") ?? "combine");
   const ageGroup = String(formData.get("ageGroup") ?? "12");
+  const gender = String(formData.get("gender") ?? "girls");
   if (!seasonId) redirect("/admin/team-rankings");
 
   const session = await auth();
@@ -93,7 +102,7 @@ async function recomputeAll(formData: FormData) {
   });
 
   redirect(
-    `/admin/team-rankings?${new URLSearchParams({ season: seasonId, view, ageGroup, recomputeStarted: "1" })}`,
+    `/admin/team-rankings?${new URLSearchParams({ season: seasonId, gender, view, ageGroup, recomputeStarted: "1" })}`,
   );
 }
 
@@ -102,6 +111,7 @@ export default async function TeamRankingsIndexPage({
 }: {
   searchParams: Promise<{
     season?: string;
+    gender?: string;
     view?: string;
     ageGroup?: string;
     sort?: string;
@@ -111,6 +121,7 @@ export default async function TeamRankingsIndexPage({
 }) {
   const {
     season: seasonParam,
+    gender: genderParam,
     view: viewParam,
     ageGroup: ageGroupParam,
     sort,
@@ -122,17 +133,21 @@ export default async function TeamRankingsIndexPage({
   const activeSeason = seasons.find((s) => s.isActive) ?? seasons[0];
   const season = seasons.find((s) => s.id === seasonParam) ?? activeSeason;
 
+  const gender = parseRankingGender(genderParam);
   const view: View = viewParam === "power" ? "power" : viewParam === "nps" ? "nps" : "combine";
   const ageGroup = AGE_GROUPS.includes(Number(ageGroupParam)) ? Number(ageGroupParam) : 12;
   const dir: SortDir = dirParam === "desc" ? "desc" : "asc";
 
-  function tabHref(overrides: { view?: View; ageGroup?: number }) {
-    const params = new URLSearchParams({
+  function tabParams(overrides: { gender?: RankingGender; view?: View; ageGroup?: number } = {}) {
+    return new URLSearchParams({
       season: season?.id ?? "",
+      gender: rankingGenderParam(overrides.gender ?? gender),
       view: overrides.view ?? view,
       ageGroup: String(overrides.ageGroup ?? ageGroup),
     });
-    return `/admin/team-rankings?${params}`;
+  }
+  function tabHref(overrides: { gender?: RankingGender; view?: View; ageGroup?: number }) {
+    return `/admin/team-rankings?${tabParams(overrides)}`;
   }
 
   return (
@@ -153,6 +168,7 @@ export default async function TeamRankingsIndexPage({
         <>
           <div className="mb-6 flex items-end gap-3">
             <form method="get" className="flex items-end gap-3">
+              <input type="hidden" name="gender" value={rankingGenderParam(gender)} />
               <input type="hidden" name="view" value={view} />
               <input type="hidden" name="ageGroup" value={ageGroup} />
               <label className="flex flex-col gap-1 text-sm">
@@ -163,6 +179,7 @@ export default async function TeamRankingsIndexPage({
 
             <form action={recomputeAll}>
               <input type="hidden" name="seasonId" value={season.id} />
+              <input type="hidden" name="gender" value={rankingGenderParam(gender)} />
               <input type="hidden" name="view" value={view} />
               <input type="hidden" name="ageGroup" value={ageGroup} />
               <SubmitButton className={primaryButtonClass} pendingText="Recomputing…">
@@ -170,8 +187,16 @@ export default async function TeamRankingsIndexPage({
               </SubmitButton>
             </form>
             <p className="pb-2 text-xs text-slate-500">
-              Runs Colley, Elo, and Massey for every age group in the selected season.
+              Runs Colley, Elo, and Massey for every age group, girls and boys, in the selected season.
             </p>
+          </div>
+
+          <div className="mb-4 flex gap-1 border-b">
+            {RANKING_GENDERS.map((g) => (
+              <Link key={g} href={tabHref({ gender: g })} prefetch={false} className={tabLinkClass(g === gender)}>
+                {RANKING_GENDER_LABEL[g]}
+              </Link>
+            ))}
           </div>
 
           <div className="mb-4 flex gap-1 border-b">
@@ -212,25 +237,28 @@ export default async function TeamRankingsIndexPage({
             <NpsRankingTable
               seasonId={season.id}
               ageGroup={ageGroup}
+              gender={gender}
               sort={sort}
               dir={dir}
-              baseParams={new URLSearchParams({ season: season.id, view, ageGroup: String(ageGroup) })}
+              baseParams={tabParams()}
             />
           ) : view === "power" ? (
             <PowerRankingTable
               seasonId={season.id}
               ageGroup={ageGroup}
+              gender={gender}
               sort={sort}
               dir={dir}
-              baseParams={new URLSearchParams({ season: season.id, view, ageGroup: String(ageGroup) })}
+              baseParams={tabParams()}
             />
           ) : (
             <CombineRankingTable
               seasonId={season.id}
               ageGroup={ageGroup}
+              gender={gender}
               sort={sort}
               dir={dir}
-              baseParams={new URLSearchParams({ season: season.id, view, ageGroup: String(ageGroup) })}
+              baseParams={tabParams()}
             />
           )}
         </>
@@ -276,18 +304,20 @@ function SortableHeader({
 async function NpsRankingTable({
   seasonId,
   ageGroup,
+  gender,
   sort,
   dir,
   baseParams,
 }: {
   seasonId: string;
   ageGroup: number;
+  gender: RankingGender;
   sort?: string;
   dir: SortDir;
   baseParams: URLSearchParams;
 }) {
   const results = await prisma.rankingResult.findMany({
-    where: { seasonId, ageGroup },
+    where: { seasonId, ageGroup, gender },
     include: {
       team: { include: { club: true } },
       contributions: {
@@ -367,17 +397,19 @@ async function NpsRankingTable({
 async function PowerRankingTable({
   seasonId,
   ageGroup,
+  gender,
   sort,
   dir,
   baseParams,
 }: {
   seasonId: string;
   ageGroup: number;
+  gender: RankingGender;
   sort?: string;
   dir: SortDir;
   baseParams: URLSearchParams;
 }) {
-  const data = await getLatestPowerRatings(seasonId, ageGroup);
+  const data = await getLatestPowerRatings(seasonId, ageGroup, gender);
   const { latestColley, latestElo, latestMassey } = data;
   const defaultRows = buildPowerRows(data);
 
@@ -551,12 +583,14 @@ async function PowerRankingTable({
 async function CombineRankingTable({
   seasonId,
   ageGroup,
+  gender,
   sort,
   dir,
   baseParams,
 }: {
   seasonId: string;
   ageGroup: number;
+  gender: RankingGender;
   sort?: string;
   dir: SortDir;
   baseParams: URLSearchParams;
@@ -564,10 +598,10 @@ async function CombineRankingTable({
   // npsResults and powerData don't depend on each other's results.
   const [npsResults, powerData] = await Promise.all([
     prisma.rankingResult.findMany({
-      where: { seasonId, ageGroup },
+      where: { seasonId, ageGroup, gender },
       include: { team: { include: { club: true } } },
     }),
-    getLatestPowerRatings(seasonId, ageGroup),
+    getLatestPowerRatings(seasonId, ageGroup, gender),
   ]);
   const powerRows = buildPowerRows(powerData);
 

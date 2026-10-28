@@ -8,6 +8,7 @@ import {
   getSeasonColleyRatingPopulation,
 } from "@/lib/rating/computeDivisionFieldStrength";
 import { computeRatingHistogram } from "@/lib/rating/ratingHistogram";
+import { partitionGenderForDivision } from "@/lib/teamGender";
 import { generateSuggestion, acceptSuggestion, overrideSuggestion } from "./actions";
 import { RatingHistogramChart } from "./RatingHistogramChart";
 import {
@@ -60,7 +61,11 @@ export default async function DivisionScoringPage({
 
   const ratings = snapshot ? await getDivisionRatedRatings(divisionId) : [];
   const populationRatings = snapshot
-    ? await getSeasonColleyRatingPopulation(division.event.seasonId, division.ageGroup)
+    ? await getSeasonColleyRatingPopulation(
+        division.event.seasonId,
+        division.ageGroup,
+        partitionGenderForDivision(division.gender),
+      )
     : [];
   const histogram =
     snapshot && ratings.length > 0

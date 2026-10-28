@@ -6,7 +6,9 @@ import { AGE_GROUPS, computeClubScore, rankClubs, type BestRankByAgeGroup } from
 
 const ALGORITHM_VERSION = "phase7-v1";
 
-/** teamId -> rank within one (season, ageGroup), for whichever per-team ranking
+/** teamId -> rank within one (season, ageGroup) of the GIRLS bucket -- club rankings
+ * are girls-only for now (a boys club split is a deferred follow-up, see
+ * docs/plan.md), so they read the girls team rankings explicitly. For whichever per-team ranking
  * `source` selects. NPS reads the persisted RankingResult.rank directly; COMBINED
  * reuses the same Combined Rankings blend the team-rankings pages already compute
  * (see computeCombinedRankByTeam) so club rankings never re-derive that math. */
@@ -16,10 +18,10 @@ async function getTeamRanksByAgeGroup(
   source: ClubRankingSource,
 ): Promise<Map<string, number>> {
   if (source === "COMBINED") {
-    return computeCombinedRankByTeam(seasonId, ageGroup);
+    return computeCombinedRankByTeam(seasonId, ageGroup, "GIRLS");
   }
   const results = await prisma.rankingResult.findMany({
-    where: { seasonId, ageGroup },
+    where: { seasonId, ageGroup, gender: "GIRLS" },
     select: { teamId: true, rank: true },
   });
   return new Map(results.map((r) => [r.teamId, r.rank]));

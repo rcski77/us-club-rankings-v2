@@ -11,17 +11,20 @@ export function SeasonPathSelect({
   seasons,
   defaultValue,
   ageGroup,
+  query = "",
 }: {
   seasons: { id: string; label: string }[];
   defaultValue: string;
   ageGroup: number;
+  /** Query string carried across the switch (e.g. "?gender=boys"). */
+  query?: string;
 }) {
   const router = useRouter();
   return (
     <select
       defaultValue={defaultValue}
       className={selectClass}
-      onChange={(e) => router.push(`/admin/analysis/${e.currentTarget.value}/${ageGroup}`)}
+      onChange={(e) => router.push(`/admin/analysis/${e.currentTarget.value}/${ageGroup}${query}`)}
     >
       {seasons.map((s) => (
         <option key={s.id} value={s.id}>

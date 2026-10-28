@@ -2,10 +2,12 @@ import { prisma } from "@/lib/prisma";
 import { computeDivisionFieldStrength } from "./computeDivisionFieldStrength";
 import { computeDivisionWeight } from "./divisionWeight";
 import { computeFssPercentile } from "./suggestPointTemplate";
+import { divisionGendersInPartition, partitionGenderForDivision, type RankingGender } from "@/lib/teamGender";
+import type { DivisionGender } from "@/generated/prisma/client";
 
 /**
  * Computes every division's Elo K-factor weight (see divisionWeight.ts) for one
- * (season, ageGroup) partition -- shared by computeMatchDivisionWeights() below (Elo
+ * (season, ageGroup, gender) partition -- shared by computeMatchDivisionWeights() below (Elo
  * recompute) and the Analysis page (a live display of what a division would
  * contribute to Elo, alongside the scoring-suggestion Band it already shows).
  * Colley-only, deliberately: never computeDivisionScoringSuggestion.ts's Elo/DCI-based
@@ -19,9 +21,10 @@ import { computeFssPercentile } from "./suggestPointTemplate";
 export async function computeDivisionWeightsForPartition(
   seasonId: string,
   ageGroup: number,
+  gender: RankingGender,
 ): Promise<Map<string, number>> {
   const populationRows = await prisma.teamRatingHistory.findMany({
-    where: { seasonId, ageGroup, ratingEngine: "COLLEY" },
+    where: { seasonId, ageGroup, gender, ratingEngine: "COLLEY" },
     orderBy: { weekEndingDate: "desc" },
   });
   const latestByTeam = new Map<string, number>();
@@ -31,7 +34,7 @@ export async function computeDivisionWeightsForPartition(
   const colleyPopulation = [...latestByTeam.values()];
 
   const divisions = await prisma.division.findMany({
-    where: { ageGroup, event: { seasonId }, finishes: { some: {} } },
+    where: { ageGroup, gender: { in: divisionGendersInPartition(gender) }, event: { seasonId }, finishes: { some: {} } },
   });
 
   // Independent per-division lookups (each is its own 2-query round trip) -- see
@@ -60,24 +63,31 @@ export async function computeDivisionWeightsForPartition(
 
 /**
  * Computes each distinct division's Elo K-factor weight for a list of Match-shaped
- * rows, keyed by divisionId -- groups by (season, ageGroup) partition and delegates
+ * rows, keyed by divisionId -- groups by (season, ageGroup, gender) partition (the
+ * division's own bucket, see partitionGenderForDivision) and delegates
  * to computeDivisionWeightsForPartition() above for each one.
  */
 export async function computeMatchDivisionWeights(
-  matches: { divisionId: string | null; division: { ageGroup: number } | null; event: { seasonId: string } }[],
+  matches: {
+    divisionId: string | null;
+    division: { ageGroup: number; gender: DivisionGender } | null;
+    event: { seasonId: string };
+  }[],
 ): Promise<Map<string, number>> {
-  const partitions = new Map<string, { seasonId: string; ageGroup: number }>();
+  const partitions = new Map<string, { seasonId: string; ageGroup: number; gender: RankingGender }>();
   for (const m of matches) {
     if (!m.divisionId || !m.division) continue;
-    partitions.set(`${m.event.seasonId}:${m.division.ageGroup}`, {
+    const gender = partitionGenderForDivision(m.division.gender);
+    partitions.set(`${m.event.seasonId}:${m.division.ageGroup}:${gender}`, {
       seasonId: m.event.seasonId,
       ageGroup: m.division.ageGroup,
+      gender,
     });
   }
 
   const weights = new Map<string, number>();
-  for (const { seasonId, ageGroup } of partitions.values()) {
-    const partitionWeights = await computeDivisionWeightsForPartition(seasonId, ageGroup);
+  for (const { seasonId, ageGroup, gender } of partitions.values()) {
+    const partitionWeights = await computeDivisionWeightsForPartition(seasonId, ageGroup, gender);
     for (const [divisionId, weight] of partitionWeights) weights.set(divisionId, weight);
   }
   return weights;

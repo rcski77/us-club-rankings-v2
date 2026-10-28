@@ -1657,6 +1657,37 @@ which had leaked into `RankingResult` and 2,776 stray rows into `TeamRatingHisto
 coincidentally share a display name, e.g. two different "CVC 14-1" teams). After
 recompute, zero boys teams remain in NPS/Power/Combined Rankings.
 
+**Gender-partitioned team rankings (2026-10-28).** Supersedes the girls-only filter
+above: girls and boys now rank in separate buckets, for seeding upcoming boys events.
+Every team ranking/rating partition is `(seasonId, ageGroup, gender)` instead of
+`(seasonId, ageGroup)`. A `gender` column (default `GIRLS`, which correctly backfills
+every pre-existing row) was added to `RankingResult`, `TeamRatingHistory` and
+`TeamEloMatchStep`, and their unique keys and indexes now include it. A team's bucket
+is **`Team.gender`**, not the team-code prefix `isBoysTeamCode()` used to check (now
+deleted). The two disagreed for 103 dev-DB teams, 102 of them boys teams stored as
+`GIRLS`, created before the gender field existed. The migration fixes those by setting
+`Team.gender` from the TeamSeason codes when all coded seasons agree. The read-only
+`npm run db:audit-team-gender` (`prisma/auditTeamGender.ts`, `--apply` to fix) re-checks
+this at any time. `src/lib/teamGender.ts` holds the shared helpers. Division-level
+computations (field strength, division weights, the scoring suggestion's population)
+map `Division.gender` onto a bucket with `partitionGenderForDivision()` (COED → girls).
+They also only count ratings from the division's own bucket. This matters because
+"26 Triple Crown Summer NIT / 15/16 Boys" is tagged GIRLS but holds 9 boys teams; once
+those teams had boys ratings, they were skewing every girls 16U division weight. The
+ranking-compute service enumerates `(ageGroup, gender)` partitions
+(`src/lib/ranking/rankingPartitions.ts`). Admin UI: a Girls | Boys tab row on Team
+Rankings and Analysis (`?gender=boys`, default girls, so old links still work), Girls
+and Boys team-rankings export workbooks, a gender select on team create/edit, and
+gender badges on team and event-division views. **Still girls-only, by design:** club
+rankings, the 5-year aggregate, and the public `/rankings` pages, all explicitly pinned
+to `GIRLS`. A boys club-ranking split is a follow-up. NPS isn't recomputed nightly, so
+`npm run db:recompute-team-rankings` recomputes every partition (NPS + Colley/Elo/Massey)
+for a season. Verified on the dev DB: after recompute, girls output matched the
+pre-change baseline exactly (3,607 NPS rows; 23,325 latest Colley/Elo/Massey rows).
+Boys got Colley/Elo/Massey ratings for 250 teams. Boys NPS stays empty until the boys
+divisions' scoring is confirmed; all 15 were SUGGESTED, with suggestions generated
+against the girls population, so re-run analysis on them before confirming.
+
 **`TeamRatingHistory` weekEndingDate dedup fix (2026-07-29).** Found while verifying
 the gender filter above: `computeColleyRatings`/`computeEloRatingsForPartition`/
 `computeMasseyRatingsForPartition`'s delete-and-replace snapshot pattern

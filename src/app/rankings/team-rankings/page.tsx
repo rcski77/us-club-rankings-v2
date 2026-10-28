@@ -29,6 +29,9 @@ import { DEFAULT_PAGE_SIZE, Pagination, parsePage } from "../Pagination";
 export const metadata: Metadata = { title: "Team Rankings" };
 
 const AGE_GROUPS = [12, 13, 14, 15, 16, 17, 18];
+// The public site shows girls rankings only for now -- boys rankings are admin-only
+// until they're ready to publish (see teamGender.ts).
+const PUBLIC_GENDER = "GIRLS" as const;
 const VIEWS = [
   { value: "combine", label: "Combined Rankings" },
   { value: "nps", label: "NPS Rankings" },
@@ -221,9 +224,9 @@ async function NpsRankingTable({
 
   // totalCount and rows don't depend on each other's results.
   const [totalCount, rows] = await Promise.all([
-    prisma.rankingResult.count({ where: { seasonId, ageGroup } }),
+    prisma.rankingResult.count({ where: { seasonId, ageGroup, gender: PUBLIC_GENDER } }),
     prisma.rankingResult.findMany({
-      where: { seasonId, ageGroup },
+      where: { seasonId, ageGroup, gender: PUBLIC_GENDER },
       include: {
         team: { include: { club: true } },
         contributions: {
@@ -326,7 +329,7 @@ async function PowerRankingTable({
   page: number;
   baseParams: URLSearchParams;
 }) {
-  const data = await getLatestPowerRatings(seasonId, ageGroup);
+  const data = await getLatestPowerRatings(seasonId, ageGroup, PUBLIC_GENDER);
   const { latestColley, latestElo, latestMassey } = data;
   const defaultRows = buildPowerRows(data);
 
@@ -490,10 +493,10 @@ async function CombineRankingTable({
   // npsResults and powerData don't depend on each other's results.
   const [npsResults, powerData] = await Promise.all([
     prisma.rankingResult.findMany({
-      where: { seasonId, ageGroup },
+      where: { seasonId, ageGroup, gender: PUBLIC_GENDER },
       include: { team: { include: { club: true } } },
     }),
-    getLatestPowerRatings(seasonId, ageGroup),
+    getLatestPowerRatings(seasonId, ageGroup, PUBLIC_GENDER),
   ]);
   const powerRows = buildPowerRows(powerData);
 
