@@ -264,7 +264,7 @@ export default async function PublicTeamDetailPage({
                           {f.division.tierLabel}
                           {f.division.tierLevel ? ` ${f.division.tierLevel}` : ""}
                         </td>
-                        <td className={numTdClass}>{f.rank}</td>
+                        <td className={numTdClass}>{f.rank ?? "—"}</td>
                         <td className={`${numTdClass} font-semibold`} style={{ color: brand.purple }}>
                           {f.points ?? ""}
                         </td>

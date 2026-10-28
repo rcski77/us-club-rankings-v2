@@ -122,8 +122,13 @@ export async function fetchAesStandings(batchId: string, formData: FormData) {
   }
 
   let result;
+  // "Event still in progress" checkbox: keep teams with no finish rank yet as
+  // provisional finishes (see ImportBatch.inProgress). Saved on the batch so a later
+  // Resolve/Commit knows to accept their blank ranks.
+  const inProgress = formData.get("inProgress") === "on";
+  await prisma.importBatch.update({ where: { id: batchId }, data: { inProgress } });
   try {
-    result = await fetchAesStandingsRows(aesEventId!);
+    result = await fetchAesStandingsRows(aesEventId!, { includeUnranked: inProgress });
   } catch (err) {
     redirect(
       batchPath(batchId, {
@@ -206,8 +211,13 @@ export async function fetchSportwrenchStandings(batchId: string, formData: FormD
   }
 
   let result;
+  // "Event still in progress" checkbox: keep teams with no finish rank yet as
+  // provisional finishes (see ImportBatch.inProgress). Saved on the batch so a later
+  // Resolve/Commit knows to accept their blank ranks.
+  const inProgress = formData.get("inProgress") === "on";
+  await prisma.importBatch.update({ where: { id: batchId }, data: { inProgress } });
   try {
-    result = await fetchSportwrenchStandingsRows(swEventId!);
+    result = await fetchSportwrenchStandingsRows(swEventId!, { includeUnranked: inProgress });
   } catch (err) {
     redirect(
       batchPath(batchId, {
@@ -287,8 +297,13 @@ export async function fetchVbscheduleStandings(batchId: string, formData: FormDa
   }
 
   let result;
+  // "Event still in progress" checkbox: keep teams with no finish rank yet as
+  // provisional finishes (see ImportBatch.inProgress). Saved on the batch so a later
+  // Resolve/Commit knows to accept their blank ranks.
+  const inProgress = formData.get("inProgress") === "on";
+  await prisma.importBatch.update({ where: { id: batchId }, data: { inProgress } });
   try {
-    result = await fetchVbscheduleStandingsRows(vbsEventId!);
+    result = await fetchVbscheduleStandingsRows(vbsEventId!, { includeUnranked: inProgress });
   } catch (err) {
     redirect(
       batchPath(batchId, {
@@ -368,8 +383,13 @@ export async function fetchTm2Standings(batchId: string, formData: FormData) {
   }
 
   let result;
+  // "Event still in progress" checkbox: keep teams with no finish rank yet as
+  // provisional finishes (see ImportBatch.inProgress). Saved on the batch so a later
+  // Resolve/Commit knows to accept their blank ranks.
+  const inProgress = formData.get("inProgress") === "on";
+  await prisma.importBatch.update({ where: { id: batchId }, data: { inProgress } });
   try {
-    result = await fetchTm2StandingsRows(tm2EventId!);
+    result = await fetchTm2StandingsRows(tm2EventId!, { includeUnranked: inProgress });
   } catch (err) {
     redirect(
       batchPath(batchId, {

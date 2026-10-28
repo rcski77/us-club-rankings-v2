@@ -377,7 +377,10 @@ model TeamFinish {
   division       Division @relation(fields: [divisionId], references: [id], onDelete: Cascade)
   teamId         String
   team           Team     @relation(fields: [teamId], references: [id])
-  rank           Int // may repeat across rows for ties
+  rank           Int? // may repeat across rows for ties. Null = provisional: the team is
+  // entered in an event still in progress (e.g. a power league with no standings until
+  // the end), imported so its match results count toward Power rankings. A division
+  // can't be confirmed (points awarded) while any of its finishes is still null.
   tiebreakOrder  Int? // AES-embedded unique seed/order number, display/ordering only
   points         Int? // resolved from DivisionPointBand at confirm time; null until then
   ignoreAge      Boolean  @default(false)
@@ -857,6 +860,9 @@ model ImportBatch {
   // event's EventSchedule rows change later. Null for batches driven purely by
   // manually-uploaded CSVs with no fetchable schedule.
   scheduleSource ImportSource?
+  inProgress  Boolean @default(false) // staff ticked "event still in progress" when
+  // fetching standings: teams with no finish rank yet are kept as provisional finishes
+  // (TeamFinish.rank null) instead of skipped, so match results can resolve to them.
   summaryJson Json? // display cache of row-status + new-club/team/division counts,
   // refreshed after resolve/commit -- mirrors the Division.scoringStatus-coarse-field
   // / audit-trail-detail pattern used elsewhere; ImportRow is the real detail.

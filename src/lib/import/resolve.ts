@@ -63,6 +63,9 @@ type ResolveContext = {
   clubsByExternalCode: Map<string, ClubRef[]>;
   existingFinishByKey: Map<string, string>;
   claimedKeys: Set<string>;
+  // The batch was fetched with "event still in progress" ticked (ImportBatch.inProgress):
+  // a blank rank means "no final rank yet" -- a provisional finish -- not an error.
+  inProgress: boolean;
   // Every row's team-code gender, grouped by division label (see divisionGender.ts) --
   // a division's gender is the majority across all of its rows in the batch, so a
   // mixed division matches/creates one division instead of splitting by row.
@@ -194,6 +197,7 @@ export async function resolveImportBatch(batchId: string): Promise<void> {
     clubsByExternalCode,
     existingFinishByKey,
     claimedKeys: new Set(),
+    inProgress: batch.inProgress,
     rowGendersByLabel,
   };
 
@@ -274,8 +278,11 @@ function resolveRow(row: RowInput, ctx: ResolveContext) {
 
   const nameField = parseAesTeamNameField(row.teamNameRaw);
 
-  const rank = Number(row.rankRaw);
-  if (!Number.isFinite(rank) || rank <= 0) {
+  const isProvisional = ctx.inProgress && row.rankRaw.trim() === "";
+  const rank = isProvisional ? null : Number(row.rankRaw);
+  if (isProvisional) {
+    messages.push("No final rank yet — imported as a provisional finish (event still in progress).");
+  } else if (rank === null || !Number.isFinite(rank) || rank <= 0) {
     escalate("ERROR", `Rank "${row.rankRaw}" is not a valid positive number.`);
   }
 
@@ -461,12 +468,16 @@ function resolveRow(row: RowInput, ctx: ResolveContext) {
     const finishId = ctx.existingFinishByKey.get(`${matchedDivisionId}:${matchedTeamId}`);
     if (finishId) {
       existingTeamFinishId = finishId;
-      messages.push(`A finish already exists for this team in this division — commit will update it to rank ${row.rankRaw}.`);
+      messages.push(
+        isProvisional
+          ? "A finish already exists for this team in this division — commit keeps its current rank."
+          : `A finish already exists for this team in this division — commit will update it to rank ${row.rankRaw}.`,
+      );
     }
   }
 
   return {
-    parsedRank: Number.isFinite(rank) ? rank : null,
+    parsedRank: rank !== null && Number.isFinite(rank) ? rank : null,
     parsedAgeGroup: label.ageGroup,
     parsedTeamAgeGroup: decoded.ageGroup,
     parsedTierLabel: label.tierLabel,

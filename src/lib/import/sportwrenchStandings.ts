@@ -85,7 +85,13 @@ export type FetchSportwrenchStandingsResult = {
  * -- proper competition-style ties, matching what Sportwrench's own site displays as
  * the Finish column).
  */
-export async function fetchSportwrenchStandingsRows(eventId: string): Promise<FetchSportwrenchStandingsResult> {
+// `includeUnranked`: the "event still in progress" import (e.g. a power league with no
+// standings until the end) -- a team with a code but no finish rank yet is kept, with a
+// blank rank, instead of skipped, so it becomes a provisional finish (see resolve.ts).
+export async function fetchSportwrenchStandingsRows(
+  eventId: string,
+  options: { includeUnranked?: boolean } = {},
+): Promise<FetchSportwrenchStandingsResult> {
   const eventInfo = await fetchSportwrenchEventInfo(eventId);
 
   const rawByDivision: Record<number, ApiStandingTeam[]> = {};
@@ -98,7 +104,7 @@ export async function fetchSportwrenchStandingsRows(eventId: string): Promise<Fe
     rawByDivision[division.divisionId] = teams;
 
     for (const team of teams) {
-      if (!team.organization_code || team.rank == null) {
+      if (!team.organization_code || (team.rank == null && !options.includeUnranked)) {
         skippedCount += 1;
         continue;
       }
@@ -106,7 +112,7 @@ export async function fetchSportwrenchStandingsRows(eventId: string): Promise<Fe
       rows.push({
         rowNumber,
         ageGroupLabel: team.division_name ?? division.name,
-        rank: String(team.rank),
+        rank: team.rank == null ? "" : String(team.rank),
         teamNameField: team.team_name ?? "",
         teamCode: team.organization_code,
         clubName: team.club_name?.trim() || null,

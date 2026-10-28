@@ -101,7 +101,11 @@ export async function computeColleyRatings(
     const divisionMatches = matchesByDivision.get(divisionId);
     if (divisionMatches && divisionMatches.length > 0) return buildMatchComparisons(divisionMatches);
     const isConfirmed = finishes[0]?.division.scoringStatus === "CONFIRMED";
-    return isConfirmed ? buildDivisionComparisons(finishes) : [];
+    // A confirmed division never has unranked (provisional) finishes -- confirming is
+    // blocked until every team has a rank -- but the filter keeps the types honest.
+    return isConfirmed
+      ? buildDivisionComparisons(finishes.filter((f): f is typeof f & { rank: number } => f.rank !== null))
+      : [];
   });
   const ratings = solveColley(comparisons).filter((r) => relevantTeamIds.has(r.teamId));
 

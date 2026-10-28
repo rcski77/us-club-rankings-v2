@@ -284,8 +284,9 @@ async function NpsRankingTable({
                     {r.contributions.map((c) => (
                       <li key={c.id} className={c.countedInTop3 ? "" : "line-through opacity-50"}>
                         {c.teamFinish.division.event.name} ({c.teamFinish.division.name}): {c.points} pts (
-                        {c.teamFinish.rank}
-                        {ordinalSuffix(c.teamFinish.rank)})
+                        {c.teamFinish.rank === null
+                          ? "unranked"
+                          : `${c.teamFinish.rank}${ordinalSuffix(c.teamFinish.rank)}`})
                       </li>
                     ))}
                   </ul>

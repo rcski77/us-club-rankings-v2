@@ -62,7 +62,13 @@ export type FetchVbscheduleStandingsResult = {
  * commit.ts, the review UI) can consume them unchanged -- mirrors
  * aesStandings.ts/sportwrenchStandings.ts.
  */
-export async function fetchVbscheduleStandingsRows(eventId: string): Promise<FetchVbscheduleStandingsResult> {
+// `includeUnranked`: the "event still in progress" import (e.g. a power league with no
+// standings until the end) -- a team with a code but no finish rank yet is kept, with a
+// blank rank, instead of skipped, so it becomes a provisional finish (see resolve.ts).
+export async function fetchVbscheduleStandingsRows(
+  eventId: string,
+  options: { includeUnranked?: boolean } = {},
+): Promise<FetchVbscheduleStandingsResult> {
   const eventInfo = await fetchVbscheduleEventInfo(eventId);
 
   const rawByDivision: Record<string, ApiStandingTeam[]> = {};
@@ -75,7 +81,7 @@ export async function fetchVbscheduleStandingsRows(eventId: string): Promise<Fet
     rawByDivision[division.divisionId] = teams;
 
     for (const team of teams) {
-      if (!team.alternateIdentifier || team.finalFinish == null) {
+      if (!team.alternateIdentifier || (team.finalFinish == null && !options.includeUnranked)) {
         skippedCount += 1;
         continue;
       }
@@ -83,7 +89,7 @@ export async function fetchVbscheduleStandingsRows(eventId: string): Promise<Fet
       rows.push({
         rowNumber,
         ageGroupLabel: division.name,
-        rank: String(team.finalFinish),
+        rank: team.finalFinish == null ? "" : String(team.finalFinish),
         teamNameField: team.name ?? "",
         teamCode: team.alternateIdentifier,
         clubName: team.clubName?.trim() || null,

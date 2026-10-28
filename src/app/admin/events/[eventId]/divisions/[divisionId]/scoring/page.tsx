@@ -95,6 +95,12 @@ export default async function DivisionScoringPage({
       {error === "nosuggestion" && (
         <p className={errorBannerClass}>This snapshot has no suggested template to accept.</p>
       )}
+      {error === "unranked" && (
+        <p className={errorBannerClass}>
+          Some teams don&apos;t have a final rank yet (the event is still in progress). Re-import the
+          final standings before accepting a suggestion.
+        </p>
+      )}
       {error === "nofinishes" && (
         <p className={errorBannerClass}>Enter team finishes before accepting a suggestion.</p>
       )}

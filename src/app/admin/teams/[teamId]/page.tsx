@@ -468,7 +468,7 @@ export default async function TeamDetailPage({
                         {f.division.tierLabel}
                         {f.division.tierLevel ? ` ${f.division.tierLevel}` : ""}
                       </td>
-                      <td className={tdClass}>{f.rank}</td>
+                      <td className={tdClass}>{f.rank ?? "—"}</td>
                       <td className={tdClass}>{f.points ?? ""}</td>
                       <td className={tdClass}>{maxPoints ?? ""}</td>
                     </tr>

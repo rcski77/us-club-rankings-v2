@@ -193,6 +193,16 @@ export default async function ImportBatchPage({
   const fetchSportwrenchStandingsWithId = fetchSportwrenchStandings.bind(null, batchId);
   const fetchVbscheduleStandingsWithId = fetchVbscheduleStandings.bind(null, batchId);
   const fetchTm2StandingsWithId = fetchTm2Standings.bind(null, batchId);
+  // Shared by every platform's "Fetch standings" form -- see ImportBatch.inProgress.
+  const inProgressCheckbox = (
+    <label
+      className="flex items-center gap-1 text-sm text-slate-600"
+      title="Keep teams with no finish rank yet, so this event's match results can be imported for Power rankings before final standings exist."
+    >
+      <input type="checkbox" name="inProgress" defaultChecked={batch.inProgress} />
+      Event still in progress
+    </label>
+  );
   const resolveWithId = resolveBatch.bind(null, batchId);
   const commitWithId = commitBatch.bind(null, batchId);
   const deleteWithId = deleteBatch.bind(null, batchId);
@@ -352,29 +362,33 @@ export default async function ImportBatchPage({
             {batch.scheduleUrl && (
               <div className="flex items-center gap-3">
                 {batch.scheduleSource === "AES" ? (
-                  <form action={fetchAesStandingsWithId}>
+                  <form action={fetchAesStandingsWithId} className="flex items-center gap-3">
                     <input type="hidden" name="filter" value={filter ?? ""} />
+                    {inProgressCheckbox}
                     <SubmitButton className={secondaryButtonClass} pendingText="Fetching…">
                       Fetch standings from AES
                     </SubmitButton>
                   </form>
                 ) : batch.scheduleSource === "SPORTWRENCH" ? (
-                  <form action={fetchSportwrenchStandingsWithId}>
+                  <form action={fetchSportwrenchStandingsWithId} className="flex items-center gap-3">
                     <input type="hidden" name="filter" value={filter ?? ""} />
+                    {inProgressCheckbox}
                     <SubmitButton className={secondaryButtonClass} pendingText="Fetching…">
                       Fetch standings from Sportwrench
                     </SubmitButton>
                   </form>
                 ) : batch.scheduleSource === "VBSCHEDULE" ? (
-                  <form action={fetchVbscheduleStandingsWithId}>
+                  <form action={fetchVbscheduleStandingsWithId} className="flex items-center gap-3">
                     <input type="hidden" name="filter" value={filter ?? ""} />
+                    {inProgressCheckbox}
                     <SubmitButton className={secondaryButtonClass} pendingText="Fetching…">
                       Fetch standings from VBSchedule
                     </SubmitButton>
                   </form>
                 ) : batch.scheduleSource === "TM2" ? (
-                  <form action={fetchTm2StandingsWithId}>
+                  <form action={fetchTm2StandingsWithId} className="flex items-center gap-3">
                     <input type="hidden" name="filter" value={filter ?? ""} />
+                    {inProgressCheckbox}
                     <SubmitButton className={secondaryButtonClass} pendingText="Fetching…">
                       Fetch standings from TM2
                     </SubmitButton>
@@ -488,7 +502,7 @@ export default async function ImportBatchPage({
                         <span className="ml-1 text-xs text-amber-700">(tier defaulted)</span>
                       )}
                     </td>
-                    <td className={tdClass}>{row.parsedRank ?? row.rankRaw}</td>
+                    <td className={tdClass}>{row.parsedRank ?? (row.rankRaw || "—")}</td>
                     <td className={tdClass}>
                       {row.divisionMatchType === "NEW" ? (
                         <span className="text-xs text-amber-700">

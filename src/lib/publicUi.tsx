@@ -32,7 +32,7 @@ export const tbodyClass =
 export const rowListClass =
   "divide-y divide-slate-100 [&>*]:transition-colors [&>*:nth-child(even)]:bg-slate-50/70 [&>*:hover]:bg-teal-50/70";
 
-export function RankBadge({ rank }: { rank: number | string | undefined }) {
+export function RankBadge({ rank }: { rank: number | string | null | undefined }) {
   const n = typeof rank === "number" ? rank : undefined;
   if (n === undefined) return <span className="text-slate-400">—</span>;
   const style =
