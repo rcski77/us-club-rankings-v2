@@ -1700,6 +1700,21 @@ Follow-ups the same day:
   a division has them. Confirmed scoring only matters for Colley's standings fallback,
   in divisions with no imported matches. All 15 dev-DB boys divisions have match
   results.
+- **Backfill migration `backfill_ranking_row_gender`** retags every existing
+  `RankingResult` / `TeamRatingHistory` / `TeamEloMatchStep` row with its team's gender.
+  Older weekly snapshots still held boys teams tagged with the `GIRLS` column default,
+  and the population lookups (latest row per team from any date) would have picked
+  them up.
+- **Admin sidebar** is grouped into collapsible sections (`src/app/admin/AdminNav.tsx`).
+- **Dashboard** (`src/lib/adminDashboard.ts`) adds:
+  - A **needs-attention list**: nightly/stuck/failed recompute jobs, pending or failed
+    imports, mislabeled divisions, team-gender mismatches, teams with no club, and
+    divisions awaiting scoring by gender. Each item only shows when its count is above
+    zero.
+  - A **last-computed table**: Colley/Elo/Massey/NPS × girls/boys for the active
+    season, plus the last nightly run.
+  - **Girls/boys splits** on the tiles. Job-health thresholds moved to
+    `src/lib/jobs/jobHealth.ts`, shared with `/admin/job-runs`.
 
 **`TeamRatingHistory` weekEndingDate dedup fix (2026-07-29).** Found while verifying
 the gender filter above: `computeColleyRatings`/`computeEloRatingsForPartition`/

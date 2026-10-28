@@ -1,7 +1,7 @@
 import "dotenv/config";
 import { prisma } from "../src/lib/prisma";
-import type { DivisionGender } from "../src/generated/prisma/client";
 import { applyDivisionGender, findMislabeledDivisions } from "../src/lib/divisionGenderAudit";
+import { genderFromTeamCode, type RankingGender } from "../src/lib/teamGender";
 
 /**
  * Audit (read-only by default): finds every Team whose Team.gender column disagrees
@@ -19,13 +19,6 @@ import { applyDivisionGender, findMislabeledDivisions } from "../src/lib/divisio
  * teams (see divisionGenderAudit.ts -- also browsable at /admin/division-genders).
  * Runs after the team pass since it reads Team.gender; --apply relabels those too.
  */
-function genderFromCode(code: string | null): DivisionGender | null {
-  const c = (code ?? "").trim().toLowerCase();
-  if (c.startsWith("g")) return "GIRLS";
-  if (c.startsWith("b")) return "BOYS";
-  return null;
-}
-
 async function main() {
   const apply = process.argv.includes("--apply");
   const teams = await prisma.team.findMany({
@@ -42,10 +35,10 @@ async function main() {
   let mixed = 0;
   for (const team of teams) {
     const codeGenders = new Set(
-      team.seasons.map((ts) => genderFromCode(ts.externalTeamCode)).filter((g): g is DivisionGender => g != null),
+      team.seasons.map((ts) => genderFromTeamCode(ts.externalTeamCode)).filter((g): g is RankingGender => g != null),
     );
     if (codeGenders.size === 0) continue;
-    if (codeGenders.size === 1 && codeGenders.has(team.gender)) continue;
+    if (codeGenders.size === 1 && codeGenders.has(team.gender as RankingGender)) continue;
 
     const codes = team.seasons.map((ts) => `${ts.season.label}: ${ts.externalTeamCode ?? "(none)"}`).join(", ");
     if (codeGenders.size > 1) {

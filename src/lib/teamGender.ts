@@ -37,3 +37,11 @@ export function parseRankingGender(value: string | string[] | undefined | null):
 export function rankingGenderParam(gender: RankingGender): string {
   return gender.toLowerCase();
 }
+
+/** The gender an AES-style team code's leading "g"/"b" says a team is, or null when it has neither. */
+export function genderFromTeamCode(code: string | null | undefined): RankingGender | null {
+  const c = (code ?? "").trim().toLowerCase();
+  if (c.startsWith("g")) return "GIRLS";
+  if (c.startsWith("b")) return "BOYS";
+  return null;
+}
