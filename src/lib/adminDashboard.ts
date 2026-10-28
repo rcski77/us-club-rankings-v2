@@ -145,7 +145,6 @@ export async function getAttentionItems(activeSeasonId: string | undefined): Pro
     {
       label: "Boys divisions awaiting scoring",
       count: unscoredBoys,
-      hint: "Only needed for points (NPS) rankings — Power rankings don't wait on it.",
       href: "/admin/analysis?gender=boys",
       tone: "info",
     },
