@@ -8,7 +8,8 @@ export function parseSportwrenchEventIdFromUrl(url: string): string | null {
   const trimmed = url.trim();
   if (!trimmed) return null;
 
-  const match = trimmed.match(/events\/([^/?#]+)/i);
+  // "events?/" also matches Otto Event's singular "/event/<id>/..." URLs.
+  const match = trimmed.match(/events?\/([^/?#]+)/i);
   if (match) return match[1];
 
   // No "events/" segment found -- if the whole trimmed string looks like a bare id

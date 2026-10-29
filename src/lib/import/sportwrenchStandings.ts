@@ -1,7 +1,7 @@
 import { fetchSportwrench } from "./sportwrenchFetch";
 import type { RawAesCsvRow } from "./aesCsv";
 
-const SW_API_BASE = "https://events.sportwrench.com/api/esw";
+const SW_API_BASE = "https://eventslegacy.ottoevent.ai/api/esw";
 
 export type SportwrenchDivisionRef = { divisionId: number; name: string };
 export type SportwrenchEventInfo = { name: string; divisions: SportwrenchDivisionRef[] };
