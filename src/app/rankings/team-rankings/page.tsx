@@ -23,15 +23,19 @@ import {
   assignRanksWithTies,
   type PowerRow,
 } from "@/lib/rating/powerRankings";
+import {
+  RANKING_GENDERS,
+  RANKING_GENDER_LABEL,
+  parseRankingGender,
+  rankingGenderParam,
+  type RankingGender,
+} from "@/lib/teamGender";
 import { SeasonFilterSelect } from "./SeasonFilterSelect";
 import { DEFAULT_PAGE_SIZE, Pagination, parsePage } from "../Pagination";
 
 export const metadata: Metadata = { title: "Team Rankings" };
 
 const AGE_GROUPS = [12, 13, 14, 15, 16, 17, 18];
-// The public site shows girls rankings only for now -- boys rankings are admin-only
-// until they're ready to publish (see teamGender.ts).
-const PUBLIC_GENDER = "GIRLS" as const;
 const VIEWS = [
   { value: "combine", label: "Combined Rankings" },
   { value: "nps", label: "NPS Rankings" },
@@ -45,6 +49,7 @@ export default async function PublicTeamRankingsPage({
 }: {
   searchParams: Promise<{
     season?: string;
+    gender?: string;
     view?: string;
     ageGroup?: string;
     sort?: string;
@@ -52,8 +57,16 @@ export default async function PublicTeamRankingsPage({
     page?: string;
   }>;
 }) {
-  const { season: seasonParam, view: viewParam, ageGroup: ageGroupParam, sort, dir: dirParam, page: pageParam } =
-    await searchParams;
+  const {
+    season: seasonParam,
+    gender: genderParam,
+    view: viewParam,
+    ageGroup: ageGroupParam,
+    sort,
+    dir: dirParam,
+    page: pageParam,
+  } = await searchParams;
+  const gender = parseRankingGender(genderParam);
   const page = parsePage(pageParam);
 
   const seasons = await prisma.season.findMany({ orderBy: { startDate: "desc" } });
@@ -64,9 +77,10 @@ export default async function PublicTeamRankingsPage({
   const ageGroup = AGE_GROUPS.includes(Number(ageGroupParam)) ? Number(ageGroupParam) : 12;
   const dir: SortDir = dirParam === "desc" ? "desc" : "asc";
 
-  function tabHref(overrides: { view?: View; ageGroup?: number }) {
+  function tabHref(overrides: { gender?: RankingGender; view?: View; ageGroup?: number }) {
     const params = new URLSearchParams({
       season: season?.id ?? "",
+      gender: rankingGenderParam(overrides.gender ?? gender),
       view: overrides.view ?? view,
       ageGroup: String(overrides.ageGroup ?? ageGroup),
     });
@@ -83,6 +97,7 @@ export default async function PublicTeamRankingsPage({
         <>
           <div className="mb-6 flex items-end gap-3">
             <form method="get" className="flex items-end gap-3">
+              <input type="hidden" name="gender" value={rankingGenderParam(gender)} />
               <input type="hidden" name="view" value={view} />
               <input type="hidden" name="ageGroup" value={ageGroup} />
               <label className="flex flex-col gap-1 text-sm">
@@ -90,6 +105,23 @@ export default async function PublicTeamRankingsPage({
                 <SeasonFilterSelect seasons={seasons} defaultValue={season.id} />
               </label>
             </form>
+          </div>
+
+          <div className="mb-4 flex flex-wrap gap-2">
+            {RANKING_GENDERS.map((g) => (
+              <Link
+                key={g}
+                href={tabHref({ gender: g })}
+                className={
+                  g === gender
+                    ? "rounded-full px-4 py-1.5 text-sm font-semibold text-white shadow-sm"
+                    : "rounded-full border border-slate-200 px-4 py-1.5 text-sm text-slate-600 transition-colors hover:border-slate-300 hover:bg-slate-50"
+                }
+                style={g === gender ? { backgroundColor: brand.teal } : undefined}
+              >
+                {RANKING_GENDER_LABEL[g]}
+              </Link>
+            ))}
           </div>
 
           <div className="mb-4 flex flex-wrap gap-2">
@@ -129,29 +161,32 @@ export default async function PublicTeamRankingsPage({
           {view === "nps" ? (
             <NpsRankingTable
               seasonId={season.id}
+              gender={gender}
               ageGroup={ageGroup}
               sort={sort}
               dir={dir}
               page={page}
-              baseParams={new URLSearchParams({ season: season.id, view, ageGroup: String(ageGroup) })}
+              baseParams={new URLSearchParams({ season: season.id, gender: rankingGenderParam(gender), view, ageGroup: String(ageGroup) })}
             />
           ) : view === "power" ? (
             <PowerRankingTable
               seasonId={season.id}
+              gender={gender}
               ageGroup={ageGroup}
               sort={sort}
               dir={dir}
               page={page}
-              baseParams={new URLSearchParams({ season: season.id, view, ageGroup: String(ageGroup) })}
+              baseParams={new URLSearchParams({ season: season.id, gender: rankingGenderParam(gender), view, ageGroup: String(ageGroup) })}
             />
           ) : (
             <CombineRankingTable
               seasonId={season.id}
+              gender={gender}
               ageGroup={ageGroup}
               sort={sort}
               dir={dir}
               page={page}
-              baseParams={new URLSearchParams({ season: season.id, view, ageGroup: String(ageGroup) })}
+              baseParams={new URLSearchParams({ season: season.id, gender: rankingGenderParam(gender), view, ageGroup: String(ageGroup) })}
             />
           )}
         </>
@@ -206,6 +241,7 @@ const NPS_ORDER_BY: Record<string, (dir: SortDir) => Prisma.RankingResultOrderBy
 
 async function NpsRankingTable({
   seasonId,
+  gender,
   ageGroup,
   sort,
   dir,
@@ -213,6 +249,7 @@ async function NpsRankingTable({
   baseParams,
 }: {
   seasonId: string;
+  gender: RankingGender;
   ageGroup: number;
   sort?: string;
   dir: SortDir;
@@ -224,9 +261,9 @@ async function NpsRankingTable({
 
   // totalCount and rows don't depend on each other's results.
   const [totalCount, rows] = await Promise.all([
-    prisma.rankingResult.count({ where: { seasonId, ageGroup, gender: PUBLIC_GENDER } }),
+    prisma.rankingResult.count({ where: { seasonId, ageGroup, gender } }),
     prisma.rankingResult.findMany({
-      where: { seasonId, ageGroup, gender: PUBLIC_GENDER },
+      where: { seasonId, ageGroup, gender },
       include: {
         team: { include: { club: true } },
         contributions: {
@@ -317,6 +354,7 @@ async function NpsRankingTable({
 
 async function PowerRankingTable({
   seasonId,
+  gender,
   ageGroup,
   sort,
   dir,
@@ -324,13 +362,14 @@ async function PowerRankingTable({
   baseParams,
 }: {
   seasonId: string;
+  gender: RankingGender;
   ageGroup: number;
   sort?: string;
   dir: SortDir;
   page: number;
   baseParams: URLSearchParams;
 }) {
-  const data = await getLatestPowerRatings(seasonId, ageGroup, PUBLIC_GENDER);
+  const data = await getLatestPowerRatings(seasonId, ageGroup, gender);
   const { latestColley, latestElo, latestMassey } = data;
   const defaultRows = buildPowerRows(data);
 
@@ -478,6 +517,7 @@ async function PowerRankingTable({
 
 async function CombineRankingTable({
   seasonId,
+  gender,
   ageGroup,
   sort,
   dir,
@@ -485,6 +525,7 @@ async function CombineRankingTable({
   baseParams,
 }: {
   seasonId: string;
+  gender: RankingGender;
   ageGroup: number;
   sort?: string;
   dir: SortDir;
@@ -494,10 +535,10 @@ async function CombineRankingTable({
   // npsResults and powerData don't depend on each other's results.
   const [npsResults, powerData] = await Promise.all([
     prisma.rankingResult.findMany({
-      where: { seasonId, ageGroup, gender: PUBLIC_GENDER },
+      where: { seasonId, ageGroup, gender },
       include: { team: { include: { club: true } } },
     }),
-    getLatestPowerRatings(seasonId, ageGroup, PUBLIC_GENDER),
+    getLatestPowerRatings(seasonId, ageGroup, gender),
   ]);
   const powerRows = buildPowerRows(powerData);
 

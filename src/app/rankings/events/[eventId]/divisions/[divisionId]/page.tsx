@@ -15,6 +15,7 @@ import {
   RankBadge,
 } from "@/lib/publicUi";
 import { getEventEloSummaries } from "@/lib/rating/computeEloRatings";
+import { partitionGenderForDivision } from "@/lib/teamGender";
 
 export async function generateMetadata({
   params,
@@ -49,8 +50,13 @@ export default async function PublicDivisionDetailPage({
     orderBy: { rank: "asc" },
   });
   // Sequential awaits (not Promise.all) -- see docs/dev-environment.md.
-  // Public pages show girls rankings only for now (see teamGender.ts).
-  const eloSummaries = await getEventEloSummaries(eventId, seasonId, division.ageGroup, "GIRLS", division.event.endDate);
+  const eloSummaries = await getEventEloSummaries(
+    eventId,
+    seasonId,
+    division.ageGroup,
+    partitionGenderForDivision(division.gender),
+    division.event.endDate,
+  );
 
   return (
     <div className="max-w-4xl">
