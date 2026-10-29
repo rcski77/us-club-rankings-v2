@@ -15,6 +15,7 @@ import {
   EloBadge,
 } from "@/lib/publicUi";
 import { getLatestPowerRatings, computeCombinedRankByTeam } from "@/lib/rating/powerRankings";
+import { RANKING_GENDERS } from "@/lib/teamGender";
 import { rankFiveYearClubs } from "@/lib/ranking/fiveYearClubRanking";
 
 export async function generateMetadata({
@@ -132,12 +133,14 @@ export default async function PublicClubDetailPage({
   const combinedRankByTeamId = new Map<string, number>();
   if (activeSeason) {
     const perAgeGroup = await Promise.all(
-      activeAgeGroups.map((ageGroup) =>
-        Promise.all([
-          // Public pages show girls rankings only for now (see teamGender.ts).
-          getLatestPowerRatings(activeSeason.id, ageGroup, "GIRLS"),
-          computeCombinedRankByTeam(activeSeason.id, ageGroup, "GIRLS"),
-        ]),
+      // Team ids are unique across buckets, so girls and boys results merge into one map.
+      activeAgeGroups.flatMap((ageGroup) =>
+        RANKING_GENDERS.map((gender) =>
+          Promise.all([
+            getLatestPowerRatings(activeSeason.id, ageGroup, gender),
+            computeCombinedRankByTeam(activeSeason.id, ageGroup, gender),
+          ]),
+        ),
       ),
     );
     for (const [powerData, combinedRanks] of perAgeGroup) {

@@ -103,18 +103,19 @@ export default async function PublicTeamDetailPage({
 
   const activeAgeGroup = team.seasons.find((ts) => ts.season.id === activeSeasonId)?.ageGroup;
 
-  // Sequential, not Promise.all -- see docs/dev-environment.md. Public pages show girls
-  // rankings only for now (see teamGender.ts), so a boys team simply has no rank here.
+  // Sequential, not Promise.all -- see docs/dev-environment.md. Ranked in the team's own
+  // gender bucket (see teamGender.ts).
+  const rankingGender = team.gender === "BOYS" ? "BOYS" : "GIRLS";
   const npsResult =
     activeSeasonId && activeAgeGroup !== undefined
       ? await prisma.rankingResult.findUnique({
-          where: { seasonId_ageGroup_gender_teamId: { seasonId: activeSeasonId, ageGroup: activeAgeGroup, gender: "GIRLS", teamId } },
+          where: { seasonId_ageGroup_gender_teamId: { seasonId: activeSeasonId, ageGroup: activeAgeGroup, gender: rankingGender, teamId } },
         })
       : null;
   const latestElo =
     activeSeasonId && activeAgeGroup !== undefined
       ? await prisma.teamRatingHistory.findFirst({
-          where: { teamId, seasonId: activeSeasonId, ageGroup: activeAgeGroup, gender: "GIRLS", ratingEngine: "ELO" },
+          where: { teamId, seasonId: activeSeasonId, ageGroup: activeAgeGroup, gender: rankingGender, ratingEngine: "ELO" },
           orderBy: { weekEndingDate: "desc" },
         })
       : null;
