@@ -13,7 +13,7 @@ import type { AesFetchedMatch, AesMatchSetScore } from "./aesMatches";
 // conservatively; raise it if this still isn't fast enough for the largest events.
 const TEAM_FETCH_CONCURRENCY = 12;
 
-const SW_API_BASE = "https://events.sportwrench.com/api/esw";
+const SW_API_BASE = "https://eventslegacy.ottoevent.ai/api/esw";
 
 // Sportwrench has no single "all matches" endpoint either -- same shape of problem
 // aesMatches.ts already solved for AES. Its per-team detail endpoint

@@ -8,6 +8,14 @@ describe("parseSportwrenchEventIdFromUrl", () => {
     );
   });
 
+  it("extracts the id from an Otto Event URL (singular /event/ path)", () => {
+    expect(
+      parseSportwrenchEventIdFromUrl(
+        "https://events.ottoevent.ai/event/204764064/divisions/31399/pool-bracket?pbTabId=a9cd935c",
+      ),
+    ).toBe("204764064");
+  });
+
   it("extracts the id from a non-hash event URL with a trailing path segment", () => {
     expect(
       parseSportwrenchEventIdFromUrl("https://events2.sportwrench.com/events/c098ff439/divisions"),
@@ -40,5 +48,6 @@ describe("parseSportwrenchEventIdFromUrl", () => {
 
   it("returns null for a URL with no event id and no bare-id shape", () => {
     expect(parseSportwrenchEventIdFromUrl("https://events.sportwrench.com/")).toBeNull();
+    expect(parseSportwrenchEventIdFromUrl("https://events.ottoevent.ai/")).toBeNull();
   });
 });

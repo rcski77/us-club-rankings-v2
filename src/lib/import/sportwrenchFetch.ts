@@ -36,6 +36,7 @@ export async function fetchSportwrench(
 
   const args = [
     "-s", // silent -- no progress meter
+    "-L", // follow redirects (events.sportwrench.com 301s to eventslegacy.ottoevent.ai)
     "-S", // but still show errors on stderr
     "-A",
     SPORTWRENCH_USER_AGENT,
@@ -44,7 +45,7 @@ export async function fetchSportwrench(
     "-H",
     "Accept-Language: en-US,en;q=0.9",
     "-e",
-    "https://events.sportwrench.com/", // referer
+    "https://events.ottoevent.ai/", // referer
     "--max-time",
     String(Math.ceil(timeoutMs / 1000)),
     // Body on stdout, then a newline and the HTTP status code -- split apart below
