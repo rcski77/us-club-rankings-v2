@@ -104,7 +104,10 @@ export async function fetchSportwrenchStandingsRows(
     rawByDivision[division.divisionId] = teams;
 
     for (const team of teams) {
-      if (!team.organization_code || (team.rank == null && !options.includeUnranked)) {
+      // An in-progress event reports `rank: 0` (not null) for teams with no finish yet
+      // (pool play still running) -- treat any non-positive rank as "no finish".
+      const hasRank = team.rank != null && team.rank > 0;
+      if (!team.organization_code || (!hasRank && !options.includeUnranked)) {
         skippedCount += 1;
         continue;
       }
@@ -112,7 +115,7 @@ export async function fetchSportwrenchStandingsRows(
       rows.push({
         rowNumber,
         ageGroupLabel: team.division_name ?? division.name,
-        rank: team.rank == null ? "" : String(team.rank),
+        rank: hasRank ? String(team.rank) : "",
         teamNameField: team.team_name ?? "",
         teamCode: team.organization_code,
         clubName: team.club_name?.trim() || null,
