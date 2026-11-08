@@ -78,6 +78,14 @@ vi.mock("./sportwrenchFetch", () => ({
                 division_name: "17U Div 1-4 Event #1",
                 rank: 1,
               },
+              // In-progress event: no finish yet, API reports rank 0 -> skipped
+              {
+                roster_team_id: 243559,
+                team_name: "Unranked Yet",
+                organization_code: "G17UNRNK1SC",
+                division_name: "17U Div 1-4 Event #1",
+                rank: 0,
+              },
             ],
           },
         }),
@@ -92,7 +100,7 @@ describe("fetchSportwrenchStandingsRows", () => {
     const result = await fetchSportwrenchStandingsRows("c098ff439");
 
     expect(result.eventName).toBe("Test Event");
-    expect(result.skippedCount).toBe(1);
+    expect(result.skippedCount).toBe(2);
     expect(result.rows).toEqual([
       {
         rowNumber: 1,
