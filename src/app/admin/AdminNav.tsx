@@ -13,6 +13,7 @@ const SECTIONS: NavSection[] = [
     items: [
       { href: "/admin/events", label: "Events" },
       { href: "/admin/imports", label: "Imports" },
+      { href: "/admin/seeding", label: "Seeding" },
       { href: "/admin/division-genders", label: "Division Genders" },
     ],
   },
