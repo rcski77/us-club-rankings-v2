@@ -1,6 +1,6 @@
 # ADR 0001: Event seeding report module
 
-- **Status:** Proposed (2026-10-28) — deferred, nothing implemented.
+- **Status:** Phase 2–3 implemented (2026-11-08) at `/admin/seeding`; pairwise dominance, drill-down cards and persistence still deferred.
 - **Deciders:** project owner
 
 ## Context
@@ -103,6 +103,22 @@ modeled on `exportTeamRankings.ts`. No PDF; browser print covers it.
 3. Pool/band count: entered in the UI per division, or in the CSV?
 4. Default seed sort: average power rank or NPS points?
 5. Which already-imported event do we backtest against?
+
+## Implementation notes (2026-11-08)
+
+Answers to the open questions, from the real Sportwrench/Otto export:
+
+1. Input is the Sportwrench/Otto **.xlsx** team list (`Team name`, `Division name`, `USAV code`,
+   `Club name`, ...), not a CSV. Parser: `src/lib/seeding/parseTeamListXlsx.ts`.
+2. The "USAV code" is the same string as the AES team code (case-insensitive). Matching tries
+   `TeamSeason.externalTeamCode` (report season, else most recent), then lineage.
+3. Pool count is entered in the UI per division.
+4. Default sort is average power rank; NPS rank is selectable.
+
+Built: upload + match + per-division table with flags, near-tie clusters, pool-boundary rows,
+CSV export, print. Event picker supplies the season and the match-evidence cutoff (event start).
+Teams with no current-season rating fall back to the last three earlier seasons (flagged).
+Not built: pairwise dominance (`pairwise.ts`), common-opponent cards, persisted reports.
 
 ## Implementation phases
 
